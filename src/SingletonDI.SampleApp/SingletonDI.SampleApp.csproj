@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>SingletonDI.SampleApp</RootNamespace>
+    <AssemblyName>SingletonDI.SampleApp</AssemblyName>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SingletonDI.Attributes\SingletonDI.Attributes.csproj" />
+  </ItemGroup>
+
+  <!-- Подключаем генератор исходного кода как Analyzer -->
+  <ItemGroup>
+    <ProjectReference Include="..\SingletonDI.Generator\SingletonDI.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Exclude generated files from compilation -->
+  <ItemGroup>
+    <Compile Remove="Generated\**\*.cs" />
+  </ItemGroup>
+
+</Project>
