@@ -52,7 +52,7 @@ public class SingletonDIGeneratorTests
             ShortName = "Consumer",
             Namespace = "Test",
             IsPartial = true,
-            Dependencies = ImmutableArray.Create("Test.Provider")
+            Dependencies = ["Test.Provider"]
         };
 
         // Assert
@@ -75,10 +75,10 @@ public class SingletonDIGeneratorTests
             IsDisposable = false,
             Dependencies = ImmutableArray<string>.Empty
         };
-        
+
         var model = new CombinedModel
         {
-            Providers = ImmutableArray.Create(provider),
+            Providers = [provider],
             Consumers = ImmutableArray<ConsumerModel>.Empty,
             TopologicalOrder = ImmutableArray<string>.Empty // Empty indicates cycle
         };
@@ -86,7 +86,7 @@ public class SingletonDIGeneratorTests
         // Assert
         Assert.True(model.HasCircularDependency);
     }
-    
+
     [Fact]
     public void CombinedModel_NoCircularDependency_ReturnsFalse()
     {
