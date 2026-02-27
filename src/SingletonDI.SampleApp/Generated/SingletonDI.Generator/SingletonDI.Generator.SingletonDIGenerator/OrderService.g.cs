@@ -8,7 +8,7 @@ namespace SingletonDI.SampleApp
         /// <summary>
         /// Gets the singleton instance of global::SingletonDI.SampleApp.DatabaseService.
         /// </summary>
-        public global::SingletonDI.SampleApp.DatabaseService? DatabaseServiceInstance
+        public global::SingletonDI.SampleApp.DatabaseService DatabaseServiceInstance
         {
             get
             {

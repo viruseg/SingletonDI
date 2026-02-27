@@ -34,9 +34,19 @@ internal static class ExceptionHelperEmitter
         sb.AppendLine("        internal static void ThrowContainerNotInitialized() =>");
         sb.AppendLine("            throw new global::System.InvalidOperationException(");
         sb.AppendLine("                \"Singleton container has not been initialized. \" +");
-        sb.AppendLine("                \"Ensure you are using providers and consumers within the same assembly.\"");
-
-
+        sb.AppendLine("                \"Call SingletonInitializer.InitializeAsync() before accessing singletons.\"");
+        sb.AppendLine("            );");
+        sb.AppendLine();
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine("        /// Throws InvalidOperationException when a singleton is accessed before initialization.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine("        /// <typeparam name=\"T\">The type of the singleton.</typeparam>");
+        sb.AppendLine("        /// <returns>Never returns, always throws.</returns>");
+        sb.AppendLine("        [global::System.Diagnostics.CodeAnalysis.DoesNotReturn]");
+        sb.AppendLine("        internal static T ThrowNotInitialized<T>() =>");
+        sb.AppendLine("            throw new global::System.InvalidOperationException(");
+        sb.AppendLine("                $\"Singleton of type '{typeof(T).Name}' has not been initialized. \" +");
+        sb.AppendLine("                \"Call SingletonInitializer.InitializeAsync() before accessing singletons.\"");
         sb.AppendLine("            );");
         sb.AppendLine();
         sb.AppendLine("        /// <summary>");

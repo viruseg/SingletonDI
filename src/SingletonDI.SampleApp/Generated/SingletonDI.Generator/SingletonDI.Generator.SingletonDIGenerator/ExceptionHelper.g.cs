@@ -16,7 +16,19 @@ namespace DependencyManager.Generated.Internal
         internal static void ThrowContainerNotInitialized() =>
             throw new global::System.InvalidOperationException(
                 "Singleton container has not been initialized. " +
-                "Ensure you are using providers and consumers within the same assembly."
+                "Call SingletonInitializer.InitializeAsync() before accessing singletons."
+            );
+
+        /// <summary>
+        /// Throws InvalidOperationException when a singleton is accessed before initialization.
+        /// </summary>
+        /// <typeparam name="T">The type of the singleton.</typeparam>
+        /// <returns>Never returns, always throws.</returns>
+        [global::System.Diagnostics.CodeAnalysis.DoesNotReturn]
+        internal static T ThrowNotInitialized<T>() =>
+            throw new global::System.InvalidOperationException(
+                $"Singleton of type '{typeof(T).Name}' has not been initialized. " +
+                "Call SingletonInitializer.InitializeAsync() before accessing singletons."
             );
 
         /// <summary>

@@ -1,3 +1,4 @@
+using DependencyManager.Generated;
 using SingletonDI.Attributes;
 
 namespace SingletonDI.SampleApp;
@@ -64,13 +65,13 @@ public partial class OrderController
 // Main program entry point
 public static class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         Console.WriteLine("=== SingletonDI Sample Application ===\n");
         Console.WriteLine("Starting application...");
 
-        // The container is automatically initialized via ModuleInitializer
-        // No manual initialization needed!
+        // Explicitly initialize the singleton container
+        await SingletonInitializer.InitializeAsync();
 
         // Use the consumer
         var controller = new OrderController();

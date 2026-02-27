@@ -80,7 +80,7 @@ internal static class ConsumerEmitter
             sb.AppendLine($"        /// <summary>");
             sb.AppendLine($"        /// Gets the singleton instance of {formattedType}.");
             sb.AppendLine($"        /// </summary>");
-            sb.AppendLine($"        public {formattedType}? {propertyAccessName}");
+            sb.AppendLine($"        public {formattedType} {propertyAccessName}");
             sb.AppendLine("        {");
             sb.AppendLine("            get");
             sb.AppendLine("            {");

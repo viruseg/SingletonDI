@@ -110,8 +110,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 }
             }
 
-            // Run topological sort
-            var sortResult = TopologicalSorter.Sort(providerModels.ToImmutableArray());
+            // Run topological sort by levels
+            var sortResult = TopologicalSorter.SortByLevels(providerModels.ToImmutableArray());
 
             // If there's a cycle, emit diagnostic
             if (sortResult.HasCycle)
@@ -132,10 +132,14 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             {
                 var containerSource = ContainerEmitter.Generate(
                     providerModels.ToImmutableArray(),
-                    sortResult.SortedOrder,
+                    sortResult.Levels,
                     propertyNames);
 
                 spc.AddSource("SingletonContainer.g.cs", SourceText.From(containerSource, encoding: System.Text.Encoding.UTF8));
+
+                // Generate SingletonInitializer
+                var initializerSource = SingletonInitializerEmitter.Generate();
+                spc.AddSource("SingletonInitializer.g.cs", SourceText.From(initializerSource, encoding: System.Text.Encoding.UTF8));
             }
 
             // Generate consumer partial classes

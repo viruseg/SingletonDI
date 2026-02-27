@@ -8,7 +8,7 @@ namespace SingletonDI.SampleApp
         /// <summary>
         /// Gets the singleton instance of global::SingletonDI.SampleApp.DatabaseService.
         /// </summary>
-        public global::SingletonDI.SampleApp.DatabaseService? DatabaseServiceInstance
+        public global::SingletonDI.SampleApp.DatabaseService DatabaseServiceInstance
         {
             get
             {
@@ -20,7 +20,7 @@ namespace SingletonDI.SampleApp
         /// <summary>
         /// Gets the singleton instance of global::SingletonDI.SampleApp.UserService.
         /// </summary>
-        public global::SingletonDI.SampleApp.UserService? UserServiceInstance
+        public global::SingletonDI.SampleApp.UserService UserServiceInstance
         {
             get
             {
@@ -32,7 +32,7 @@ namespace SingletonDI.SampleApp
         /// <summary>
         /// Gets the singleton instance of global::SingletonDI.SampleApp.OrderService.
         /// </summary>
-        public global::SingletonDI.SampleApp.OrderService? OrderServiceInstance
+        public global::SingletonDI.SampleApp.OrderService OrderServiceInstance
         {
             get
             {
