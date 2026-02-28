@@ -12,7 +12,6 @@ namespace SingletonDI.SampleApp
         {
             get
             {
-                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();
                 return global::DependencyManager.Generated.Internal.SingletonContainer.DatabaseService;
             }
         }

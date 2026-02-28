@@ -12,7 +12,6 @@ namespace SingletonDI.SampleApp
         {
             get
             {
-                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();
                 return global::DependencyManager.Generated.Internal.SingletonContainer.DatabaseService;
             }
         }
@@ -24,7 +23,6 @@ namespace SingletonDI.SampleApp
         {
             get
             {
-                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();
                 return global::DependencyManager.Generated.Internal.SingletonContainer.UserService;
             }
         }
@@ -36,7 +34,6 @@ namespace SingletonDI.SampleApp
         {
             get
             {
-                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();
                 return global::DependencyManager.Generated.Internal.SingletonContainer.OrderService;
             }
         }

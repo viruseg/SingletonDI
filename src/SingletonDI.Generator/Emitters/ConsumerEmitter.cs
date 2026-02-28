@@ -84,7 +84,6 @@ internal static class ConsumerEmitter
             sb.AppendLine("        {");
             sb.AppendLine("            get");
             sb.AppendLine("            {");
-            sb.AppendLine("                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();");
             sb.AppendLine($"                return global::DependencyManager.Generated.Internal.SingletonContainer.{propertyName};");
             sb.AppendLine("            }");
             sb.AppendLine("        }");

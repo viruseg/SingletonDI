@@ -11,6 +11,7 @@ namespace DependencyManager.Generated.Internal
     {
         private static volatile bool _isInitialized;
         private static readonly object _lock = new object();
+        private static global::System.Threading.Tasks.Task? _initializationTask;
 
         private static SingletonDI.SampleApp.DatabaseService? _DatabaseService;
         private static SingletonDI.SampleApp.UserService? _UserService;
@@ -22,25 +23,54 @@ namespace DependencyManager.Generated.Internal
 
         /// <summary>
         /// Initializes all singletons asynchronously with parallel level processing.
+        /// Thread-safe: uses task caching pattern to ensure single initialization.
         /// </summary>
-        public static async global::System.Threading.Tasks.Task InitializeAsync()
+        public static global::System.Threading.Tasks.Task InitializeAsync()
         {
-            if (_isInitialized) return;
+            if (_isInitialized) return global::System.Threading.Tasks.Task.CompletedTask;
 
             lock (_lock)
             {
-                if (_isInitialized) return;
+                if (_isInitialized) return global::System.Threading.Tasks.Task.CompletedTask;
+
+                // If task is not created yet, create it once
+                if (_initializationTask == null)
+                {
+                    _initializationTask = InitializeInternalAsync();
+                }
+
+                return _initializationTask;
             }
+        }
 
-            _isInitialized = true;
+        /// <summary>
+        /// Internal initialization logic. Called once via task caching pattern.
+        /// </summary>
+        private static async global::System.Threading.Tasks.Task InitializeInternalAsync()
+        {
+            try
+            {
+                // Level 0
+                _DatabaseService = new SingletonDI.SampleApp.DatabaseService();
+                _UserService = new SingletonDI.SampleApp.UserService();
 
-            // Level 0
-            _DatabaseService = new SingletonDI.SampleApp.DatabaseService();
-            _UserService = new SingletonDI.SampleApp.UserService();
-            _OrderService = new SingletonDI.SampleApp.OrderService();
+                await _UserService!.InitializeAsync();
 
-            await _UserService!.InitializeAsync();
+                // Level 1
+                _OrderService = new SingletonDI.SampleApp.OrderService();
 
+                // Set initialized flag after successful completion
+                _isInitialized = true;
+            }
+            catch
+            {
+                // Reset task on error to allow retry
+                lock (_lock)
+                {
+                    _initializationTask = null;
+                }
+                throw;
+            }
         }
 
         /// <summary>

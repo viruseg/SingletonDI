@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -121,12 +122,34 @@ internal static class ProviderValidator
             return ImmutableArray<string>.Empty;
         }
 
-        var dependencies = consumeAttr.ConstructorArguments
-            .Where(arg => arg.Kind == TypedConstantKind.Type)
-            .Select(arg => ((ITypeSymbol)arg.Value!).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
-            .Where(fqn => allProviderFullyQualifiedNames.Contains(fqn))
-            .ToImmutableArray();
-
-        return dependencies;
+        var dependencies = new List<string>();
+        foreach (var arg in consumeAttr.ConstructorArguments)
+        {
+            if (arg.Kind == TypedConstantKind.Array && arg.Values != null)
+            {
+                // params Type[] - массив типов
+                foreach (var element in arg.Values)
+                {
+                    if (element.Kind == TypedConstantKind.Type && element.Value is ITypeSymbol dependencyType)
+                    {
+                        var fqn = dependencyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        if (allProviderFullyQualifiedNames.Contains(fqn))
+                        {
+                            dependencies.Add(fqn);
+                        }
+                    }
+                }
+            }
+            else if (arg.Kind == TypedConstantKind.Type && arg.Value is ITypeSymbol singleType)
+            {
+                // Одиночный тип (если когда-либо будет использоваться без params)
+                var fqn = singleType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                if (allProviderFullyQualifiedNames.Contains(fqn))
+                {
+                    dependencies.Add(fqn);
+                }
+            }
+        }
+        return dependencies.ToImmutableArray();
     }
 }

@@ -45,6 +45,7 @@ internal static class ContainerEmitter
         // Generate fields
         sb.AppendLine("        private static volatile bool _isInitialized;");
         sb.AppendLine("        private static readonly object _lock = new object();");
+        sb.AppendLine("        private static global::System.Threading.Tasks.Task? _initializationTask;");
         sb.AppendLine();
 
         // Generate singleton fields
@@ -70,26 +71,39 @@ internal static class ContainerEmitter
         sb.AppendLine();
         sb.AppendLine("        /// <summary>");
         sb.AppendLine("        /// Initializes all singletons asynchronously with parallel level processing.");
+        sb.AppendLine("        /// Thread-safe: uses task caching pattern to ensure single initialization.");
         sb.AppendLine("        /// </summary>");
-        sb.AppendLine("        public static async global::System.Threading.Tasks.Task InitializeAsync()");
+        sb.AppendLine("        public static global::System.Threading.Tasks.Task InitializeAsync()");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (_isInitialized) return;");
+        sb.AppendLine("            if (_isInitialized) return global::System.Threading.Tasks.Task.CompletedTask;");
         sb.AppendLine();
         sb.AppendLine("            lock (_lock)");
         sb.AppendLine("            {");
-        sb.AppendLine("                if (_isInitialized) return;");
+        sb.AppendLine("                if (_isInitialized) return global::System.Threading.Tasks.Task.CompletedTask;");
+        sb.AppendLine();
+        sb.AppendLine("                // If task is not created yet, create it once");
+        sb.AppendLine("                if (_initializationTask == null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    _initializationTask = InitializeInternalAsync();");
+        sb.AppendLine("                }");
+        sb.AppendLine();
+        sb.AppendLine("                return _initializationTask;");
         sb.AppendLine("            }");
+        sb.AppendLine("        }");
         sb.AppendLine();
-
-        // Set initialized flag early to allow providers to access dependencies during their initialization
-        sb.AppendLine("            _isInitialized = true;");
-        sb.AppendLine();
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine("        /// Internal initialization logic. Called once via task caching pattern.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine("        private static async global::System.Threading.Tasks.Task InitializeInternalAsync()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
 
         // Generate initialization code by levels
         for (int levelIndex = 0; levelIndex < levels.Count; levelIndex++)
         {
             var level = levels[levelIndex];
-            sb.AppendLine($"            // Level {levelIndex}");
+            sb.AppendLine($"                // Level {levelIndex}");
 
             // Create instances for this level
             foreach (var provider in level)
@@ -98,9 +112,8 @@ internal static class ContainerEmitter
                 var formattedType = PropertyNameResolver.FormatTypeName(fqn);
                 var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
 
-                // Build constructor arguments
-                var constructorArgs = BuildConstructorArgs(provider, propertyNames);
-                sb.AppendLine($"            _{fieldName} = new {formattedType}({constructorArgs});");
+                // Dependencies are injected via generated properties, not constructor
+                sb.AppendLine($"                _{fieldName} = new {formattedType}();");
             }
 
             // Generate parallel initialization for this level (only for providers with InitializeAsync)
@@ -112,16 +125,16 @@ internal static class ContainerEmitter
                 if (asyncProviders.Count > 1)
                 {
                     // Multiple async providers - run in parallel
-                    sb.AppendLine("            await global::System.Threading.Tasks.Task.WhenAll(");
+                    sb.AppendLine("                await global::System.Threading.Tasks.Task.WhenAll(");
                     for (int i = 0; i < asyncProviders.Count; i++)
                     {
                         var provider = asyncProviders[i];
                         var fqn = provider.FullyQualifiedName;
                         var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
                         var comma = i < asyncProviders.Count - 1 ? "," : "";
-                        sb.AppendLine($"                _{fieldName}!.InitializeAsync(){comma}");
+                        sb.AppendLine($"                    _{fieldName}!.InitializeAsync(){comma}");
                     }
-                    sb.AppendLine("            );");
+                    sb.AppendLine("                );");
                 }
                 else
                 {
@@ -129,12 +142,26 @@ internal static class ContainerEmitter
                     var provider = asyncProviders[0];
                     var fqn = provider.FullyQualifiedName;
                     var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
-                    sb.AppendLine($"            await _{fieldName}!.InitializeAsync();");
+                    sb.AppendLine($"                await _{fieldName}!.InitializeAsync();");
                 }
             }
 
             sb.AppendLine();
         }
+
+        // Set initialized flag AFTER successful completion
+        sb.AppendLine("                // Set initialized flag after successful completion");
+        sb.AppendLine("                _isInitialized = true;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch");
+        sb.AppendLine("            {");
+        sb.AppendLine("                // Reset task on error to allow retry");
+        sb.AppendLine("                lock (_lock)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    _initializationTask = null;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                throw;");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
 
         sb.AppendLine();
