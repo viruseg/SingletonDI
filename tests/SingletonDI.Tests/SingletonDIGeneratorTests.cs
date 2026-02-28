@@ -29,8 +29,7 @@ public class SingletonDIGeneratorTests
             FullyQualifiedName = "Test.Provider",
             ShortName = "Provider",
             Namespace = "Test",
-            HasSyncInit = true,
-            HasAsyncInit = false,
+            HasInitializeAsyncMethod = true,
             IsDisposable = false,
             Dependencies = ImmutableArray<string>.Empty
         };
@@ -38,8 +37,25 @@ public class SingletonDIGeneratorTests
         // Assert
         Assert.Equal("Test.Provider", model.FullyQualifiedName);
         Assert.Equal("Provider", model.ShortName);
-        Assert.True(model.HasSyncInit);
-        Assert.False(model.HasAsyncInit);
+        Assert.True(model.HasInitializeAsyncMethod);
+    }
+
+    [Fact]
+    public void ProviderModel_WithoutInitializeAsync_CanBeCreated()
+    {
+        // Arrange & Act
+        var model = new ProviderModel
+        {
+            FullyQualifiedName = "Test.Provider",
+            ShortName = "Provider",
+            Namespace = "Test",
+            HasInitializeAsyncMethod = false,
+            IsDisposable = false,
+            Dependencies = ImmutableArray<string>.Empty
+        };
+
+        // Assert
+        Assert.False(model.HasInitializeAsyncMethod);
     }
 
     [Fact]
@@ -70,8 +86,7 @@ public class SingletonDIGeneratorTests
             FullyQualifiedName = "Test.Provider",
             ShortName = "Provider",
             Namespace = "Test",
-            HasSyncInit = false,
-            HasAsyncInit = false,
+            HasInitializeAsyncMethod = false,
             IsDisposable = false,
             Dependencies = ImmutableArray<string>.Empty
         };

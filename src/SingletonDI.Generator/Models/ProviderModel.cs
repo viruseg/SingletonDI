@@ -23,14 +23,9 @@ public readonly record struct ProviderModel
     public required string Namespace { get; init; }
 
     /// <summary>
-    /// Whether the provider implements IInitializeSync.
+    /// Whether the provider has a method with signature "Task InitializeAsync()".
     /// </summary>
-    public required bool HasSyncInit { get; init; }
-
-    /// <summary>
-    /// Whether the provider implements IInitializeAsync.
-    /// </summary>
-    public required bool HasAsyncInit { get; init; }
+    public required bool HasInitializeAsyncMethod { get; init; }
 
     /// <summary>
     /// Whether the provider implements IDisposable.
@@ -38,7 +33,7 @@ public readonly record struct ProviderModel
     public required bool IsDisposable { get; init; }
 
     /// <summary>
-    /// Dependencies of this provider (types it consumes via [Consume]).
+    /// Dependencies of this provider (types it consumes via [SingletonDIConsume]).
     /// </summary>
     public required ImmutableArray<string> Dependencies { get; init; }
 }

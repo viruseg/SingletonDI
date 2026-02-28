@@ -8,8 +8,7 @@ SingletonDI — это Roslyn Source Generator, который автомати�
 
 - ✅ **Автоматическая генерация кода** — весь DI-код создаётся на этапе компиляции
 - ✅ **Incremental Source Generator** — высокая производительность благодаря инкрементальной генерации
-- ✅ **Async инициализация** — поддержка асинхронной инициализации через `IInitializeAsync`
-- ✅ **Sync инициализация** — поддержка синхронной инициализации через `IInitializeSync`
+- ✅ **Async инициализация** — поддержка асинхронной инициализации через метод `InitializeAsync()`
 - ✅ **Параллельная инициализация** — синглтоны на одном уровне зависимостей инициализируются параллельно
 - ✅ **Топологическая сортировка** — автоматическое определение порядка инициализации по зависимостям
 - ✅ **Детекция циклических зависимостей** — ошибки обнаруживаются на этапе компиляции
@@ -53,22 +52,22 @@ dotnet run --project src/SingletonDI.SampleApp
 ```csharp
 using SingletonDI.Attributes;
 
-// Простой singleton с синхронной инициализацией
-[Provide]
-public class DatabaseService : IInitializeSync
+// Простой singleton с синхронной инициализацией (через конструктор)
+[SingletonDIProvide]
+public class DatabaseService
 {
     public string ConnectionString { get; private set; }
 
-    public void Initialize()
+    public DatabaseService()
     {
-        // Код инициализации выполняется при старте приложения
+        // Код инициализации выполняется при создании экземпляра
         ConnectionString = "Server=localhost;Database=MyApp;Connected=true";
     }
 }
 
 // Singleton с асинхронной инициализацией
-[Provide]
-public class UserService : IInitializeAsync
+[SingletonDIProvide]
+public class UserService
 {
     public string UserName { get; private set; }
 
@@ -85,7 +84,7 @@ public class UserService : IInitializeAsync
 
 ```csharp
 // Класс, который использует зависимости
-[Consume(typeof(DatabaseService), typeof(UserService))]
+[SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
 public partial class OrderController  // Обязательно partial!
 {
     public void ProcessOrder()
@@ -118,13 +117,13 @@ public static class Program
 
 ## Атрибуты
 
-### [Provide]
+### [SingletonDIProvide]
 
 Маркирует класс как singleton-провайдер. Генератор создаст экземпляр этого класса и будет управлять его жизненным циклом.
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class ProvideAttribute : Attribute
+public sealed class SingletonDIProvideAttribute : Attribute
 ```
 
 **Требования:**
@@ -133,44 +132,64 @@ public sealed class ProvideAttribute : Attribute
 - Класс не должен быть `abstract`
 - Не наследуется (каждый класс должен быть явно помечен)
 
+**Инициализация:**
+- Для синхронной инициализации используйте конструктор без параметров
+- Для асинхронной инициализации реализуйте метод `Task InitializeAsync()`
+
 **Примеры:**
 
 ```csharp
-// ✅ Корректно
-[Provide]
-public class MyService { }
+// ✅ Корректно — синхронная инициализация через конструктор
+[SingletonDIProvide]
+public class MyService 
+{ 
+    public MyService()
+    {
+        // Инициализация
+    }
+}
+
+// ✅ Корректно — асинхронная инициализация через метод
+[SingletonDIProvide]
+public class DataService
+{
+    public async Task InitializeAsync()
+    {
+        // Асинхронная инициализация
+    }
+}
 
 // ✅ Корректно — record class разрешён
-[Provide]
+[SingletonDIProvide]
 public record class MyRecord(string Value);
 
 // ❌ Ошибка — struct не поддерживается
-[Provide]
+[SingletonDIProvide]
 public struct MyStruct { }  // DM0001
 
 // ❌ Ошибка — abstract class не поддерживается
-[Provide]
+[SingletonDIProvide]
 public abstract class MyAbstract { }  // DM0002
 ```
 
-### [Consume]
+### [SingletonDIConsume]
 
 Маркирует класс как потребителя singleton-зависимостей. Генератор создаст свойства для доступа к указанным синглтонам.
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, 
                 AllowMultiple = false, Inherited = true)]
-public sealed class ConsumeAttribute : Attribute
+public sealed class SingletonDIConsumeAttribute : Attribute
 {
     public Type[] Dependencies { get; }
     
-    public ConsumeAttribute(params Type[] dependencies) { }
+    public SingletonDIConsumeAttribute(params Type[] dependencies) { }
 }
 ```
 
 **Требования:**
 - Класс должен быть объявлен как `partial`
-- Все указанные зависимости должны быть помечены `[Provide]`
+- Все указанные зависимости должны быть помечены `[SingletonDIProvide]`
 - Нельзя указывать сам класс в списке зависимостей (self-reference)
 - Наследуется (`Inherited = true`) — наследники автоматически получают те же зависимости
 
@@ -178,73 +197,20 @@ public sealed class ConsumeAttribute : Attribute
 
 ```csharp
 // ✅ Корректно
-[Consume(typeof(DatabaseService), typeof(UserService))]
+[SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
 public partial class OrderController { }
 
 // ✅ Наследник автоматически получает те же зависимости
 public partial class AdvancedOrderController : OrderController { }
 
 // ❌ Ошибка — класс не partial
-[Consume(typeof(DatabaseService))]
+[SingletonDIConsume(typeof(DatabaseService))]
 public class OrderController { }  // DM0007
 
 // ❌ Ошибка — зависимость не является провайдером
-[Consume(typeof(SomeNonProviderClass))]
+[SingletonDIConsume(typeof(SomeNonProviderClass))]
 public partial class MyClass { }  // DM0006
 ```
-
-## Интерфейсы инициализации
-
-### IInitializeSync
-
-Интерфейс для синхронной инициализации singleton-объектов.
-
-```csharp
-public interface IInitializeSync
-{
-    void Initialize();
-}
-```
-
-Используйте, когда инициализация не требует асинхронных операций:
-
-```csharp
-[Provide]
-public class ConfigService : IInitializeSync
-{
-    public void Initialize()
-    {
-        // Загрузка конфигурации, подключение к ресурсам и т.д.
-    }
-}
-```
-
-### IInitializeAsync
-
-Интерфейс для асинхронной инициализации singleton-объектов.
-
-```csharp
-public interface IInitializeAsync
-{
-    Task InitializeAsync();
-}
-```
-
-Используйте для асинхронных операций (загрузка данных, сетевые запросы):
-
-```csharp
-[Provide]
-public class DataService : IInitializeAsync
-{
-    public async Task InitializeAsync()
-    {
-        await LoadDataFromServerAsync();
-        await InitializeCacheAsync();
-    }
-}
-```
-
-> **Важно:** Класс не может реализовывать оба интерфейса одновременно — это приведёт к ошибке компиляции (DM0010).
 
 ## Сгенерированный код
 
@@ -297,7 +263,7 @@ namespace DependencyManager.Generated
 
 ### Partial-классы потребителей
 
-Для каждого `[Consume]`-класса генерируется partial-класс со свойствами:
+Для каждого `[SingletonDIConsume]`-класса генерируется partial-класс со свойствами:
 
 ```csharp
 // <auto-generated/>
@@ -341,26 +307,24 @@ public global::Baz.Bar Baz_Bar { get; }
 
 | ID | Уровень | Описание |
 |---|---|---|
-| **DM0001** | Error | `[Provide]` применён к `struct` или `record struct` |
-| **DM0002** | Error | `[Provide]` применён к `abstract class` |
-| **DM0003** | Error | `[Provide]` применён к `interface` |
-| **DM0004** | Error | Класс с `[Provide]` не имеет публичного конструктора без параметров |
-| **DM0005** | Warning | Класс с `[Provide]` не реализует `IInitializeSync` или `IInitializeAsync` |
-| **DM0006** | Error | `[Consume]` ссылается на тип без `[Provide]` |
-| **DM0007** | Error | Класс с `[Consume]` не объявлен как `partial` |
-| **DM0008** | Error | Класс с `[Consume]` ссылается сам на себя (self-reference) |
+| **DM0001** | Error | `[SingletonDIProvide]` применён к `struct` или `record struct` |
+| **DM0002** | Error | `[SingletonDIProvide]` применён к `abstract class` |
+| **DM0003** | Error | `[SingletonDIProvide]` применён к `interface` |
+| **DM0004** | Error | Класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров |
+| **DM0006** | Error | `[SingletonDIConsume]` ссылается на тип без `[SingletonDIProvide]` |
+| **DM0007** | Error | Класс с `[SingletonDIConsume]` не объявлен как `partial` |
+| **DM0008** | Error | Класс с `[SingletonDIConsume]` ссылается сам на себя (self-reference) |
 | **DM0009** | Error | Обнаружена циклическая зависимость между провайдерами |
-| **DM0010** | Error | Класс реализует оба интерфейса инициализации одновременно |
 
 ### Пример ошибки циклической зависимости
 
 ```csharp
-[Provide]
-[Consume(typeof(ServiceB))]
+[SingletonDIProvide]
+[SingletonDIConsume(typeof(ServiceB))]
 public partial class ServiceA { }
 
-[Provide]
-[Consume(typeof(ServiceA))]
+[SingletonDIProvide]
+[SingletonDIConsume(typeof(ServiceA))]
 public partial class ServiceB { }
 
 // Ошибка DM0009: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
@@ -370,7 +334,7 @@ public partial class ServiceB { }
 
 - **Только синглтоны** — библиотека не поддерживает Scoped или Transient lifestyle
 - **Одна сборка** — генератор работает только в рамках одной сборки (per-assembly ограничение Roslyn)
-- **Нет межсборочных ссылок** — `[Provide]`-типы из других сборок не поддерживаются
+- **Нет межсборочных ссылок** — `[SingletonDIProvide]`-типы из других сборок не поддерживаются
 - **`struct` запрещён** — только `class` может быть провайдером
 
 ## Структура решения
@@ -378,11 +342,9 @@ public partial class ServiceB { }
 ```
 SingletonDI/
 ├── src/
-│   ├── SingletonDI.Attributes/     # Атрибуты и интерфейсы
-│   │   ├── ProvideAttribute.cs
-│   │   ├── ConsumeAttribute.cs
-│   │   ├── IInitializeSync.cs
-│   │   └── IInitializeAsync.cs
+│   ├── SingletonDI.Attributes/     # Атрибуты
+│   │   ├── SingletonDIProvideAttribute.cs
+│   │   └── SingletonDIConsumeAttribute.cs
 │   │
 │   ├── SingletonDI.Generator/      # Incremental Source Generator
 │   │   ├── SingletonDIGenerator.cs # Главный файл генератора

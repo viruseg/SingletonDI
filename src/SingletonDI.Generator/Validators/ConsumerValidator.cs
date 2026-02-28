@@ -6,12 +6,12 @@ using SingletonDI.Generator.Models;
 namespace SingletonDI.Generator.Validators;
 
 /// <summary>
-/// Validates consumer types with [Consume] attribute and creates ConsumerModel.
+/// Validates consumer types with [SingletonDIConsume] attribute and creates ConsumerModel.
 /// </summary>
 internal static class ConsumerValidator
 {
     /// <summary>
-    /// Validates a type with [Consume] attribute and creates a ConsumerModel.
+    /// Validates a type with [SingletonDIConsume] attribute and creates a ConsumerModel.
     /// Returns null if validation fails.
     /// </summary>
     public static ConsumerModel? Validate(
@@ -32,9 +32,9 @@ internal static class ConsumerValidator
             return null;
         }
 
-        // Get dependencies from [Consume] attribute
+        // Get dependencies from [SingletonDIConsume] attribute
         var consumeAttr = typeSymbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.ConsumeAttribute");
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIConsumeAttribute");
 
         if (consumeAttr == null)
         {
@@ -72,7 +72,7 @@ internal static class ConsumerValidator
         {
             var depFqn = depType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-            // DM0006: Reference must have [Provide]
+            // DM0006: Reference must have [SingletonDIProvide]
             if (!allProviderFullyQualifiedNames.Contains(depFqn))
             {
                 reportDiagnostic(Diagnostic.Create(

@@ -6,15 +6,12 @@ using SingletonDI.Generator.Models;
 namespace SingletonDI.Generator.Validators;
 
 /// <summary>
-/// Validates provider types with [Provide] attribute and creates ProviderModel.
+/// Validates provider types with [SingletonDIProvide] attribute and creates ProviderModel.
 /// </summary>
 internal static class ProviderValidator
 {
-    private const string InitializeSyncFullName = "SingletonDI.Attributes.IInitializeSync";
-    private const string InitializeAsyncFullName = "SingletonDI.Attributes.IInitializeAsync";
-
     /// <summary>
-    /// Validates a type with [Provide] attribute and creates a ProviderModel.
+    /// Validates a type with [SingletonDIProvide] attribute and creates a ProviderModel.
     /// Returns null if validation fails.
     /// </summary>
     public static ProviderModel? Validate(
@@ -26,16 +23,10 @@ internal static class ProviderValidator
         // DM0001: Cannot be struct or record struct
         if (typeDecl.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.StructDeclaration))
         {
-            var recordKeyword = typeDecl.ChildTokens()
-                .Any(t => t.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.RecordKeyword));
-
-            if (recordKeyword)
-            {
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.ProvideOnStruct,
-                    typeDecl.Identifier.GetLocation()));
-                return null;
-            }
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ProvideOnStruct,
+                typeDecl.Identifier.GetLocation()));
+            return null;
         }
 
         // DM0002: Cannot be abstract class
@@ -69,34 +60,14 @@ internal static class ProviderValidator
             return null;
         }
 
-        // Check for IInitializeSync and IInitializeAsync
-        var hasSyncInit = typeSymbol.Interfaces.Any(i => i.OriginalDefinition.ToDisplayString() == InitializeSyncFullName);
-        var hasAsyncInit = typeSymbol.Interfaces.Any(i => i.OriginalDefinition.ToDisplayString() == InitializeAsyncFullName);
-
-        // DM0010: Cannot have both
-        if (hasSyncInit && hasAsyncInit)
-        {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.ProvideBothInitializationMethods,
-                typeDecl.Identifier.GetLocation(),
-                typeSymbol.Name));
-            return null;
-        }
-
-        // DM0005: Warning if neither
-        if (!hasSyncInit && !hasAsyncInit)
-        {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.ProvideMissingInitialization,
-                typeDecl.Identifier.GetLocation(),
-                typeSymbol.Name));
-        }
+        // Check for InitializeAsync method with signature "Task InitializeAsync()"
+        var hasInitializeAsyncMethod = HasInitializeAsyncMethod(typeSymbol);
 
         // Check for IDisposable
         var isDisposable = typeSymbol.Interfaces.Any(i =>
             i.OriginalDefinition.ToDisplayString() == "System.IDisposable");
 
-        // Get dependencies (if this provider also has [Consume])
+        // Get dependencies (if this provider also has [SingletonDIConsume])
         var dependencies = GetDependencies(typeSymbol, allProviderFullyQualifiedNames);
 
         var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -106,20 +77,44 @@ internal static class ProviderValidator
             FullyQualifiedName = fqn,
             ShortName = typeSymbol.Name,
             Namespace = typeSymbol.ContainingNamespace.ToDisplayString(),
-            HasSyncInit = hasSyncInit,
-            HasAsyncInit = hasAsyncInit,
+            HasInitializeAsyncMethod = hasInitializeAsyncMethod,
             IsDisposable = isDisposable,
             Dependencies = dependencies
         };
+    }
+
+    /// <summary>
+    /// Checks if the type has a method with signature "Task InitializeAsync()".
+    /// </summary>
+    private static bool HasInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
+    {
+        foreach (var member in typeSymbol.GetMembers())
+        {
+            if (member is IMethodSymbol method &&
+                method.Name == "InitializeAsync" &&
+                method.Parameters.IsEmpty &&
+                method.ReturnType != null)
+            {
+                // Check if return type is Task
+                var returnTypeName = method.ReturnType.ToDisplayString();
+                if (returnTypeName == "System.Threading.Tasks.Task" ||
+                    returnTypeName == "Task")
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static ImmutableArray<string> GetDependencies(
         INamedTypeSymbol typeSymbol,
         HashSet<string> allProviderFullyQualifiedNames)
     {
-        // Find [Consume] attribute on this type
+        // Find [SingletonDIConsume] attribute on this type
         var consumeAttr = typeSymbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.ConsumeAttribute");
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIConsumeAttribute");
 
         if (consumeAttr == null)
         {

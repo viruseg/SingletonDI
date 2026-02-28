@@ -39,20 +39,8 @@ namespace DependencyManager.Generated.Internal
             _UserService = new SingletonDI.SampleApp.UserService();
             _OrderService = new SingletonDI.SampleApp.OrderService();
 
-            await global::System.Threading.Tasks.Task.WhenAll(
-                InitializeInstanceAsync(_DatabaseService),
-                InitializeInstanceAsync(_UserService),
-                InitializeInstanceAsync(_OrderService)
-            );
+            await _UserService!.InitializeAsync();
 
-        }
-
-        private static async global::System.Threading.Tasks.Task InitializeInstanceAsync(object? instance)
-        {
-            if (instance is SingletonDI.Attributes.IInitializeAsync asyncInit)
-                await asyncInit.InitializeAsync();
-            else if (instance is SingletonDI.Attributes.IInitializeSync syncInit)
-                syncInit.Initialize();
         }
 
         /// <summary>

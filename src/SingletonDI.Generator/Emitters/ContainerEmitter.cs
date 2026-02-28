@@ -103,36 +103,38 @@ internal static class ContainerEmitter
                 sb.AppendLine($"            _{fieldName} = new {formattedType}({constructorArgs});");
             }
 
-            // Generate parallel initialization for this level
-            if (level.Count > 0)
+            // Generate parallel initialization for this level (only for providers with InitializeAsync)
+            var asyncProviders = level.Where(p => p.HasInitializeAsyncMethod).ToList();
+            if (asyncProviders.Count > 0)
             {
                 sb.AppendLine();
-                sb.AppendLine("            await global::System.Threading.Tasks.Task.WhenAll(");
 
-                for (int i = 0; i < level.Count; i++)
+                if (asyncProviders.Count > 1)
                 {
-                    var provider = level[i];
+                    // Multiple async providers - run in parallel
+                    sb.AppendLine("            await global::System.Threading.Tasks.Task.WhenAll(");
+                    for (int i = 0; i < asyncProviders.Count; i++)
+                    {
+                        var provider = asyncProviders[i];
+                        var fqn = provider.FullyQualifiedName;
+                        var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
+                        var comma = i < asyncProviders.Count - 1 ? "," : "";
+                        sb.AppendLine($"                _{fieldName}!.InitializeAsync(){comma}");
+                    }
+                    sb.AppendLine("            );");
+                }
+                else
+                {
+                    // Single async provider - direct await
+                    var provider = asyncProviders[0];
                     var fqn = provider.FullyQualifiedName;
                     var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
-                    var comma = i < level.Count - 1 ? "," : "";
-                    sb.AppendLine($"                InitializeInstanceAsync(_{fieldName}){comma}");
+                    sb.AppendLine($"            await _{fieldName}!.InitializeAsync();");
                 }
-
-                sb.AppendLine("            );");
             }
 
             sb.AppendLine();
         }
-        sb.AppendLine("        }");
-
-        // Generate helper method for instance initialization
-        sb.AppendLine();
-        sb.AppendLine("        private static async global::System.Threading.Tasks.Task InitializeInstanceAsync(object? instance)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            if (instance is SingletonDI.Attributes.IInitializeAsync asyncInit)");
-        sb.AppendLine("                await asyncInit.InitializeAsync();");
-        sb.AppendLine("            else if (instance is SingletonDI.Attributes.IInitializeSync syncInit)");
-        sb.AppendLine("                syncInit.Initialize();");
         sb.AppendLine("        }");
 
         sb.AppendLine();

@@ -6,7 +6,7 @@
 
 ```
 Solution
-├── Attributes          (отдельная сборка — только атрибуты и интерфейсы)
+├── Attributes          (отдельная сборка — только атрибуты)
 ├── Generator           (Roslyn Incremental Source Generator)
 │   ├── Analyzers/      (диагностика)
 │   ├── Models/         (immutable data models для пайплайна)
@@ -20,33 +20,37 @@ Solution
 
 ## Часть 1: Сборка атрибутов
 
-### ProvideAttribute
+### SingletonDIProvideAttribute
 ```csharp
+/// <summary>
+/// Marks a class as a singleton provider that can be injected into consumers.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The marked class will be registered in the DI container as a singleton.
+/// </para>
+/// <para>
+/// Initialization options:
+/// <list type="bullet">
+/// <item><description>Use parameterless constructor for synchronous initialization</description></item>
+/// <item><description>Implement <c>Task InitializeAsync()</c> method for asynchronous initialization (will be called automatically if present)</description></item>
+/// </list>
+/// </para>
+/// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class ProvideAttribute : Attribute { }
-
-// Интерфейсы для инициализации (опциональные)
-public interface IInitializeSync
-{
-    void Initialize();
-}
-
-public interface IInitializeAsync
-{
-    Task InitializeAsync();
-}
+public sealed class SingletonDIProvideAttribute : Attribute { }
 ```
 
-### ConsumeAttribute
+### SingletonDIConsumeAttribute
 ```csharp
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]
-public sealed class ConsumeAttribute : Attribute
+public sealed class SingletonDIConsumeAttribute : Attribute
 {
-    public ConsumeAttribute(params Type[] dependencies) { }
+    public SingletonDIConsumeAttribute(params Type[] dependencies) { }
 }
 ```
 
-> **Важно:** `[Consume]` имеет `Inherited = true` — наследники автоматически получают те же зависимости.
+> **Важно:** `[SingletonDIConsume]` имеет `Inherited = true` — наследники автоматически получают те же зависимости.
 
 ---
 
@@ -56,16 +60,14 @@ public sealed class ConsumeAttribute : Attribute
 
 | ID | Уровень | Условие |
 |---|---|---|
-| `DM0001` | Error | `[Provide]` на `struct` или `record struct` |
-| `DM0002` | Error | `[Provide]` на `abstract class` |
-| `DM0003` | Error | `[Provide]` на `interface` |
-| `DM0004` | Error | `[Provide]`-класс не имеет `public` конструктора без параметров |
-| `DM0005` | Warning | `[Provide]`-класс не содержит ни `Initialize()`, ни `InitializeAsync()` |
-| `DM0006` | Error | `[Consume]` ссылается на тип без `[Provide]` |
-| `DM0007` | Error | `[Consume]` — потребитель не является `partial` |
-| `DM0008` | Error | `[Consume]` — класс потребляет сам себя (self-reference) |
+| `DM0001` | Error | `[SingletonDIProvide]` на `struct` или `record struct` |
+| `DM0002` | Error | `[SingletonDIProvide]` на `abstract class` |
+| `DM0003` | Error | `[SingletonDIProvide]` на `interface` |
+| `DM0004` | Error | `[SingletonDIProvide]`-класс не имеет `public` конструктора без параметров |
+| `DM0006` | Error | `[SingletonDIConsume]` ссылается на тип без `[SingletonDIProvide]` |
+| `DM0007` | Error | `[SingletonDIConsume]` — потребитель не является `partial` |
+| `DM0008` | Error | `[SingletonDIConsume]` — класс потребляет сам себя (self-reference) |
 | `DM0009` | Error | Циклическая зависимость между синглтонами (сообщение указывает весь цикл) |
-| `DM0010` | Error | `[Provide]` имеет одновременно оба метода: `Initialize()` и `InitializeAsync()` |
 
 Все `DiagnosticDescriptor` создаются через фабричный метод `DiagnosticDescriptors.Create(id, title, messageFormat, ...)`.
 
@@ -82,8 +84,7 @@ ProviderModel
   FullyQualifiedName: string
   ShortName: string
   Namespace: string
-  HasSyncInit: bool
-  HasAsyncInit: bool
+  HasInitializeAsyncMethod: bool
   IsDisposable: bool
 
 ConsumerModel
@@ -102,10 +103,10 @@ CombinedModel
 ```
 RegisterSourceOutput
   │
-  ├── ForAttributeWithMetadataName("[Provide]")
+  ├── ForAttributeWithMetadataName("[SingletonDIProvide]")
   │     → ValidateProvider() → ProviderModel
   │
-  ├── ForAttributeWithMetadataName("[Consume]")
+  ├── ForAttributeWithMetadataName("[SingletonDIConsume]")
   │     → ValidateConsumer() → ConsumerModel
   │
   └── Combine(providers, consumers)
@@ -116,7 +117,7 @@ RegisterSourceOutput
               └── Emit: ModuleInitializer
 ```
 
-Каждая ветка максимально независима — изменение одного `[Consume]` не перезапускает пересчёт всех провайдеров.
+Каждая ветка максимально независима — изменение одного `[SingletonDIConsume]` не перезапускает пересчёт всех провайдеров.
 
 ---
 
@@ -124,7 +125,7 @@ RegisterSourceOutput
 
 Алгоритм Кана (BFS). Только синглтоны-потребители участвуют в графе (провайдер может сам быть потребителем).
 
-1. Строится граф зависимостей только из `[Provide]`-классов, которые одновременно являются `[Consume]`.
+1. Строится граф зависимостей только из `[SingletonDIProvide]`-классов, которые одновременно являются `[SingletonDIConsume]`.
 2. Если обнаружен цикл — эмитируется `DM0009` с перечислением узлов цикла в сообщении. Генерация кода прерывается.
 3. Результат — упорядоченный список `ImmutableArray<string>` (FQN в порядке инициализации).
 
@@ -146,33 +147,25 @@ namespace DependencyManager.Generated.Internal
         private static bool _initialized;
         private static readonly object _lock = new object();
 
-        // Одно поле на каждый [Provide]-тип
+        // Одно поле на каждый [SingletonDIProvide]-тип
         internal static global::MyApp.ExampleSingleton? ExampleSingleton;
 
-        [global::System.Runtime.CompilerServices.ModuleInitializer]
-        internal static void Initialize()
+        public static async Task InitializeAsync()
         {
+            if (_initialized) return;
+
             lock (_lock)
             {
                 if (_initialized) return;
-                
-                // Синглтоны в топологическом порядке
-                ExampleSingleton = new global::MyApp.ExampleSingleton();
-                
-                // Initialize() — синхронная инициализация
-                if (ExampleSingleton is IInitializeSync sync)
-                    sync.Initialize();
-                
-                // InitializeAsync() — асинхронная инициализация
-                if (ExampleSingleton is IInitializeAsync asyncInit)
-                {
-                    var task = asyncInit.InitializeAsync();
-                    if (!task.IsCompleted)
-                        task.GetAwaiter().GetResult();
-                }
-                
-                _initialized = true;
             }
+
+            _initialized = true;
+
+            // Синглтоны в топологическом порядке
+            ExampleSingleton = new global::MyApp.ExampleSingleton();
+            
+            // InitializeAsync() — если метод существует
+            await ExampleSingleton.InitializeAsync();
         }
 
         internal static void ThrowIfNotInitialized()
@@ -186,11 +179,9 @@ namespace DependencyManager.Generated.Internal
 
 **IDisposable:** Если синглтон реализует IDisposable, контейнер генерирует статический метод `Dispose()` который вызывается при выгрузке AppDomain.
 
-> `[ModuleInitializer]` — это CLR-механизм (.NET 5+), гарантирующий запуск до любого пользовательского кода в сборке. Никаких `Startup.Initialize()` со стороны пользователя не требуется.
-
 ### 5.2 Потребители (ConsumerEmitter.cs)
 
-На каждый `[Consume]`-класс генерируется отдельный файл `<ClassName>.g.cs`:
+На каждый `[SingletonDIConsume]`-класс генерируется отдельный файл `<ClassName>.g.cs`:
 
 ```csharp
 // <auto-generated/>
@@ -235,7 +226,7 @@ internal static class ExceptionHelper
 
 ## Часть 6: Thread Safety
 
-Поле в контейнере — `volatile` или инициализация через `Interlocked.CompareExchange`. `[ModuleInitializer]` по спецификации CLR гарантированно вызывается однократно и потокобезопасно средствами рантайма — дополнительные локи не нужны. Флаг `_initialized` помечается `volatile`.
+Поле в контейнере — `volatile` или инициализация через `Interlocked.CompareExchange`. Флаг `_initialized` помечается `volatile`.
 
 Используется `lock` для потокобезопасной инициализации синглтонов.
 
@@ -246,22 +237,21 @@ internal static class ExceptionHelper
 В README генератора явно указывается:
 
 - Работает только в рамках одной сборки (per-assembly ограничение Roslyn).
-- `[Provide]`-типы из других сборок не поддерживаются в текущей версии.
-- Требует .NET 5+ (из-за `[ModuleInitializer]`).
-- `record class` разрешён для `[Provide]`, `record struct` — запрещён.
+- `[SingletonDIProvide]`-типы из других сборок не поддерживаются в текущей версии.
+- `record class` разрешён для `[SingletonDIProvide]`, `record struct` — запрещён.
 
 ---
 
 ## Часть 8: Порядок реализации
 
-1. **Сборка атрибутов** — `ProvideAttribute`, `ConsumeAttribute`, `IInitializeSync`, `IInitializeAsync`
+1. **Сборка атрибутов** — `SingletonDIProvideAttribute`, `SingletonDIConsumeAttribute`
 2. **DiagnosticDescriptors** — все ID и тексты
 3. **ExceptionHelper** (генерируемый файл)
 4. **Models** — `ProviderModel`, `ConsumerModel`, `CombinedModel`
 5. **Validators** — `ProviderValidator`, `ConsumerValidator`
 6. **TopologicalSorter** — алгоритм Кана + детекция циклов
 7. **PropertyNameResolver** — разрешение конфликтов имён
-8. **ContainerEmitter** — генерация контейнера + ModuleInitializer + IDisposable
+8. **ContainerEmitter** — генерация контейнера + IDisposable
 9. **ConsumerEmitter** — генерация partial-классов потребителей
 10. **Сборка пайплайна** — регистрация всего в `IIncrementalGeneratorInitializationContext`
 11. **SampleApp** — демонстрационное приложение
@@ -274,7 +264,7 @@ internal static class ExceptionHelper
 ```
 SingletonDI/
 ├── src/
-│   ├── SingletonDI.Attributes/        # Атрибуты и интерфейсы [Provide], [Consume], IInitializeSync, IInitializeAsync
+│   ├── SingletonDI.Attributes/        # Атрибуты [SingletonDIProvide], [SingletonDIConsume]
 │   ├── SingletonDI.Generator/         # Incremental Source Generator
 │   └── SingletonDI.SampleApp/         # Тестовое приложение
 └── tests/
@@ -295,43 +285,51 @@ SingletonDI/
 ## Итоговый поток с точки зрения пользователя
 
 ```csharp
-[Provide]
+[SingletonDIProvide]
 public class DatabaseService
 {
-    public void Initialize() { /* подключение */ }
+    // Синхронная инициализация через конструктор
+    public DatabaseService()
+    {
+        // подключение к БД
+    }
 }
 
-[Provide]
+[SingletonDIProvide]
 public class UserService
 {
-    public async Task InitializeAsync() { /* загрузка данных */ }
+    // Асинхронная инициализация через метод InitializeAsync
+    public async Task InitializeAsync()
+    {
+        // загрузка данных
+    }
 }
 
-[Consume(typeof(DatabaseService), typeof(UserService))]
+[SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
 public partial class OrderController
 {
     public void DoWork()
     {
-        // DatabaseService и UserService уже инициализированы,
-        // контейнер поднят [ModuleInitializer] до этой строки
-        _ = DatabaseService;
-        _ = UserService;
+        // DatabaseService и UserService уже инициализированы
+        _ = DatabaseServiceInstance;
+        _ = UserServiceInstance;
     }
 }
 
 // Где-то в коде:
-var ctrl = new OrderController(); // никакого дополнительного кода
+await SingletonInitializer.InitializeAsync();
+var ctrl = new OrderController();
 ctrl.DoWork(); // всё работает
 ```
 
 ---
 
-## Подтверждённые требования (из问答)
+## Подтверждённые требования
 
 - ✅ Вариант A: Ленивое свойство через Container
 - ✅ .NET 10
-- ✅ Async инициализация через lock + GetAwaiter().GetResult()
-- ✅ [Provide] не наследуется, [Consume] наследуется
+- ✅ Async инициализация через метод InitializeAsync
+- ✅ [SingletonDIProvide] не наследуется, [SingletonDIConsume] наследуется
 - ✅ ExceptionHelper — отдельный генерируемый файл
 - ✅ 3 проекта + Tests
 - ✅ IDisposable поддержка

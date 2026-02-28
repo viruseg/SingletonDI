@@ -27,10 +27,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             spc.AddSource("ExceptionHelper.g.cs", SourceText.From(ExceptionHelperEmitter.Generate(), encoding: System.Text.Encoding.UTF8));
         });
 
-        // Get provider types - types with [Provide] attribute
+        // Get provider types - types with [SingletonDIProvide] attribute
         var providers = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                "SingletonDI.Attributes.ProvideAttribute",
+                "SingletonDI.Attributes.SingletonDIProvideAttribute",
                 predicate: (node, token) => node is TypeDeclarationSyntax,
                 transform: (context, token) =>
                 {
@@ -44,10 +44,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .Where(t => t != null)
             .Select((t, _) => t!);
 
-        // Get consumer types - types with [Consume] attribute
+        // Get consumer types - types with [SingletonDIConsume] attribute
         var consumers = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                "SingletonDI.Attributes.ConsumeAttribute",
+                "SingletonDI.Attributes.SingletonDIConsumeAttribute",
                 predicate: (node, token) => node is TypeDeclarationSyntax,
                 transform: (context, token) =>
                 {

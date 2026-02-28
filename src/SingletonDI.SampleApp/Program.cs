@@ -3,24 +3,22 @@ using SingletonDI.Attributes;
 
 namespace SingletonDI.SampleApp;
 
-// Example 1: Simple sync provider
-[Provide]
-public class DatabaseService : IInitializeSync
+// Example 1: Simple provider with synchronous initialization (constructor only)
+[SingletonDIProvide]
+public class DatabaseService
 {
-    public string ConnectionString { get; private set; } = "Server=localhost;Database=Sample";
+    public string ConnectionString { get; private set; } = "Server=localhost;Database=Sample;Connected=true";
 
-    public void Initialize()
+    public DatabaseService()
     {
-        Console.WriteLine("[DatabaseService] Initialize() called - connecting to database...");
-        // Simulate database connection
-        ConnectionString = "Server=localhost;Database=Sample;Connected=true";
+        Console.WriteLine("[DatabaseService] Constructor called - connecting to database...");
         Console.WriteLine("[DatabaseService] Database connected successfully!");
     }
 }
 
-// Example 2: Async provider
-[Provide]
-public class UserService : IInitializeAsync
+// Example 2: Provider with async initialization via InitializeAsync method
+[SingletonDIProvide]
+public class UserService
 {
     public string UserName { get; private set; } = "DefaultUser";
 
@@ -35,26 +33,26 @@ public class UserService : IInitializeAsync
 }
 
 // Example 3: Provider that depends on another provider
-[Provide]
-[Consume(typeof(DatabaseService))]
-public partial class OrderService : IInitializeSync
+[SingletonDIProvide]
+[SingletonDIConsume(typeof(DatabaseService))]
+public partial class OrderService
 {
     // DatabaseService доступен через сгенерированное свойство DatabaseServiceInstance
 
-    public void Initialize()
+    public OrderService()
     {
-        Console.WriteLine("[OrderService] Initialize() called - setting up order processing...");
+        Console.WriteLine("[OrderService] Constructor called - setting up order processing...");
         Console.WriteLine($"[OrderService] Using database: {DatabaseServiceInstance?.ConnectionString}");
     }
 }
 
 // Example 4: Consumer class
-[Consume(typeof(DatabaseService), typeof(UserService), typeof(OrderService))]
+[SingletonDIConsume(typeof(DatabaseService), typeof(UserService), typeof(OrderService))]
 public partial class OrderController
 {
     public void ProcessOrder()
     {
-        // All dependencies are already initialized via ModuleInitializer
+        // All dependencies are already initialized via SingletonInitializer
         Console.WriteLine("\n=== OrderController ===");
         Console.WriteLine($"Database: {DatabaseServiceInstance?.ConnectionString}");
         Console.WriteLine($"User: {UserServiceInstance?.UserName}");
