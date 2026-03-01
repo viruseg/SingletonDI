@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\SingletonDI.Attributes\SingletonDI.Attributes.csproj" />
     <ProjectReference Include="..\..\src\SingletonDI.Generator\SingletonDI.Generator.csproj" />
+    <ProjectReference Include="..\..\src\SingletonDI.Refactoring\SingletonDI.Refactoring.csproj" />
   </ItemGroup>
 
 </Project>
