@@ -20,29 +20,11 @@ internal static class ProviderValidator
         HashSet<string> allProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
-        // DM0001: Cannot be struct or record struct
-        if (typeDecl.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.StructDeclaration))
-        {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.ProvideOnStruct,
-                typeDecl.Identifier.GetLocation()));
-            return null;
-        }
-
         // DM0002: Cannot be abstract class
         if (typeSymbol.IsAbstract)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProvideOnAbstractClass,
-                typeDecl.Identifier.GetLocation()));
-            return null;
-        }
-
-        // DM0003: Cannot be interface
-        if (typeSymbol.TypeKind == TypeKind.Interface)
-        {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.ProvideOnInterface,
                 typeDecl.Identifier.GetLocation()));
             return null;
         }

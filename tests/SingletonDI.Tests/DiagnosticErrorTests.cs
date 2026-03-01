@@ -9,28 +9,6 @@ namespace SingletonDI.Tests;
 public class DiagnosticErrorTests
 {
     [Fact]
-    public void DM0001_ProvideOnStruct()
-    {
-        // Arrange
-        const string SOURCE = """
-                              using SingletonDI.Attributes;
-
-                              [SingletonDIProvide]
-                              public struct MyStruct
-                              {
-                              }
-                              """;
-
-        // Act
-        var diagnostics = RunGenerator(SOURCE);
-
-        // Assert
-        var dm0001 = diagnostics.FirstOrDefault(d => d.Id == "DM0001");
-        Assert.NotNull(dm0001);
-        Assert.Equal("Cannot use [SingletonDIProvide] on struct", dm0001.Descriptor.Title);
-    }
-
-    [Fact]
     public void DM0002_ProvideOnAbstractClass()
     {
         // Arrange
@@ -39,28 +17,6 @@ public class DiagnosticErrorTests
 
                               [SingletonDIProvide]
                               public abstract class MyAbstractClass
-                              {
-                              }
-                              """;
-
-        // Act
-        var diagnostics = RunGenerator(SOURCE);
-
-        // Assert
-        var dm0002 = diagnostics.FirstOrDefault(d => d.Id == "DM0002");
-        Assert.NotNull(dm0002);
-        Assert.Equal("Cannot use [SingletonDIProvide] on abstract class", dm0002.Descriptor.Title);
-    }
-
-    [Fact]
-    public void DM0002_ProvideOnInterface()
-    {
-        // Arrange
-        const string SOURCE = """
-                              using SingletonDI.Attributes;
-
-                              [SingletonDIProvide]
-                              public interface IInterface
                               {
                               }
                               """;

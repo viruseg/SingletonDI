@@ -331,9 +331,7 @@ public global::Baz.Bar Baz_Bar { get; }
 
 | ID | Уровень | Описание |
 |---|---|---|
-| **DM0001** | Error | `[SingletonDIProvide]` применён к `struct` или `record struct` |
 | **DM0002** | Error | `[SingletonDIProvide]` применён к `abstract class` |
-| **DM0003** | Error | `[SingletonDIProvide]` применён к `interface` |
 | **DM0004** | Error | Класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров |
 | **DM0005** | Error | Метод `InitializeAsync` имеет недоступный модификатор доступа (должен быть `public`, `internal` или `protected internal`) |
 | **DM0006** | Error | `[SingletonDIConsume]` ссылается на тип без `[SingletonDIProvide]` |

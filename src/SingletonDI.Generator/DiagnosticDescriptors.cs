@@ -10,32 +10,12 @@ internal static class DiagnosticDescriptors
     private const string Category = "SingletonDI";
 
     /// <summary>
-    /// DM0001: [SingletonDIProvide] attribute cannot be used on struct or record struct.
-    /// </summary>
-    public static readonly DiagnosticDescriptor ProvideOnStruct = Create(
-        "DM0001",
-        "Cannot use [SingletonDIProvide] on struct",
-        "[SingletonDIProvide] attribute cannot be applied to struct or record struct. Only classes are supported.",
-        Category,
-        DiagnosticSeverity.Error);
-
-    /// <summary>
     /// DM0002: [SingletonDIProvide] attribute cannot be used on abstract class.
     /// </summary>
     public static readonly DiagnosticDescriptor ProvideOnAbstractClass = Create(
         "DM0002",
         "Cannot use [SingletonDIProvide] on abstract class",
         "[SingletonDIProvide] attribute cannot be applied to abstract class. Only concrete classes are supported.",
-        Category,
-        DiagnosticSeverity.Error);
-
-    /// <summary>
-    /// DM0003: [SingletonDIProvide] attribute cannot be used on interface.
-    /// </summary>
-    public static readonly DiagnosticDescriptor ProvideOnInterface = Create(
-        "DM0003",
-        "Cannot use [SingletonDIProvide] on interface",
-        "[SingletonDIProvide] attribute cannot be applied to interface. Only classes are supported.",
         Category,
         DiagnosticSeverity.Error);
 
