@@ -53,6 +53,28 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0002_ProvideOnInterface()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              [SingletonDIProvide]
+                              public interface IInterface
+                              {
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0002 = diagnostics.FirstOrDefault(d => d.Id == "DM0002");
+        Assert.NotNull(dm0002);
+        Assert.Equal("Cannot use [SingletonDIProvide] on abstract class", dm0002.Descriptor.Title);
+    }
+
+    [Fact]
     public void DM0004_ProvideMissingParameterlessConstructor()
     {
         // Arrange
