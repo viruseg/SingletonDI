@@ -50,6 +50,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0005: InitializeAsync method has inaccessible access modifier.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InitializeAsyncNotAccessible = Create(
+        "DM0005",
+        "InitializeAsync method has inaccessible access modifier",
+        "Method InitializeAsync has access modifier '{0}' which makes it inaccessible from generated code. Use 'public', 'internal', or 'protected internal'.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0006: [SingletonDIConsume] references a type that does not have [SingletonDIProvide] attribute.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeReferencesNonProvider = Create(
@@ -86,6 +96,26 @@ internal static class DiagnosticDescriptors
         "DM0009",
         "Circular dependency detected",
         "Circular dependency detected: {0}. Please resolve the dependency cycle between singleton providers.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0010: Duplicate type in SingletonDIConsume attribute arguments.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConsumeDuplicateTypes = Create(
+        "DM0010",
+        "Duplicate type in SingletonDIConsume attribute arguments",
+        "Type '{0}' is specified multiple times in SingletonDIConsume attribute. Each type should be specified only once.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0011: Type already declared in base class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConsumeDuplicateInBaseClass = Create(
+        "DM0011",
+        "Type already declared in base class",
+        "Type '{0}' is already declared in base class '{1}'. Remove the duplicate declaration.",
         Category,
         DiagnosticSeverity.Error);
 

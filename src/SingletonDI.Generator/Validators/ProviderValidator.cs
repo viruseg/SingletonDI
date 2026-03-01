@@ -62,7 +62,23 @@ internal static class ProviderValidator
         }
 
         // Check for InitializeAsync method with signature "Task InitializeAsync()"
-        var hasInitializeAsyncMethod = HasInitializeAsyncMethod(typeSymbol);
+        var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol);
+
+        // DM0005: Validate InitializeAsync access modifier
+        if (initializeAsyncMethod != null)
+        {
+            var accessibility = initializeAsyncMethod.DeclaredAccessibility;
+            if (accessibility == Accessibility.Private ||
+                accessibility == Accessibility.Protected ||
+                accessibility == Accessibility.ProtectedAndInternal)
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.InitializeAsyncNotAccessible,
+                    initializeAsyncMethod.Locations.FirstOrDefault(),
+                    accessibility.ToString().ToLower()));
+                return null;
+            }
+        }
 
         // Check for IDisposable
         var isDisposable = typeSymbol.Interfaces.Any(i =>
@@ -78,16 +94,17 @@ internal static class ProviderValidator
             FullyQualifiedName = fqn,
             ShortName = typeSymbol.Name,
             Namespace = typeSymbol.ContainingNamespace.ToDisplayString(),
-            HasInitializeAsyncMethod = hasInitializeAsyncMethod,
+            HasInitializeAsyncMethod = initializeAsyncMethod != null,
             IsDisposable = isDisposable,
             Dependencies = dependencies
         };
     }
 
     /// <summary>
-    /// Checks if the type has a method with signature "Task InitializeAsync()".
+    /// Finds the InitializeAsync method with signature "Task InitializeAsync()".
+    /// Returns null if not found.
     /// </summary>
-    private static bool HasInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
+    private static IMethodSymbol? FindInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
     {
         foreach (var member in typeSymbol.GetMembers())
         {
@@ -101,12 +118,12 @@ internal static class ProviderValidator
                 if (returnTypeName == "System.Threading.Tasks.Task" ||
                     returnTypeName == "Task")
                 {
-                    return true;
+                    return method;
                 }
             }
         }
 
-        return false;
+        return null;
     }
 
     private static ImmutableArray<string> GetDependencies(
