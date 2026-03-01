@@ -14,6 +14,7 @@ SingletonDI — это Roslyn Source Generator, который автомати�
 - ✅ **Детекция циклических зависимостей** — ошибки обнаруживаются на этапе компиляции
 - ✅ **Потокобезопасность** — корректная работа в многопоточной среде
 - ✅ **Диагностика ошибок** — информативные сообщения об ошибках компиляции
+- ✅ **Code Refactoring** — автоматическое добавление метода `InitializeAsync`
 
 ## Установка
 
@@ -191,6 +192,7 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - Класс должен быть объявлен как `partial`
 - Все указанные зависимости должны быть помечены `[SingletonDIProvide]`
 - Нельзя указывать сам класс в списке зависимостей (self-reference)
+- Нельзя дублировать типы в списке зависимостей
 - Наследуется (`Inherited = true`) — наследники автоматически получают те же зависимости
 
 **Примеры:**
@@ -210,6 +212,28 @@ public class OrderController { }  // DM0007
 // ❌ Ошибка — зависимость не является провайдером
 [SingletonDIConsume(typeof(SomeNonProviderClass))]
 public partial class MyClass { }  // DM0006
+
+// ❌ Ошибка — дублирование типа
+[SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]
+public partial class MyClass { }  // DM0010
+```
+
+## Code Refactoring
+
+Проект включает Code Refactoring провайдер для автоматического добавления метода `InitializeAsync` в классы с атрибутом `[SingletonDIProvide]`.
+
+**Использование:**
+1. Установите курсор на имя класса с `[SingletonDIProvide]`
+2. Нажмите `Ctrl+.` (или `Alt+Enter` в Rider)
+3. Выберите "Add InitializeAsync method"
+
+Генератор добавит следующий метод:
+
+```csharp
+public Task InitializeAsync()
+{
+    return Task.CompletedTask;
+}
 ```
 
 ## Сгенерированный код
@@ -311,10 +335,14 @@ public global::Baz.Bar Baz_Bar { get; }
 | **DM0002** | Error | `[SingletonDIProvide]` применён к `abstract class` |
 | **DM0003** | Error | `[SingletonDIProvide]` применён к `interface` |
 | **DM0004** | Error | Класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров |
+| **DM0005** | Error | Метод `InitializeAsync` имеет недоступный модификатор доступа (должен быть `public`, `internal` или `protected internal`) |
 | **DM0006** | Error | `[SingletonDIConsume]` ссылается на тип без `[SingletonDIProvide]` |
 | **DM0007** | Error | Класс с `[SingletonDIConsume]` не объявлен как `partial` |
 | **DM0008** | Error | Класс с `[SingletonDIConsume]` ссылается сам на себя (self-reference) |
 | **DM0009** | Error | Обнаружена циклическая зависимость между провайдерами |
+| **DM0010** | Error | Дублирование типа в аргументах `[SingletonDIConsume]` |
+| **DM0011** | Error | Тип уже объявлен в базовом классе |
+| **DM0012** | Error | Метод `InitializeAsync` не может быть `static` |
 
 ### Пример ошибки циклической зависимости
 
@@ -328,6 +356,29 @@ public partial class ServiceA { }
 public partial class ServiceB { }
 
 // Ошибка DM0009: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
+```
+
+### Пример ошибки недоступного InitializeAsync
+
+```csharp
+[SingletonDIProvide]
+public class MyService
+{
+    private async Task InitializeAsync()  // ❌ DM0005: private недоступен
+    {
+        await Task.Delay(100);
+    }
+}
+
+// ✅ Корректно:
+[SingletonDIProvide]
+public class MyService
+{
+    public async Task InitializeAsync()  // public доступен
+    {
+        await Task.Delay(100);
+    }
+}
 ```
 
 ## Ограничения
@@ -350,9 +401,23 @@ SingletonDI/
 │   │   ├── SingletonDIGenerator.cs # Главный файл генератора
 │   │   ├── DiagnosticDescriptors.cs
 │   │   ├── Emitters/               # Генераторы кода
+│   │   │   ├── ContainerEmitter.cs
+│   │   │   ├── ConsumerEmitter.cs
+│   │   │   ├── ExceptionHelperEmitter.cs
+│   │   │   └── SingletonInitializerEmitter.cs
 │   │   ├── Models/                 # Модели данных
+│   │   │   ├── ProviderModel.cs
+│   │   │   ├── ConsumerModel.cs
+│   │   │   └── CombinedModel.cs
 │   │   ├── Validators/             # Валидаторы
+│   │   │   ├── ProviderValidator.cs
+│   │   │   └── ConsumerValidator.cs
 │   │   └── Helpers/                # Вспомогательные классы
+│   │       ├── TopologicalSorter.cs
+│   │       └── PropertyNameResolver.cs
+│   │
+│   ├── SingletonDI.Refactoring/    # Code Refactoring провайдеры
+│   │   └── SingletonDIProvideRefactoringProvider.cs
 │   │
 │   └── SingletonDI.SampleApp/      # Пример использования
 │       ├── Program.cs
@@ -360,8 +425,10 @@ SingletonDI/
 │
 └── tests/
     └── SingletonDI.Tests/          # Unit-тесты
+        ├── SingletonDIGeneratorTests.cs
+        └── DiagnosticErrorTests.cs
 ```
 
 ## Лицензия
 
-MIT License (или укажите вашу лицензию)
+MIT License
