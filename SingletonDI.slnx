@@ -1,6 +1,7 @@
 ﻿<Solution>
   <Project Path="src/SingletonDI.Attributes/SingletonDI.Attributes.csproj" />
   <Project Path="src/SingletonDI.Generator/SingletonDI.Generator.csproj" />
+  <Project Path="src/SingletonDI.Refactoring/SingletonDI.Refactoring.csproj" />
   <Project Path="src/SingletonDI.SampleApp/SingletonDI.SampleApp.csproj" />
   <Project Path="tests/SingletonDI.Tests/SingletonDI.Tests.csproj" />
 </Solution>
