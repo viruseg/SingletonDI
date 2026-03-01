@@ -18,7 +18,7 @@ namespace DependencyManager.Generated.Internal
                 "Singleton container has not been initialized. " +
                 "Call SingletonInitializer.InitializeAsync() before accessing singletons."
             );
-
+        
         /// <summary>
         /// Throws InvalidOperationException when a singleton is accessed before initialization.
         /// </summary>
@@ -30,7 +30,7 @@ namespace DependencyManager.Generated.Internal
                 $"Singleton of type '{typeof(T).Name}' has not been initialized. " +
                 "Call SingletonInitializer.InitializeAsync() before accessing singletons."
             );
-
+        
         /// <summary>
         /// Throws InvalidOperationException when a singleton is null.
         /// </summary>

@@ -126,7 +126,7 @@ internal static class ContainerEmitter
                 {
                     // Multiple async providers - run in parallel
                     sb.AppendLine("                await global::System.Threading.Tasks.Task.WhenAll(");
-                    for (int i = 0; i < asyncProviders.Count; i++)
+                    for (var i = 0; i < asyncProviders.Count; i++)
                     {
                         var provider = asyncProviders[i];
                         var fqn = provider.FullyQualifiedName;
@@ -134,7 +134,7 @@ internal static class ContainerEmitter
                         var comma = i < asyncProviders.Count - 1 ? "," : "";
                         sb.AppendLine($"                    _{fieldName}!.InitializeAsync(){comma}");
                     }
-                    sb.AppendLine("                );");
+                    sb.AppendLine("                ).ConfigureAwait(false);");
                 }
                 else
                 {
@@ -142,7 +142,7 @@ internal static class ContainerEmitter
                     var provider = asyncProviders[0];
                     var fqn = provider.FullyQualifiedName;
                     var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
-                    sb.AppendLine($"                await _{fieldName}!.InitializeAsync();");
+                    sb.AppendLine($"                await _{fieldName}!.InitializeAsync().ConfigureAwait(false);");
                 }
             }
 

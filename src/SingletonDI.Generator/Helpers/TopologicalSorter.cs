@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Diagnostics;
 using SingletonDI.Generator.Models;
 
 namespace SingletonDI.Generator.Helpers;

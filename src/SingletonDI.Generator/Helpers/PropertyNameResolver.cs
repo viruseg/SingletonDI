@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Text;
 using SingletonDI.Generator.Models;
 
 namespace SingletonDI.Generator.Helpers;
@@ -14,7 +13,7 @@ internal static class PropertyNameResolver
     /// Mapping from provider FQN to resolved property name.
     /// </summary>
     public static ImmutableDictionary<string, string> ResolvePropertyNames(
-        System.Collections.Generic.List<ProviderModel> providers)
+        List<ProviderModel> providers)
     {
         if (providers.Count == 0)
         {

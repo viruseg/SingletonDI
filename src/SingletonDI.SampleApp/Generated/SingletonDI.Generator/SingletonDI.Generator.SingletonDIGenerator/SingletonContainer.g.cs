@@ -54,7 +54,7 @@ namespace DependencyManager.Generated.Internal
                 _DatabaseService = new SingletonDI.SampleApp.DatabaseService();
                 _UserService = new SingletonDI.SampleApp.UserService();
 
-                await _UserService!.InitializeAsync();
+                await _UserService!.InitializeAsync().ConfigureAwait(false);
 
                 // Level 1
                 _OrderService = new SingletonDI.SampleApp.OrderService();

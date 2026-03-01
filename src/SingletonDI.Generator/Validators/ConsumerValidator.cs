@@ -234,7 +234,7 @@ internal static class ConsumerValidator
                 {
                     foreach (var element in firstArg.Values)
                     {
-                        if (element.Kind == TypedConstantKind.Type && element.Value is ITypeSymbol depType)
+                        if (element is { Kind: TypedConstantKind.Type, Value: ITypeSymbol depType })
                         {
                             var depFqn = depType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                             if (!result.ContainsKey(depFqn))
@@ -244,7 +244,7 @@ internal static class ConsumerValidator
                         }
                     }
                 }
-                else if (firstArg.Kind == TypedConstantKind.Type && firstArg.Value is ITypeSymbol singleType)
+                else if (firstArg is { Kind: TypedConstantKind.Type, Value: ITypeSymbol singleType })
                 {
                     var depFqn = singleType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     if (!result.ContainsKey(depFqn))

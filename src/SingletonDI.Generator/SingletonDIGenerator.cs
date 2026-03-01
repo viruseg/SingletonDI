@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -95,7 +94,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             }
 
             // Convert TypeDeclarationSyntax to ProviderModel
-            var providerModels = new System.Collections.Generic.List<ProviderModel>();
+            var providerModels = new List<ProviderModel>();
             foreach (var typeDecl in data.Providers)
             {
                 var semanticModel = data.Compilation.GetSemanticModel(typeDecl.SyntaxTree);
@@ -145,7 +144,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             // Generate consumer partial classes
             if (data.Consumers.Length > 0)
             {
-                var consumerModels = new System.Collections.Generic.List<ConsumerModel>();
+                var consumerModels = new List<ConsumerModel>();
                 foreach (var typeDecl in data.Consumers)
                 {
                     var semanticModel = data.Compilation.GetSemanticModel(typeDecl.SyntaxTree);

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -68,9 +67,10 @@ internal static class ProviderValidator
         if (initializeAsyncMethod != null)
         {
             var accessibility = initializeAsyncMethod.DeclaredAccessibility;
-            if (accessibility == Accessibility.Private ||
-                accessibility == Accessibility.Protected ||
-                accessibility == Accessibility.ProtectedAndInternal)
+            if (accessibility is
+                Accessibility.Private or
+                Accessibility.Protected or
+                Accessibility.ProtectedAndInternal)
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.InitializeAsyncNotAccessible,
@@ -108,15 +108,16 @@ internal static class ProviderValidator
     {
         foreach (var member in typeSymbol.GetMembers())
         {
-            if (member is IMethodSymbol method &&
-                method.Name == "InitializeAsync" &&
-                method.Parameters.IsEmpty &&
-                method.ReturnType != null)
+            if (member is IMethodSymbol { Name: "InitializeAsync", Parameters.IsEmpty: true } method)
             {
                 // Check if return type is Task
                 var returnTypeName = method.ReturnType.ToDisplayString();
-                if (returnTypeName == "System.Threading.Tasks.Task" ||
-                    returnTypeName == "Task")
+
+                if (returnTypeName is
+                    "System.Threading.Tasks.Task" or
+                    "Task" or
+                    "System.Threading.Tasks.ValueTask" or
+                    "ValueTask")
                 {
                     return method;
                 }

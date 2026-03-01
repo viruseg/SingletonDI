@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Collections.Generic;
 using System.Text;
 using SingletonDI.Generator.Helpers;
 using SingletonDI.Generator.Models;
@@ -16,7 +15,7 @@ internal static class ConsumerEmitter
     /// Returns a dictionary mapping file names to source content.
     /// </summary>
     public static ImmutableDictionary<string, string> Generate(
-        System.Collections.Generic.List<ConsumerModel> consumers,
+        List<ConsumerModel> consumers,
         ImmutableDictionary<string, string> propertyNames)
     {
         if (consumers.Count == 0)
