@@ -161,8 +161,11 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
                 var consumerSources = ConsumerEmitter.Generate(consumerModels, propertyNames);
 
-                foreach (var (fileName, source) in consumerSources)
+                foreach (var p in consumerSources)
                 {
+                    var fileName = p.Key;
+                    var source = p.Value;
+
                     spc.AddSource(fileName, SourceText.From(source, encoding: System.Text.Encoding.UTF8));
                 }
             }

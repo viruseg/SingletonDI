@@ -155,14 +155,11 @@ internal static class ConsumerValidator
             dependencies.Add(depFqn);
         }
 
-        return new ConsumerModel
-        {
-            FullyQualifiedName = fqn,
-            ShortName = typeSymbol.Name,
-            Namespace = typeSymbol.ContainingNamespace.ToDisplayString(),
-            IsPartial = true,
-            Dependencies = dependencies.ToImmutable()
-        };
+        return new ConsumerModel(FullyQualifiedName : fqn,
+                                 ShortName : typeSymbol.Name,
+                                 Namespace : typeSymbol.ContainingNamespace.ToDisplayString(),
+                                 IsPartial : true,
+                                 Dependencies : dependencies.ToImmutable());
     }
 
     /// <summary>

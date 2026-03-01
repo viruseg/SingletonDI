@@ -6,29 +6,35 @@ namespace SingletonDI.Generator.Models;
 /// Immutable model representing a consumer of singleton providers.
 /// </summary>
 public readonly record struct ConsumerModel
+(
+    string FullyQualifiedName,
+    string ShortName,
+    string Namespace,
+    bool IsPartial,
+    ImmutableArray<string> Dependencies)
 {
     /// <summary>
     /// The fully qualified name of the consumer type.
     /// </summary>
-    public required string FullyQualifiedName { get; init; }
+    public string FullyQualifiedName { get; } = FullyQualifiedName;
 
     /// <summary>
     /// The short name of the consumer type (without namespace).
     /// </summary>
-    public required string ShortName { get; init; }
+    public string ShortName { get; } = ShortName;
 
     /// <summary>
     /// The namespace of the consumer type.
     /// </summary>
-    public required string Namespace { get; init; }
+    public string Namespace { get; } = Namespace;
 
     /// <summary>
     /// Whether the consumer is declared as partial.
     /// </summary>
-    public required bool IsPartial { get; init; }
+    public bool IsPartial { get; } = IsPartial;
 
     /// <summary>
     /// The fully qualified names of the provider types this consumer depends on.
     /// </summary>
-    public required ImmutableArray<string> Dependencies { get; init; }
+    public ImmutableArray<string> Dependencies { get; } = Dependencies;
 }

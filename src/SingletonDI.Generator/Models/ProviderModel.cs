@@ -5,35 +5,40 @@ namespace SingletonDI.Generator.Models;
 /// <summary>
 /// Immutable model representing a singleton provider.
 /// </summary>
-public readonly record struct ProviderModel
+public readonly record struct ProviderModel(string fullyQualifiedName,
+                                            string shortName,
+                                            string @namespace,
+                                            bool hasInitializeAsyncMethod,
+                                            bool isDisposable,
+                                            ImmutableArray<string> dependencies)
 {
     /// <summary>
     /// The fully qualified name of the provider type.
     /// </summary>
-    public required string FullyQualifiedName { get; init; }
+    public string FullyQualifiedName { get; } = fullyQualifiedName;
 
     /// <summary>
     /// The short name of the provider type (without namespace).
     /// </summary>
-    public required string ShortName { get; init; }
+    public string ShortName { get; } = shortName;
 
     /// <summary>
     /// The namespace of the provider type.
     /// </summary>
-    public required string Namespace { get; init; }
+    public string Namespace { get; } = @namespace;
 
     /// <summary>
     /// Whether the provider has a method with signature "Task InitializeAsync()".
     /// </summary>
-    public required bool HasInitializeAsyncMethod { get; init; }
+    public bool HasInitializeAsyncMethod { get; } = hasInitializeAsyncMethod;
 
     /// <summary>
     /// Whether the provider implements IDisposable.
     /// </summary>
-    public required bool IsDisposable { get; init; }
+    public bool IsDisposable { get; } = isDisposable;
 
     /// <summary>
     /// Dependencies of this provider (types it consumes via [SingletonDIConsume]).
     /// </summary>
-    public required ImmutableArray<string> Dependencies { get; init; }
+    public ImmutableArray<string> Dependencies { get; } = dependencies;
 }

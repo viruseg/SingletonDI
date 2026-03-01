@@ -81,15 +81,12 @@ internal static class ProviderValidator
 
         var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-        return new ProviderModel
-        {
-            FullyQualifiedName = fqn,
-            ShortName = typeSymbol.Name,
-            Namespace = typeSymbol.ContainingNamespace.ToDisplayString(),
-            HasInitializeAsyncMethod = initializeAsyncMethod != null,
-            IsDisposable = isDisposable,
-            Dependencies = dependencies
-        };
+        return new ProviderModel(fullyQualifiedName : fqn,
+                                 shortName : typeSymbol.Name,
+                                 @namespace : typeSymbol.ContainingNamespace.ToDisplayString(),
+                                 hasInitializeAsyncMethod : initializeAsyncMethod != null,
+                                 isDisposable : isDisposable,
+                                 dependencies : dependencies);
     }
 
     /// <summary>

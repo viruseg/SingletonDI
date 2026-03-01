@@ -14,19 +14,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SingletonDI.Attributes\SingletonDI.Attributes.csproj" />
-  </ItemGroup>
-
-  <!-- Подключаем генератор исходного кода как Analyzer -->
-  <ItemGroup>
     <ProjectReference Include="..\SingletonDI.Generator\SingletonDI.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-  </ItemGroup>
-
-  <!-- Подключаем рефакторинг как Analyzer -->
-  <ItemGroup>
     <ProjectReference Include="..\SingletonDI.Refactoring\SingletonDI.Refactoring.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <!-- Exclude generated files from compilation -->
   <ItemGroup>
     <Compile Remove="Generated\**\*.cs" />
   </ItemGroup>

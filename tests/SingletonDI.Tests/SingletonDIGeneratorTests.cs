@@ -1,6 +1,4 @@
 using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 using SingletonDI.Generator;
 using SingletonDI.Generator.Models;
@@ -26,15 +24,12 @@ public class SingletonDIGeneratorTests
     public void ProviderModel_CanBeCreated()
     {
         // Arrange & Act
-        var model = new ProviderModel
-        {
-            FullyQualifiedName = "Test.Provider",
-            ShortName = "Provider",
-            Namespace = "Test",
-            HasInitializeAsyncMethod = true,
-            IsDisposable = false,
-            Dependencies = ImmutableArray<string>.Empty
-        };
+        var model = new ProviderModel(fullyQualifiedName : "Test.Provider",
+                                      shortName : "Provider",
+                                      @namespace : "Test",
+                                      hasInitializeAsyncMethod : true,
+                                      isDisposable : false,
+                                      dependencies : ImmutableArray<string>.Empty);
 
         // Assert
         Assert.Equal("Test.Provider", model.FullyQualifiedName);
@@ -46,15 +41,12 @@ public class SingletonDIGeneratorTests
     public void ProviderModel_WithoutInitializeAsync_CanBeCreated()
     {
         // Arrange & Act
-        var model = new ProviderModel
-        {
-            FullyQualifiedName = "Test.Provider",
-            ShortName = "Provider",
-            Namespace = "Test",
-            HasInitializeAsyncMethod = false,
-            IsDisposable = false,
-            Dependencies = ImmutableArray<string>.Empty
-        };
+        var model = new ProviderModel(fullyQualifiedName : "Test.Provider",
+                                      shortName : "Provider",
+                                      @namespace : "Test",
+                                      hasInitializeAsyncMethod : false,
+                                      isDisposable : false,
+                                      dependencies : ImmutableArray<string>.Empty);
 
         // Assert
         Assert.False(model.HasInitializeAsyncMethod);
@@ -64,14 +56,11 @@ public class SingletonDIGeneratorTests
     public void ConsumerModel_CanBeCreated()
     {
         // Arrange & Act
-        var model = new ConsumerModel
-        {
-            FullyQualifiedName = "Test.Consumer",
-            ShortName = "Consumer",
-            Namespace = "Test",
-            IsPartial = true,
-            Dependencies = ["Test.Provider"]
-        };
+        var model = new ConsumerModel(FullyQualifiedName: "Test.Consumer",
+                          ShortName: "Consumer",
+                          Namespace: "Test",
+                          IsPartial: true,
+                          Dependencies: ["Test.Provider"]);
 
         // Assert
         Assert.Equal("Test.Consumer", model.FullyQualifiedName);
@@ -83,22 +72,17 @@ public class SingletonDIGeneratorTests
     public void CombinedModel_HasCircularDependency_ReturnsTrue()
     {
         // Arrange - circular dependency exists when TopologicalOrder is empty but Providers is not
-        var provider = new ProviderModel
-        {
-            FullyQualifiedName = "Test.Provider",
-            ShortName = "Provider",
-            Namespace = "Test",
-            HasInitializeAsyncMethod = false,
-            IsDisposable = false,
-            Dependencies = ImmutableArray<string>.Empty
-        };
+        var provider = new ProviderModel(fullyQualifiedName : "Test.Provider",
+                                         shortName : "Provider",
+                                         @namespace : "Test",
+                                         hasInitializeAsyncMethod : false,
+                                         isDisposable : false,
+                                         dependencies : ImmutableArray<string>.Empty);
 
-        var model = new CombinedModel
-        {
-            Providers = [provider],
-            Consumers = ImmutableArray<ConsumerModel>.Empty,
-            TopologicalOrder = ImmutableArray<string>.Empty // Empty indicates cycle
-        };
+        var model = new CombinedModel(Providers: [provider],
+                                      Consumers: ImmutableArray<ConsumerModel>.Empty,
+                                      TopologicalOrder: ImmutableArray<string>.Empty // Empty indicates cycle
+        );
 
         // Assert
         Assert.True(model.HasCircularDependency);
@@ -108,12 +92,9 @@ public class SingletonDIGeneratorTests
     public void CombinedModel_NoCircularDependency_ReturnsFalse()
     {
         // Arrange - no circular dependency when both are empty (no providers)
-        var model = new CombinedModel
-        {
-            Providers = ImmutableArray<ProviderModel>.Empty,
-            Consumers = ImmutableArray<ConsumerModel>.Empty,
-            TopologicalOrder = ImmutableArray<string>.Empty
-        };
+        var model = new CombinedModel(Providers: ImmutableArray<ProviderModel>.Empty,
+                                      Consumers: ImmutableArray<ConsumerModel>.Empty,
+                                      TopologicalOrder: ImmutableArray<string>.Empty);
 
         // Assert
         Assert.False(model.HasCircularDependency);

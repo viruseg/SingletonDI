@@ -11,7 +11,7 @@ namespace SingletonDI.Attributes;
 /// The class must be declared as <c>partial</c> to allow code generation.
 /// </para>
 /// <para>
-/// <see cref="Inherited"/> is set to <c>true</c>, meaning derived classes automatically get the same dependencies.
+/// Inherited is set to <c>true</c>, meaning derived classes automatically get the same dependencies.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]

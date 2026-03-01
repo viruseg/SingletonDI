@@ -12,10 +12,10 @@ internal static class TopologicalSorter
     /// <summary>
     /// Result of topological sorting.
     /// </summary>
-    public readonly struct SortResult
+    public readonly struct SortResult(ImmutableArray<string> sortedOrder, ImmutableArray<string> cycle)
     {
-        public required ImmutableArray<string> SortedOrder { get; init; }
-        public required ImmutableArray<string> Cycle { get; init; }
+        public ImmutableArray<string> SortedOrder { get; } = sortedOrder;
+        public ImmutableArray<string> Cycle { get; } = cycle;
         public bool HasCycle => !Cycle.IsEmpty;
     }
 
@@ -29,11 +29,7 @@ internal static class TopologicalSorter
     {
         if (providers.IsEmpty)
         {
-            return new SortResult
-            {
-                SortedOrder = ImmutableArray<string>.Empty,
-                Cycle = ImmutableArray<string>.Empty
-            };
+            return new SortResult(ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
         }
 
         // Convert to list
@@ -41,11 +37,7 @@ internal static class TopologicalSorter
 
         if (validProviders.Count == 0)
         {
-            return new SortResult
-            {
-                SortedOrder = ImmutableArray<string>.Empty,
-                Cycle = ImmutableArray<string>.Empty
-            };
+            return new SortResult(ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
         }
 
         // Build dependency graph: only include providers that have dependencies
@@ -120,18 +112,10 @@ internal static class TopologicalSorter
             // Cycle detected - find the cycle path
             var cycle = FindCycle(adjacency, remainingWithDegree[0]);
 
-            return new SortResult
-            {
-                SortedOrder = ImmutableArray<string>.Empty,
-                Cycle = cycle
-            };
+            return new SortResult(ImmutableArray<string>.Empty, cycle);
         }
 
-        return new SortResult
-        {
-            SortedOrder = result.ToImmutable(),
-            Cycle = ImmutableArray<string>.Empty
-        };
+        return new SortResult(result.ToImmutable(), ImmutableArray<string>.Empty);
     }
 
     /// <summary>
@@ -189,18 +173,18 @@ internal static class TopologicalSorter
     /// <summary>
     /// Result of topological sorting by levels.
     /// </summary>
-    public readonly struct LevelSortResult
+    public readonly struct LevelSortResult(List<List<ProviderModel>> levels, ImmutableArray<string> cycle)
     {
         /// <summary>
         /// List of levels, where each level contains providers that can be initialized in parallel.
         /// Providers on level N depend only on providers from levels 0..N-1.
         /// </summary>
-        public required List<List<ProviderModel>> Levels { get; init; }
+        public List<List<ProviderModel>> Levels { get; } = levels;
 
         /// <summary>
         /// The detected cycle, if any. Empty if no cycle was detected.
         /// </summary>
-        public required ImmutableArray<string> Cycle { get; init; }
+        public ImmutableArray<string> Cycle { get; } = cycle;
 
         /// <summary>
         /// Whether a cycle was detected during sorting.
@@ -219,22 +203,14 @@ internal static class TopologicalSorter
     {
         if (providers.IsEmpty)
         {
-            return new LevelSortResult
-            {
-                Levels = new List<List<ProviderModel>>(),
-                Cycle = ImmutableArray<string>.Empty
-            };
+            return new LevelSortResult(new List<List<ProviderModel>>(), ImmutableArray<string>.Empty);
         }
 
         var validProviders = providers.ToList();
 
         if (validProviders.Count == 0)
         {
-            return new LevelSortResult
-            {
-                Levels = new List<List<ProviderModel>>(),
-                Cycle = ImmutableArray<string>.Empty
-            };
+            return new LevelSortResult(new List<List<ProviderModel>>(), ImmutableArray<string>.Empty);
         }
 
         // Build provider dictionary for quick lookup
@@ -301,11 +277,7 @@ internal static class TopologicalSorter
 
                 var cycle = FindCycle(adjacency, remainingWithDegree.FirstOrDefault() ?? string.Empty);
 
-                return new LevelSortResult
-                {
-                    Levels = new List<List<ProviderModel>>(),
-                    Cycle = cycle
-                };
+                return new LevelSortResult(new List<List<ProviderModel>>(), cycle);
             }
 
             // Add current level to result
@@ -324,10 +296,6 @@ internal static class TopologicalSorter
             }
         }
 
-        return new LevelSortResult
-        {
-            Levels = levels,
-            Cycle = ImmutableArray<string>.Empty
-        };
+        return new LevelSortResult(levels, ImmutableArray<string>.Empty);
     }
 }
