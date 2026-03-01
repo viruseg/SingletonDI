@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 using SingletonDI.Generator;
 using SingletonDI.Generator.Models;

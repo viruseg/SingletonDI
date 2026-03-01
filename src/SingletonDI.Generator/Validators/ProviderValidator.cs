@@ -80,6 +80,16 @@ internal static class ProviderValidator
             }
         }
 
+        // DM0012: InitializeAsync cannot be static
+        if (initializeAsyncMethod is { IsStatic: true })
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.InitializeAsyncIsStatic,
+                initializeAsyncMethod.Locations.FirstOrDefault(),
+                typeSymbol.Name));
+            return null;
+        }
+
         // Check for IDisposable
         var isDisposable = typeSymbol.Interfaces.Any(i =>
             i.OriginalDefinition.ToDisplayString() == "System.IDisposable");
@@ -103,6 +113,8 @@ internal static class ProviderValidator
     /// <summary>
     /// Finds the InitializeAsync method with signature "Task InitializeAsync()".
     /// Returns null if not found.
+    /// Note: This method finds both static and instance methods.
+    /// Static methods are validated separately by DM0012 diagnostic.
     /// </summary>
     private static IMethodSymbol? FindInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
     {

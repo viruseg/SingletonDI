@@ -119,6 +119,16 @@ internal static class DiagnosticDescriptors
         Category,
         DiagnosticSeverity.Error);
 
+    /// <summary>
+    /// DM0012: InitializeAsync method cannot be static.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InitializeAsyncIsStatic = Create(
+        "DM0012",
+        "InitializeAsync method cannot be static",
+        "Method InitializeAsync in class '{0}' is static. InitializeAsync must be an instance method.",
+        Category,
+        DiagnosticSeverity.Error);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,
