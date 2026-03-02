@@ -42,7 +42,7 @@ public partial class OrderService
     public OrderService()
     {
         Console.WriteLine("[OrderService] Constructor called - setting up order processing...");
-        Console.WriteLine($"[OrderService] Using database: {DatabaseServiceInstance?.ConnectionString}");
+        Console.WriteLine($"[OrderService] Using database: {DatabaseService.ConnectionString}");
     }
 }
 
@@ -54,8 +54,8 @@ public partial class OrderController
     {
         // All dependencies are already initialized via SingletonInitializer
         Console.WriteLine("\n=== OrderController ===");
-        Console.WriteLine($"Database: {DatabaseServiceInstance?.ConnectionString}");
-        Console.WriteLine($"User: {UserServiceInstance?.UserName}");
+        Console.WriteLine($"Database: {DatabaseService.ConnectionString}");
+        Console.WriteLine($"User: {UserService.UserName}");
         Console.WriteLine("Order processed successfully!");
     }
 }

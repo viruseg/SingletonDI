@@ -74,7 +74,7 @@ internal static class ConsumerEmitter
 
             // Add global:: prefix for proper type resolution
             var formattedType = "global::" + PropertyNameResolver.FormatTypeName(dep);
-            var propertyAccessName = propertyName + "Instance"; // Add suffix to avoid conflict with type name
+            var propertyAccessName = propertyName;
 
             sb.AppendLine($"        /// <summary>");
             sb.AppendLine($"        /// Gets the singleton instance of {formattedType}.");
