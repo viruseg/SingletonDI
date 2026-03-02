@@ -24,8 +24,8 @@ public class SingletonDIConsumerCodeFixProvider : CodeFixProvider
     /// <summary>
     /// Diagnostic IDs that this provider can fix.
     /// </summary>
-    public const string DM0010 = "DM0010";
-    public const string DM0011 = "DM0011";
+    private const string DM0010 = "DM0010";
+    private const string DM0011 = "DM0011";
 
     private const string DM0010Title = "Remove duplicate type";
     private const string DM0011Title = "Remove type from attribute";
@@ -116,11 +116,41 @@ public class SingletonDIConsumerCodeFixProvider : CodeFixProvider
                 return document;
 
             // If this is the only attribute in the list, remove the entire list
+            // But preserve the leading trivia (comments, XML docs) of the next node
             if (attributeList.Attributes.Count == 1)
             {
-                var updatedRoot = root.RemoveNode(attributeList, SyntaxRemoveOptions.KeepNoTrivia);
+                // Get the parent node (usually a class declaration)
+                var parentNode = attributeList.Parent;
+                if (parentNode is null)
+                    return document;
+
+                // Get the leading trivia from the attribute list (which includes comments before it)
+                var attributeListLeadingTrivia = attributeList.GetLeadingTrivia();
+
+                // Remove the attribute list but keep leading trivia
+                var updatedRoot = root.RemoveNode(attributeList, SyntaxRemoveOptions.KeepLeadingTrivia);
                 if (updatedRoot is null)
                     return document;
+
+                // If there was leading trivia (comments/XML docs), we need to preserve them
+                // by attaching them to the next token
+                if (attributeListLeadingTrivia.Any())
+                {
+                    // Find the same parent in the updated tree
+                    var updatedParent = updatedRoot.FindNode(parentNode.Span).FirstAncestorOrSelf<TypeDeclarationSyntax>();
+                    if (updatedParent is not null)
+                    {
+                        // Get the first token of the parent (usually the keyword like "class")
+                        var firstToken = updatedParent.GetFirstToken();
+                        var newLeadingTrivia = firstToken.LeadingTrivia;
+
+                        // Prepend the preserved trivia
+                        var combinedTrivia = attributeListLeadingTrivia.AddRange(newLeadingTrivia);
+                        var newFirstToken = firstToken.WithLeadingTrivia(combinedTrivia);
+
+                        updatedRoot = updatedRoot.ReplaceToken(firstToken, newFirstToken);
+                    }
+                }
 
                 return document.WithSyntaxRoot(updatedRoot);
             }

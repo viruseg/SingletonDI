@@ -6,6 +6,10 @@ using Xunit;
 
 namespace SingletonDI.Tests;
 
+/// <summary>
+/// Tests for diagnostic errors in SingletonDI.Generator.
+/// These tests verify that diagnostics are correctly reported for various error conditions.
+/// </summary>
 public class DiagnosticErrorTests
 {
     [Fact]
@@ -15,9 +19,24 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Абстрактный базовый класс.
+                              /// Не может использоваться с [SingletonDIProvide].
+                              /// </summary>
                               [SingletonDIProvide]
                               public abstract class MyAbstractClass
                               {
+                                  // Абстрактный метод
+                                  public abstract void DoSomething();
+                                  
+                                  /* Многострочный комментарий
+                                     в абстрактном классе */
+                                  protected int _baseValue;
+                                  
+                                  /// <summary>
+                                  /// Конкретный метод базового класса.
+                                  /// </summary>
+                                  public void ConcreteMethod() { }
                               }
                               """;
 
@@ -37,10 +56,30 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис без параметризованного конструктора.
+                              /// </summary>
                               [SingletonDIProvide]
                               public class MyService
                               {
-                                  public MyService(int value) { }
+                                  // Поле для хранения значения
+                                  private readonly int _value;
+                                  
+                                  /// <summary>
+                                  /// Единственный конструктор с параметром.
+                                  /// </summary>
+                                  public MyService(int value) 
+                                  { 
+                                      _value = value; 
+                                  }
+                                  
+                                  /* Метод для получения значения */
+                                  public int GetValue() => _value;
+                                  
+                                  /// <summary>
+                                  /// Имя сервиса.
+                                  /// </summary>
+                                  public string Name { get; set; } = "Default";
                               }
                               """;
 
@@ -61,10 +100,26 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис с приватным конструктором.
+                              /// </summary>
                               [SingletonDIProvide]
                               public class MyService
                               {
+                                  // Приватный конструктор - ошибка!
                                   private MyService() { }
+                                  
+                                  // Статический счётчик экземпляров
+                                  private static int _instanceCount;
+                                  
+                                  /// <summary>
+                                  /// Идентификатор экземпляра.
+                                  /// </summary>
+                                  public int Id { get; } = ++_instanceCount;
+                                  
+                                  /* Многострочный комментарий
+                                     перед методом */
+                                  public void DoWork() { }
                               }
                               """;
 
@@ -85,10 +140,25 @@ public class DiagnosticErrorTests
                               using System.Threading.Tasks;
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис с приватным методом InitializeAsync.
+                              /// </summary>
                               [SingletonDIProvide]
                               public class MyService
                               {
+                                  // Приватное поле
+                                  private bool _isInitialized;
+                                  
+                                  // Приватный метод инициализации - ошибка!
                                   private Task InitializeAsync() => Task.CompletedTask;
+                                  
+                                  /// <summary>
+                                  /// Проверка инициализации.
+                                  /// </summary>
+                                  public bool IsReady => _isInitialized;
+                                  
+                                  /* Вспомогательный метод */
+                                  public void Reset() => _isInitialized = false;
                               }
                               """;
 
@@ -109,10 +179,26 @@ public class DiagnosticErrorTests
                               using System.Threading.Tasks;
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис с защищённым методом InitializeAsync.
+                              /// </summary>
                               [SingletonDIProvide]
                               public class MyService
                               {
+                                  // Защищённый метод инициализации - ошибка!
                                   protected Task InitializeAsync() => Task.CompletedTask;
+                                  
+                                  // Константа по умолчанию
+                                  private const string DefaultName = "Service";
+                                  
+                                  /// <summary>
+                                  /// Имя сервиса.
+                                  /// </summary>
+                                  public string Name { get; set; } = DefaultName;
+                                  
+                                  /* Многострочный комментарий
+                                     в конце класса */
+                                  public void DoSomething() { }
                               }
                               """;
 
@@ -132,11 +218,31 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
-                              public class NonProviderService { }
+                              /// <summary>
+                              /// Обычный класс без атрибута [SingletonDIProvide].
+                              /// </summary>
+                              public class NonProviderService
+                              {
+                                  // Поле в обычном классе
+                                  private int _value;
+                                  
+                                  /// <summary>
+                                  /// Метод обычного класса.
+                                  /// </summary>
+                                  public void Execute() { }
+                              }
 
+                              /// <summary>
+                              /// Консьюмер, ссылающийся на NonProviderService.
+                              /// </summary>
                               [SingletonDIConsume(typeof(NonProviderService))]
                               public partial class MyConsumer
                               {
+                                  // Комментарий в консьюмере
+                                  private string _name = "Consumer";
+                                  
+                                  /* Многострочный комментарий */
+                                  public void DoWork() { }
                               }
                               """;
 
@@ -157,12 +263,29 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис-провайдер.
+                              /// </summary>
                               [SingletonDIProvide]
-                              public class MyService { }
+                              public class MyService 
+                              { 
+                                  // Реализация сервиса
+                                  public void Execute() { }
+                              }
 
+                              /// <summary>
+                              /// Консьюмер без модификатора partial - ошибка!
+                              /// </summary>
                               [SingletonDIConsume(typeof(MyService))]
-                              public class MyConsumer
+                              public class MyConsumer  // Забыли partial!
                               {
+                                  // Поле консьюмера
+                                  private int _counter;
+                                  
+                                  /// <summary>
+                                  /// Метод консьюмера.
+                                  /// </summary>
+                                  public void DoWork() { }
                               }
                               """;
 
@@ -183,16 +306,34 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис A с зависимостью от B.
+                              /// </summary>
                               [SingletonDIProvide]
                               [SingletonDIConsume(typeof(ServiceB))]
                               public partial class ServiceA
                               {
+                                  // Идентификатор сервиса A
+                                  public int IdA { get; set; }
+                                  
+                                  /// <summary>
+                                  /// Метод сервиса A.
+                                  /// </summary>
+                                  public void MethodA() { }
                               }
 
+                              /// <summary>
+                              /// Сервис B с зависимостью от A.
+                              /// </summary>
                               [SingletonDIProvide]
                               [SingletonDIConsume(typeof(ServiceA))]
                               public partial class ServiceB
                               {
+                                  // Идентификатор сервиса B
+                                  public int IdB { get; set; }
+                                  
+                                  /* Метод сервиса B */
+                                  public void MethodB() { }
                               }
                               """;
 
@@ -212,22 +353,50 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис A -> B.
+                              /// </summary>
                               [SingletonDIProvide]
                               [SingletonDIConsume(typeof(ServiceB))]
                               public partial class ServiceA
                               {
+                                  // Поле сервиса A
+                                  private string _name = "A";
+                                  
+                                  /// <summary>
+                                  /// Имя сервиса.
+                                  /// </summary>
+                                  public string Name => _name;
                               }
 
+                              /// <summary>
+                              /// Сервис B -> C.
+                              /// </summary>
                               [SingletonDIProvide]
                               [SingletonDIConsume(typeof(ServiceC))]
                               public partial class ServiceB
                               {
+                                  // Поле сервиса B
+                                  private string _name = "B";
+                                  
+                                  /* Метод */
+                                  public string GetName() => _name;
                               }
 
+                              /// <summary>
+                              /// Сервис C -> A (цикл!).
+                              /// </summary>
                               [SingletonDIProvide]
                               [SingletonDIConsume(typeof(ServiceA))]
                               public partial class ServiceC
                               {
+                                  // Поле сервиса C
+                                  private string _name = "C";
+                                  
+                                  /// <summary>
+                                  /// Имя сервиса C.
+                                  /// </summary>
+                                  public string Name => _name;
                               }
                               """;
 
@@ -247,12 +416,29 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис-провайдер.
+                              /// </summary>
                               [SingletonDIProvide]
-                              public class MyService { }
+                              public class MyService 
+                              { 
+                                  // Реализация
+                                  public void Execute() { }
+                              }
 
-                              [SingletonDIConsume(typeof(MyService), typeof(MyService))]
+                              /// <summary>
+                              /// Консьюмер с дублирующимся типом в атрибуте.
+                              /// </summary>
+                              [SingletonDIConsume(typeof(MyService), typeof(MyService))]  // Дубликат!
                               public partial class MyConsumer
                               {
+                                  // Поле консьюмера
+                                  private int _value;
+                                  
+                                  /// <summary>
+                                  /// Свойство консьюмера.
+                                  /// </summary>
+                                  public int Value => _value;
                               }
                               """;
 
@@ -273,17 +459,42 @@ public class DiagnosticErrorTests
         const string SOURCE = """
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис для потребления.
+                              /// </summary>
                               [SingletonDIProvide]
-                              public class MyService { }
+                              public class MyService 
+                              { 
+                                  // Метод сервиса
+                                  public void Execute() { }
+                              }
 
+                              /// <summary>
+                              /// Базовый консьюмер.
+                              /// </summary>
                               [SingletonDIConsume(typeof(MyService))]
                               public partial class BaseConsumer
                               {
+                                  // Поле базового класса
+                                  protected int _baseValue;
+                                  
+                                  /// <summary>
+                                  /// Метод базового класса.
+                                  /// </summary>
+                                  public void BaseMethod() { }
                               }
 
-                              [SingletonDIConsume(typeof(MyService))]
+                              /// <summary>
+                              /// Производный консьюмер с дублирующейся зависимостью.
+                              /// </summary>
+                              [SingletonDIConsume(typeof(MyService))]  // Уже есть в BaseConsumer!
                               public partial class DerivedConsumer : BaseConsumer
                               {
+                                  // Поле производного класса
+                                  private string _derivedName;
+                                  
+                                  /* Метод производного класса */
+                                  public void DerivedMethod() { }
                               }
                               """;
 
@@ -306,10 +517,26 @@ public class DiagnosticErrorTests
                               using System.Threading.Tasks;
                               using SingletonDI.Attributes;
 
+                              /// <summary>
+                              /// Сервис со статическим методом InitializeAsync.
+                              /// </summary>
                               [SingletonDIProvide]
                               public class MyService
                               {
+                                  // Статическое поле
+                                  private static int _counter;
+                                  
+                                  // Статический метод - ошибка!
                                   public static Task InitializeAsync() => Task.CompletedTask;
+                                  
+                                  /// <summary>
+                                  /// Экземплярное свойство.
+                                  /// </summary>
+                                  public int Id { get; } = ++_counter;
+                                  
+                                  /* Многострочный комментарий
+                                     перед методом */
+                                  public void DoWork() { }
                               }
                               """;
 

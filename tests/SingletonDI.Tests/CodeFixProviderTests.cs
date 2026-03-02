@@ -12,6 +12,7 @@ namespace SingletonDI.Tests;
 
 /// <summary>
 /// Tests for CodeFixProviders in SingletonDI.Refactoring.
+/// These tests verify that code fixes preserve comments, XML documentation, and unrelated members.
 /// </summary>
 public class CodeFixProviderTests
 {
@@ -24,20 +25,56 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Тестовый класс для проверки исправления DM0004.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyClass
                    {
+                       // Это приватный конструктор - должен стать публичным
                        private MyClass() { }
+                       
+                       /* Многострочный комментарий
+                          который должен сохраниться */
+                       private int _counter;  // Лишнее поле
+                       
+                       /// <summary>
+                       /// Лишнее свойство для проверки сохранения.
+                       /// </summary>
+                       public string Name { get; set; } = "Test";
+                       
+                       /// <summary>
+                       /// Лишний метод.
+                       /// </summary>
+                       public void DoSomething() { }
                    }
                    """;
 
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Тестовый класс для проверки исправления DM0004.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyClass
                        {
+                           // Это приватный конструктор - должен стать публичным
                            public MyClass() { }
+                       
+                           /* Многострочный комментарий
+                              который должен сохраниться */
+                           private int _counter;  // Лишнее поле
+                       
+                           /// <summary>
+                           /// Лишнее свойство для проверки сохранения.
+                           /// </summary>
+                           public string Name { get; set; } = "Test";
+                       v
+                           /// <summary>
+                           /// Лишний метод.
+                           /// </summary>
+                           public void DoSomething() { }
                        }
                        """;
 
@@ -51,24 +88,52 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Сервис с приватным конструктором и членами.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyService
                    {
+                       // Приватный конструктор
                        private MyService() { }
                        
+                       // Счётчик операций
+                       private int _operationCount;
+                       
+                       /// <summary>
+                       /// Выполняет полезную работу.
+                       /// </summary>
                        public void DoWork() { }
+                       
+                       /* Дополнительный метод
+                          с многострочным комментарием */
+                       public int GetCount() => _operationCount;
                    }
                    """;
 
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Сервис с приватным конструктором и членами.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyService
                        {
+                           // Приватный конструктор
                            public MyService() { }
                        
+                           // Счётчик операций
+                           private int _operationCount;
+                       
+                           /// <summary>
+                           /// Выполняет полезную работу.
+                           /// </summary>
                            public void DoWork() { }
+                       
+                           /* Дополнительный метод
+                              с многострочным комментарием */
+                           public int GetCount() => _operationCount;
                        }
                        """;
 
@@ -81,11 +146,21 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Сервис с параметризованным конструктором.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyService
                    {
+                       // Параметризованный конструктор
                        public MyService(int a) { }
                        
+                       // Поле для хранения значения
+                       private readonly int _value;
+                       
+                       /// <summary>
+                       /// Выполняет работу.
+                       /// </summary>
                        public void DoWork() { }
                    }
                    """;
@@ -93,15 +168,25 @@ public class CodeFixProviderTests
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Сервис с параметризованным конструктором.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyService
                        {
                            public MyService()
                            {
                            }
-                           
+                       
+                           // Параметризованный конструктор
                            public MyService(int a) { }
-
+                       
+                           // Поле для хранения значения
+                           private readonly int _value;
+                       
+                           /// <summary>
+                           /// Выполняет работу.
+                           /// </summary>
                            public void DoWork() { }
                        }
                        """;
@@ -116,10 +201,26 @@ public class CodeFixProviderTests
                    using System.Threading.Tasks;
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Класс с приватным методом InitializeAsync.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyClass
                    {
+                       // Приватное поле
+                       private bool _isInitialized;
+                       
+                       // Приватный метод инициализации - должен стать публичным
                        private Task InitializeAsync() => Task.CompletedTask;
+                       
+                       /// <summary>
+                       /// Проверяет инициализацию.
+                       /// </summary>
+                       public bool IsInitialized => _isInitialized;
+                       
+                       /* Дополнительный метод
+                          который не должен изменяться */
+                       public void Reset() => _isInitialized = false;
                    }
                    """;
 
@@ -127,10 +228,26 @@ public class CodeFixProviderTests
                        using System.Threading.Tasks;
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Класс с приватным методом InitializeAsync.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyClass
                        {
+                           // Приватное поле
+                           private bool _isInitialized;
+                       
+                           // Приватный метод инициализации - должен стать публичным
                            public Task InitializeAsync() => Task.CompletedTask;
+                       
+                           /// <summary>
+                           /// Проверяет инициализацию.
+                           /// </summary>
+                           public bool IsInitialized => _isInitialized;
+                       
+                           /* Дополнительный метод
+                              который не должен изменяться */
+                           public void Reset() => _isInitialized = false;
                        }
                        """;
 
@@ -144,10 +261,22 @@ public class CodeFixProviderTests
                    using System.Threading.Tasks;
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Класс с защищённым методом InitializeAsync.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyClass
                    {
+                       // Защищённый метод - должен стать публичным
                        protected Task InitializeAsync() => Task.CompletedTask;
+                       
+                       // Константа
+                       private const string DefaultName = "Default";
+                       
+                       /// <summary>
+                       /// Имя экземпляра.
+                       /// </summary>
+                       public string Name { get; set; } = DefaultName;
                    }
                    """;
 
@@ -155,10 +284,22 @@ public class CodeFixProviderTests
                        using System.Threading.Tasks;
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Класс с защищённым методом InitializeAsync.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyClass
                        {
+                           // Защищённый метод - должен стать публичным
                            public Task InitializeAsync() => Task.CompletedTask;
+                       
+                           // Константа
+                           private const string DefaultName = "Default";
+                       
+                           /// <summary>
+                           /// Имя экземпляра.
+                           /// </summary>
+                           public string Name { get; set; } = DefaultName;
                        }
                        """;
 
@@ -175,10 +316,22 @@ public class CodeFixProviderTests
                    using System.Threading.Tasks;
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Класс со статическим методом InitializeAsync.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyClass
                    {
+                       // Статический метод - должен стать экземплярным
                        public static Task InitializeAsync() => Task.CompletedTask;
+                       
+                       // Статическое поле
+                       private static int _instanceCount;
+                       
+                       /// <summary>
+                       /// Экземплярное свойство.
+                       /// </summary>
+                       public int Id { get; } = ++_instanceCount;
                    }
                    """;
 
@@ -186,10 +339,22 @@ public class CodeFixProviderTests
                        using System.Threading.Tasks;
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Класс со статическим методом InitializeAsync.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyClass
                        {
+                           // Статический метод - должен стать экземплярным
                            public Task InitializeAsync() => Task.CompletedTask;
+                       
+                           // Статическое поле
+                           private static int _instanceCount;
+                       
+                           /// <summary>
+                           /// Экземплярное свойство.
+                           /// </summary>
+                           public int Id { get; } = ++_instanceCount;
                        }
                        """;
 
@@ -203,10 +368,23 @@ public class CodeFixProviderTests
                    using System.Threading.Tasks;
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Класс с async static методом InitializeAsync.
+                   /// </summary>
                    [SingletonDIProvide]
                    class MyClass
                    {
+                       // Асинхронный статический метод
                        public static async Task InitializeAsync() => await Task.Delay(1);
+                       
+                       /* Многострочный комментарий
+                          перед полем */
+                       private string _status = "Pending";
+                       
+                       /// <summary>
+                       /// Статус объекта.
+                       /// </summary>
+                       public string Status => _status;
                    }
                    """;
 
@@ -214,10 +392,23 @@ public class CodeFixProviderTests
                        using System.Threading.Tasks;
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Класс с async static методом InitializeAsync.
+                       /// </summary>
                        [SingletonDIProvide]
                        class MyClass
                        {
+                           // Асинхронный статический метод
                            public async Task InitializeAsync() => await Task.Delay(1);
+                       
+                           /* Многострочный комментарий
+                              перед полем */
+                           private string _status = "Pending";
+                       
+                           /// <summary>
+                           /// Статус объекта.
+                           /// </summary>
+                           public string Status => _status;
                        }
                        """;
 
@@ -234,24 +425,68 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Сервис-провайдер.
+                   /// </summary>
                    [SingletonDIProvide]
-                   public class MyService { }
+                   public class MyService 
+                   { 
+                       // Поле в сервисе
+                       private int _value;
+                       
+                       /// <summary>
+                       /// Получить значение.
+                       /// </summary>
+                       public int GetValue() => _value;
+                   }
 
+                   /// <summary>
+                   /// Консьюмер с дублирующимся типом.
+                   /// </summary>
                    [SingletonDIConsume(typeof(MyService), typeof(MyService))]
                    partial class MyClass
                    {
+                       // Комментарий в консьюмере
+                       private string _name = "Consumer";
+                       
+                       /// <summary>
+                       /// Имя консьюмера.
+                       /// </summary>
+                       public string Name => _name;
                    }
                    """;
 
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Сервис-провайдер.
+                       /// </summary>
                        [SingletonDIProvide]
-                       public class MyService { }
+                       public class MyService 
+                       { 
+                           // Поле в сервисе
+                           private int _value;
+                       
+                           /// <summary>
+                           /// Получить значение.
+                           /// </summary>
+                           public int GetValue() => _value;
+                       }
 
+                       /// <summary>
+                       /// Консьюмер с дублирующимся типом.
+                       /// </summary>
                        [SingletonDIConsume(typeof(MyService))]
                        partial class MyClass
                        {
+                           // Комментарий в консьюмере
+                           private string _name = "Consumer";
+                       
+                           /// <summary>
+                           /// Имя консьюмера.
+                           /// </summary>
+                           public string Name => _name;
                        }
                        """;
 
@@ -264,15 +499,40 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Сервис A.
+                   /// </summary>
                    [SingletonDIProvide]
-                   public class ServiceA { }
+                   public class ServiceA 
+                   { 
+                       // Идентификатор сервиса A
+                       public int IdA { get; set; }
+                   }
 
+                   /// <summary>
+                   /// Сервис B.
+                   /// </summary>
                    [SingletonDIProvide]
-                   public class ServiceB { }
+                   public class ServiceB 
+                   { 
+                       // Идентификатор сервиса B
+                       public int IdB { get; set; }
+                   }
 
+                   /// <summary>
+                   /// Консьюмер с множественными дубликатами.
+                   /// </summary>
                    [SingletonDIConsume(typeof(ServiceA), typeof(ServiceB), typeof(ServiceA))]
                    partial class MyClass
                    {
+                       /* Многострочный комментарий
+                          в классе MyClass */
+                       private bool _isActive = true;
+                       
+                       /// <summary>
+                       /// Активность консьюмера.
+                       /// </summary>
+                       public bool IsActive => _isActive;
                    }
                    """;
 
@@ -281,15 +541,40 @@ public class CodeFixProviderTests
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Сервис A.
+                       /// </summary>
                        [SingletonDIProvide]
-                       public class ServiceA { }
+                       public class ServiceA 
+                       { 
+                           // Идентификатор сервиса A
+                           public int IdA { get; set; }
+                       }
 
+                       /// <summary>
+                       /// Сервис B.
+                       /// </summary>
                        [SingletonDIProvide]
-                       public class ServiceB { }
+                       public class ServiceB 
+                       { 
+                           // Идентификатор сервиса B
+                           public int IdB { get; set; }
+                       }
 
+                       /// <summary>
+                       /// Консьюмер с множественными дубликатами.
+                       /// </summary>
                        [SingletonDIConsume(typeof(ServiceA), typeof(ServiceB))]
                        partial class MyClass
                        {
+                           /* Многострочный комментарий
+                              в классе MyClass */
+                           private bool _isActive = true;
+                       
+                           /// <summary>
+                           /// Активность консьюмера.
+                           /// </summary>
+                           public bool IsActive => _isActive;
                        }
                        """;
 
@@ -302,33 +587,87 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Сервис для потребления.
+                   /// </summary>
                    [SingletonDIProvide]
-                   public class MyService { }
+                   public class MyService 
+                   { 
+                       // Реализация сервиса
+                       public void Execute() { }
+                   }
 
+                   /// <summary>
+                   /// Базовый консьюмер.
+                   /// </summary>
                    [SingletonDIConsume(typeof(MyService))]
                    public partial class BaseConsumer
                    {
+                       // Поле базового класса
+                       protected int _baseValue;
+                       
+                       /// <summary>
+                       /// Метод базового класса.
+                       /// </summary>
+                       public void BaseMethod() { }
                    }
 
+                   /// <summary>
+                   /// Производный консьюмер с дублирующейся зависимостью.
+                   /// </summary>
                    [SingletonDIConsume(typeof(MyService))]
                    partial class DerivedConsumer : BaseConsumer
                    {
+                       // Поле производного класса
+                       private string _derivedName;
+                       
+                       /// <summary>
+                       /// Метод производного класса.
+                       /// </summary>
+                       public void DerivedMethod() { }
                    }
                    """;
 
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Сервис для потребления.
+                       /// </summary>
                        [SingletonDIProvide]
-                       public class MyService { }
+                       public class MyService 
+                       { 
+                           // Реализация сервиса
+                           public void Execute() { }
+                       }
 
+                       /// <summary>
+                       /// Базовый консьюмер.
+                       /// </summary>
                        [SingletonDIConsume(typeof(MyService))]
                        public partial class BaseConsumer
                        {
+                           // Поле базового класса
+                           protected int _baseValue;
+                       
+                           /// <summary>
+                           /// Метод базового класса.
+                           /// </summary>
+                           public void BaseMethod() { }
                        }
 
+                       /// <summary>
+                       /// Производный консьюмер с дублирующейся зависимостью.
+                       /// </summary>
                        partial class DerivedConsumer : BaseConsumer
                        {
+                           // Поле производного класса
+                           private string _derivedName;
+                       
+                           /// <summary>
+                           /// Метод производного класса.
+                           /// </summary>
+                           public void DerivedMethod() { }
                        }
                        """;
 
@@ -341,40 +680,100 @@ public class CodeFixProviderTests
         var test = """
                    using SingletonDI.Attributes;
 
+                   /// <summary>
+                   /// Сервис A.
+                   /// </summary>
                    [SingletonDIProvide]
-                   public class ServiceA { }
+                   public class ServiceA 
+                   { 
+                       // Метод сервиса A
+                       public void MethodA() { }
+                   }
 
+                   /// <summary>
+                   /// Сервис B.
+                   /// </summary>
                    [SingletonDIProvide]
-                   public class ServiceB { }
+                   public class ServiceB 
+                   { 
+                       // Метод сервиса B
+                       public void MethodB() { }
+                   }
 
+                   /// <summary>
+                   /// Базовый консьюмер.
+                   /// </summary>
                    [SingletonDIConsume(typeof(ServiceA))]
                    public partial class BaseConsumer
                    {
+                       // Комментарий в BaseConsumer
+                       private int _counter;
                    }
 
+                   /// <summary>
+                   /// Производный консьюмер.
+                   /// </summary>
                    [SingletonDIConsume(typeof(ServiceA), typeof(ServiceB))]
                    partial class DerivedConsumer : BaseConsumer
                    {
+                       /* Многострочный комментарий
+                          в DerivedConsumer */
+                       private string _name;
+                       
+                       /// <summary>
+                       /// Имя консьюмера.
+                       /// </summary>
+                       public string Name => _name;
                    }
                    """;
 
         var expected = """
                        using SingletonDI.Attributes;
 
+                       /// <summary>
+                       /// Сервис A.
+                       /// </summary>
                        [SingletonDIProvide]
-                       public class ServiceA { }
+                       public class ServiceA 
+                       { 
+                           // Метод сервиса A
+                           public void MethodA() { }
+                       }
 
+                       /// <summary>
+                       /// Сервис B.
+                       /// </summary>
                        [SingletonDIProvide]
-                       public class ServiceB { }
+                       public class ServiceB 
+                       { 
+                           // Метод сервиса B
+                           public void MethodB() { }
+                       }
 
+                       /// <summary>
+                       /// Базовый консьюмер.
+                       /// </summary>
                        [SingletonDIConsume(typeof(ServiceA))]
                        public partial class BaseConsumer
                        {
+                           // Комментарий в BaseConsumer
+                           private int _counter;
                        }
 
+                       /// <summary>
+                       /// Производный консьюмер.
+                       /// </summary>
                        [SingletonDIConsume(typeof(ServiceB))]
                        partial class DerivedConsumer : BaseConsumer
                        {
+                           /* Многострочный комментарий
+                              в DerivedConsumer */
+                           private string _name;
+                       
+                           /// <summary>
+                           /// Имя консьюмера.
+                           /// </summary>
+                           public string Name => _name;
                        }
                        """;
 
@@ -464,8 +863,12 @@ public class CodeFixProviderTests
         if (existingParameterlessCtor is not null)
         {
             // Change the existing constructor's accessibility to public
+            // Preserve the leading trivia (comments, XML docs) from the original constructor
+            var leadingTrivia = existingParameterlessCtor.GetLeadingTrivia();
             var newModifiers = MakePublicModifiers(existingParameterlessCtor.Modifiers);
-            var newConstructor = existingParameterlessCtor.WithModifiers(newModifiers);
+            var newConstructor = existingParameterlessCtor
+                .WithModifiers(newModifiers)
+                .WithLeadingTrivia(leadingTrivia);
             var newMembers = typeDeclaration.Members.Replace(existingParameterlessCtor, newConstructor);
             var newTypeDeclaration = typeDeclaration.WithMembers(newMembers);
             return root.ReplaceNode(typeDeclaration, newTypeDeclaration);
@@ -508,6 +911,9 @@ public class CodeFixProviderTests
         var methodDeclaration = node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
         Assert.NotNull(methodDeclaration);
 
+        // Preserve the leading trivia (comments, XML docs) from the original method
+        var leadingTrivia = methodDeclaration.GetLeadingTrivia();
+
         var modifiers = methodDeclaration.Modifiers;
         var newModifiers = SyntaxFactory.TokenList();
         var hasAccessModifier = false;
@@ -533,7 +939,9 @@ public class CodeFixProviderTests
             newModifiers = newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
         }
 
-        var newMethodDeclaration = methodDeclaration.WithModifiers(newModifiers);
+        var newMethodDeclaration = methodDeclaration
+            .WithModifiers(newModifiers)
+            .WithLeadingTrivia(leadingTrivia);
         return root.ReplaceNode(methodDeclaration, newMethodDeclaration);
     }
 
@@ -542,10 +950,15 @@ public class CodeFixProviderTests
         var methodDeclaration = node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
         Assert.NotNull(methodDeclaration);
 
+        // Preserve the leading trivia (comments, XML docs) from the original method
+        var leadingTrivia = methodDeclaration.GetLeadingTrivia();
+
         var newModifiers = SyntaxFactory.TokenList(
             methodDeclaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.StaticKeyword)));
 
-        var newMethodDeclaration = methodDeclaration.WithModifiers(newModifiers);
+        var newMethodDeclaration = methodDeclaration
+            .WithModifiers(newModifiers)
+            .WithLeadingTrivia(leadingTrivia);
         return root.ReplaceNode(methodDeclaration, newMethodDeclaration);
     }
 
@@ -573,7 +986,8 @@ public class CodeFixProviderTests
 
             if (attributeList.Attributes.Count == 1)
             {
-                return root.RemoveNode(attributeList, SyntaxRemoveOptions.KeepNoTrivia)!;
+                // Use KeepLeadingTrivia to preserve comments and XML docs
+                return root.RemoveNode(attributeList, SyntaxRemoveOptions.KeepLeadingTrivia)!;
             }
 
             var newAttributeList = attributeList.RemoveNode(attributeSyntax, SyntaxRemoveOptions.KeepNoTrivia);

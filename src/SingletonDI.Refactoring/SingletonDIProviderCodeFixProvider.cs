@@ -25,9 +25,9 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
     /// <summary>
     /// Diagnostic IDs that this provider can fix.
     /// </summary>
-    public const string DM0004 = "DM0004";
-    public const string DM0005 = "DM0005";
-    public const string DM0012 = "DM0012";
+    private const string DM0004 = "DM0004";
+    private const string DM0005 = "DM0005";
+    private const string DM0012 = "DM0012";
 
     private const string DM0004Title = "Add public parameterless constructor";
     private const string DM0005Title = "Make method public";
@@ -114,10 +114,14 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         if (existingParameterlessCtor is not null)
         {
             // Change the existing constructor's accessibility to public
+            // Preserve the leading trivia (comments, XML docs) from the original constructor
+            var leadingTrivia = existingParameterlessCtor.GetLeadingTrivia();
+
             var newModifiers = MakePublicModifiers(existingParameterlessCtor.Modifiers);
-            
+
             var newConstructor = existingParameterlessCtor
                 .WithModifiers(newModifiers)
+                .WithLeadingTrivia(leadingTrivia)
                 .WithAdditionalAnnotations(Formatter.Annotation);
 
             var newMembers = typeDeclaration.Members.Replace(existingParameterlessCtor, newConstructor);
@@ -160,7 +164,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
     {
         // Remove all access modifiers and add public at the beginning
         var newModifiers = SyntaxFactory.TokenList();
-        
+
         foreach (var modifier in existingModifiers)
         {
             if (!IsAccessModifier(modifier.Kind()))
@@ -168,10 +172,10 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
                 newModifiers = newModifiers.Add(modifier);
             }
         }
-        
+
         // Insert public at the beginning
         newModifiers = newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
-        
+
         return newModifiers;
     }
 
@@ -180,6 +184,9 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         MethodDeclarationSyntax methodDeclaration,
         CancellationToken cancellationToken)
     {
+        // Preserve the leading trivia (comments, XML docs) from the original method
+        var leadingTrivia = methodDeclaration.GetLeadingTrivia();
+
         // Get existing modifiers
         var modifiers = methodDeclaration.Modifiers;
 
@@ -213,6 +220,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
 
         var newMethodDeclaration = methodDeclaration
             .WithModifiers(newModifiers)
+            .WithLeadingTrivia(leadingTrivia)
             .WithAdditionalAnnotations(Formatter.Annotation);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
@@ -228,12 +236,16 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         MethodDeclarationSyntax methodDeclaration,
         CancellationToken cancellationToken)
     {
+        // Preserve the leading trivia (comments, XML docs) from the original method
+        var leadingTrivia = methodDeclaration.GetLeadingTrivia();
+
         // Remove static modifier from the method
         var newModifiers = SyntaxFactory.TokenList(
             methodDeclaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.StaticKeyword)));
 
         var newMethodDeclaration = methodDeclaration
             .WithModifiers(newModifiers)
+            .WithLeadingTrivia(leadingTrivia)
             .WithAdditionalAnnotations(Formatter.Annotation);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
