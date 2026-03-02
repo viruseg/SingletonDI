@@ -549,6 +549,160 @@ public class DiagnosticErrorTests
         Assert.Equal("Method InitializeAsync in class 'MyService' is static. InitializeAsync must be an instance method.", dm0012.GetMessage());
     }
 
+    [Fact]
+    public void DM0013_InvalidPropertyName_StartsWithDigit()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с невалидным именем свойства (начинается с цифры).
+                              /// </summary>
+                              [SingletonDIProvide("123InvalidName")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
+        Assert.NotNull(dm0013);
+        Assert.Contains("123InvalidName", dm0013.GetMessage());
+        Assert.Contains("valid C# identifier", dm0013.GetMessage());
+    }
+
+    [Fact]
+    public void DM0013_InvalidPropertyName_ContainsSpecialCharacters()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с невалидным именем свойства (специальные символы).
+                              /// </summary>
+                              [SingletonDIProvide("my-property")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
+        Assert.NotNull(dm0013);
+        Assert.Contains("my-property", dm0013.GetMessage());
+    }
+
+    [Fact]
+    public void DM0014_PropertyNameIsReservedKeyword()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с именем свойства, совпадающим с ключевым словом.
+                              /// </summary>
+                              [SingletonDIProvide("class")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0014 = diagnostics.FirstOrDefault(d => d.Id == "DM0014");
+        Assert.NotNull(dm0014);
+        Assert.Contains("class", dm0014.GetMessage());
+        Assert.Contains("reserved keyword", dm0014.GetMessage());
+    }
+
+    [Fact]
+    public void DM0014_PropertyNameIsReservedKeyword_Void()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с именем свойства, совпадающим с ключевым словом void.
+                              /// </summary>
+                              [SingletonDIProvide("void")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0014 = diagnostics.FirstOrDefault(d => d.Id == "DM0014");
+        Assert.NotNull(dm0014);
+        Assert.Contains("void", dm0014.GetMessage());
+    }
+
+    [Fact]
+    public void ValidPropertyName_WithUnderscorePrefix()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с валидным именем свойства (префикс подчёркивания).
+                              /// </summary>
+                              [SingletonDIProvide("_dbService")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - no DM0013 or DM0014 errors
+        Assert.DoesNotContain(diagnostics, d => d.Id is "DM0013" or "DM0014");
+    }
+
+    [Fact]
+    public void ValidPropertyName_WithPascalCase()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с валидным именем свойства (PascalCase).
+                              /// </summary>
+                              [SingletonDIProvide("DbService")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - no DM0013 or DM0014 errors
+        Assert.DoesNotContain(diagnostics, d => d.Id is "DM0013" or "DM0014");
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         var compilation = CreateCompilation(source);

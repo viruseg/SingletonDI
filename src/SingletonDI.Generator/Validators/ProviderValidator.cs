@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using SingletonDI.Generator.Models;
 
@@ -79,8 +80,16 @@ internal static class ProviderValidator
         // Get dependencies (if this provider also has [SingletonDIConsume])
         var dependencies = GetDependencies(typeSymbol, allProviderFullyQualifiedNames);
 
-        // Get custom property name from [SingletonDIProvide] attribute
-        var propertyName = GetPropertyName(typeSymbol);
+        // Get custom property name from [SingletonDIProvide] attribute with validation
+        var propertyName = GetPropertyName(typeSymbol, typeDecl, reportDiagnostic);
+        if (propertyName is null && typeSymbol.GetAttributes().Any(a =>
+            a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute" &&
+            a.ConstructorArguments.Length > 0 &&
+            a.ConstructorArguments[0].Value is string s && !string.IsNullOrEmpty(s)))
+        {
+            // Validation failed for non-empty property name
+            return null;
+        }
 
         var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
@@ -167,10 +176,13 @@ internal static class ProviderValidator
     }
 
     /// <summary>
-    /// Gets the custom property name from [SingletonDIProvide] attribute.
-    /// Returns null if not specified.
+    /// Gets the custom property name from [SingletonDIProvide] attribute with validation.
+    /// Returns null if not specified or if validation fails (diagnostic is reported in latter case).
     /// </summary>
-    private static string? GetPropertyName(INamedTypeSymbol typeSymbol)
+    private static string? GetPropertyName(
+        INamedTypeSymbol typeSymbol,
+        TypeDeclarationSyntax typeDecl,
+        Action<Diagnostic> reportDiagnostic)
     {
         var provideAttr = typeSymbol.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute");
@@ -186,6 +198,30 @@ internal static class ProviderValidator
             var arg = provideAttr.ConstructorArguments[0];
             if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string propertyName && !string.IsNullOrEmpty(propertyName))
             {
+                // Validate property name is a valid C# identifier
+                if (!SyntaxFacts.IsValidIdentifier(propertyName))
+                {
+                    var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
+                                   ?? typeDecl.Identifier.GetLocation();
+                    reportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.InvalidPropertyName,
+                        location,
+                        propertyName));
+                    return null;
+                }
+
+                // Check if it's a reserved keyword
+                if (SyntaxFacts.GetKeywordKind(propertyName) != SyntaxKind.None)
+                {
+                    var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
+                                   ?? typeDecl.Identifier.GetLocation();
+                    reportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.PropertyNameIsReservedKeyword,
+                        location,
+                        propertyName));
+                    return null;
+                }
+
                 return propertyName;
             }
         }

@@ -109,6 +109,26 @@ internal static class DiagnosticDescriptors
         Category,
         DiagnosticSeverity.Error);
 
+    /// <summary>
+    /// DM0013: Property name is not a valid C# identifier.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InvalidPropertyName = Create(
+        "DM0013",
+        "Invalid property name",
+        "Property name '{0}' is not a valid C# identifier. Property names must start with a letter or underscore and contain only letters, digits, or underscores.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0014: Property name is a C# reserved keyword.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PropertyNameIsReservedKeyword = Create(
+        "DM0014",
+        "Property name is a reserved keyword",
+        "Property name '{0}' is a C# reserved keyword. Use a different name or prefix with '@' in your code.",
+        Category,
+        DiagnosticSeverity.Error);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

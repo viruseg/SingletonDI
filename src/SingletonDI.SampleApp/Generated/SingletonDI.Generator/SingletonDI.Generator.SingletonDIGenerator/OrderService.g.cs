@@ -8,11 +8,11 @@ namespace SingletonDI.SampleApp
         /// <summary>
         /// Gets the singleton instance of global::SingletonDI.SampleApp.DatabaseService.
         /// </summary>
-        protected global::SingletonDI.SampleApp.DatabaseService DatabaseServiceInstance
+        protected global::SingletonDI.SampleApp.DatabaseService DBService
         {
             get
             {
-                return global::DependencyManager.Generated.Internal.SingletonContainer.DatabaseService;
+                return global::DependencyManager.Generated.Internal.SingletonContainer.SingletonDI_SampleApp_DatabaseService;
             }
         }
 

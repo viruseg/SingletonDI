@@ -6,44 +6,25 @@ SingletonDI — это Roslyn Source Generator, который автомати�
 
 ## Возможности
 
-- ✅ **Автоматическая генерация кода** — весь DI-код создаётся на этапе компиляции
-- ✅ **Incremental Source Generator** — высокая производительность благодаря инкрементальной генерации
-- ✅ **Async инициализация** — поддержка асинхронной инициализации через метод `InitializeAsync()`
-- ✅ **Параллельная инициализация** — синглтоны на одном уровне зависимостей инициализируются параллельно
-- ✅ **Топологическая сортировка** — автоматическое определение порядка инициализации по зависимостям
-- ✅ **Детекция циклических зависимостей** — ошибки обнаруживаются на этапе компиляции
-- ✅ **Потокобезопасность** — корректная работа в многопоточной среде
-- ✅ **Диагностика ошибок** — информативные сообщения об ошибках компиляции
-- ✅ **Code Refactoring** — автоматическое добавление метода `InitializeAsync`
+- **Автоматическая генерация кода** — весь DI-код создаётся на этапе компиляции
+- **Incremental Source Generator** — высокая производительность благодаря инкрементальной генерации
+- **Async инициализация** — поддержка асинхронной инициализации через метод `InitializeAsync()`
+- **Параллельная инициализация** — синглтоны на одном уровне зависимостей инициализируются параллельно
+- **Топологическая сортировка** — автоматическое определение порядка инициализации по зависимостям
+- **Детекция циклических зависимостей** — ошибки обнаруживаются на этапе компиляции
+- **Потокобезопасность** — корректная работа в многопоточной среде
+- **Диагностика ошибок** — информативные сообщения об ошибках компиляции
 
 ## Установка
 
-### Локальная сборка
+NuGet:
+
+|Package|Download|
+|-|-|
+|SingletonDI|[![NuGet](https://img.shields.io/nuget/v/SingletonDI.svg)](https://www.nuget.org/packages/SingletonDI) [![NuGet](https://img.shields.io/nuget/dt/SingletonDI.svg)](https://www.nuget.org/packages/SingletonDI)
 
 ```bash
-# Клонирование репозитория
-git clone <repository-url>
-cd SingletonDI
-
-# Сборка решения
-dotnet build
-
-# Запуск тестов
-dotnet test
-
-# Запуск примера
-dotnet run --project src/SingletonDI.SampleApp
-```
-
-### Подключение к проекту
-
-В `.csproj` файл вашего проекта добавьте ссылку на атрибуты и генератор:
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="path\to\SingletonDI.Attributes\SingletonDI.Attributes.csproj" />
-  <ProjectReference Include="path\to\SingletonDI.Generator\SingletonDI.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-</ItemGroup>
+dotnet add package SingletonDI
 ```
 
 ## Быстрый старт
@@ -151,7 +132,7 @@ public sealed class SingletonDIProvideAttribute : Attribute
 **Примеры:**
 
 ```csharp
-// ✅ Корректно — синхронная инициализация через конструктор
+// Синхронная инициализация через конструктор
 [SingletonDIProvide]
 public class MyService 
 { 
@@ -161,7 +142,7 @@ public class MyService
     }
 }
 
-// ✅ Корректно — асинхронная инициализация через метод
+// Асинхронная инициализация через метод
 [SingletonDIProvide]
 public class DataService
 {
@@ -170,25 +151,6 @@ public class DataService
         // Асинхронная инициализация
     }
 }
-
-// ✅ Корректно — с пользовательским именем свойства
-[SingletonDIProvide("_DbService")]
-public class DatabaseService
-{
-    // В потребителях будет доступно свойство _DbService вместо DatabaseServiceInstance
-}
-
-// ✅ Корректно — record class разрешён
-[SingletonDIProvide]
-public record class MyRecord(string Value);
-
-// ❌ Ошибка — struct не поддерживается
-[SingletonDIProvide]
-public struct MyStruct { }  // DM0001
-
-// ❌ Ошибка — abstract class не поддерживается
-[SingletonDIProvide]
-public abstract class MyAbstract { }  // DM0002
 ```
 
 **Имена свойств:**
@@ -249,135 +211,14 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - Нельзя дублировать типы в списке зависимостей
 - Наследуется (`Inherited = true`) — наследники автоматически получают те же зависимости
 
-**Примеры:**
-
 ```csharp
-// ✅ Корректно
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
 public partial class OrderController { }
-
-// ✅ Наследник автоматически получает те же зависимости
-public partial class AdvancedOrderController : OrderController { }
-
-// ❌ Ошибка — класс не partial
-[SingletonDIConsume(typeof(DatabaseService))]
-public class OrderController { }  // DM0007
-
-// ❌ Ошибка — зависимость не является провайдером
-[SingletonDIConsume(typeof(SomeNonProviderClass))]
-public partial class MyClass { }  // DM0006
-
-// ❌ Ошибка — дублирование типа
-[SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]
-public partial class MyClass { }  // DM0010
 ```
-
-## Code Refactoring
-
-Проект включает Code Refactoring провайдер для автоматического добавления метода `InitializeAsync` в классы с атрибутом `[SingletonDIProvide]`.
-
-**Использование:**
-1. Установите курсор на имя класса с `[SingletonDIProvide]`
-2. Нажмите `Ctrl+.` (или `Alt+Enter` в Rider)
-3. Выберите "Add InitializeAsync method"
-
-Генератор добавит следующий метод:
-
-```csharp
-public Task InitializeAsync()
-{
-    return Task.CompletedTask;
-}
-```
-
-## Сгенерированный код
-
-### SingletonContainer
-
-Генерируется в пространстве имён `DependencyManager.Generated.Internal`:
-
-```csharp
-// <auto-generated/>
-namespace DependencyManager.Generated.Internal
-{
-    internal static partial class SingletonContainer
-    {
-        private static volatile bool _isInitialized;
-        private static readonly object _lock = new object();
-
-        private static MyApp.DatabaseService? _DatabaseService;
-        private static MyApp.UserService? _UserService;
-
-        public static MyApp.DatabaseService DatabaseService 
-            => _DatabaseService ?? ExceptionHelper.ThrowNotInitialized<MyApp.DatabaseService>();
-        
-        public static MyApp.UserService UserService 
-            => _UserService ?? ExceptionHelper.ThrowNotInitialized<MyApp.UserService>();
-
-        public static async Task InitializeAsync()
-        {
-            // Потокобезопасная инициализация с параллельной обработкой уровней
-            // ...
-        }
-    }
-}
-```
-
-### SingletonInitializer
-
-Публичный API для инициализации:
-
-```csharp
-// <auto-generated/>
-namespace DependencyManager.Generated
-{
-    public static class SingletonInitializer
-    {
-        public static Task InitializeAsync() 
-            => Internal.SingletonContainer.InitializeAsync();
-    }
-}
-```
-
-### Partial-классы потребителей
-
-Для каждого `[SingletonDIConsume]`-класса генерируется partial-класс со свойствами:
-
-```csharp
-// <auto-generated/>
-namespace MyApp
-{
-    partial class OrderController
-    {
-        protected global::MyApp.DatabaseService DatabaseServiceInstance
-        {
-            get
-            {
-                return global::DependencyManager.Generated.Internal.SingletonContainer.DatabaseService;
-            }
-        }
-
-        protected global::MyApp.UserService UserServiceInstance
-        {
-            get
-            {
-                return global::DependencyManager.Generated.Internal.SingletonContainer.UserService;
-            }
-        }
-    }
-}
-```
-
-**Важно:** Свойства генерируются с модификатором `protected`, что делает их доступными только внутри класса и его наследников.
 
 ### Разрешение конфликтов имён
 
-При конфликте имён типов (например, `Foo.Bar` и `Baz.Bar`) генерируются имена с префиксом пространства имён:
-
-```csharp
-public global::Foo.Bar Foo_Bar { get; }
-public global::Baz.Bar Baz_Bar { get; }
-```
+При конфликте имён типов (например, `Foo.Bar` и `Baz.Bar`) генерируются имена с префиксом пространства имён.
 
 ## Диагностика
 
@@ -395,43 +236,8 @@ public global::Baz.Bar Baz_Bar { get; }
 | **DM0010** | Error | Дублирование типа в аргументах `[SingletonDIConsume]` |
 | **DM0011** | Error | Тип уже объявлен в базовом классе |
 | **DM0012** | Error | Метод `InitializeAsync` не может быть `static` |
-
-### Пример ошибки циклической зависимости
-
-```csharp
-[SingletonDIProvide]
-[SingletonDIConsume(typeof(ServiceB))]
-public partial class ServiceA { }
-
-[SingletonDIProvide]
-[SingletonDIConsume(typeof(ServiceA))]
-public partial class ServiceB { }
-
-// Ошибка DM0009: Circular dependency detected: ServiceA -> ServiceB -> ServiceA
-```
-
-### Пример ошибки недоступного InitializeAsync
-
-```csharp
-[SingletonDIProvide]
-public class MyService
-{
-    private async Task InitializeAsync()  // ❌ DM0005: private недоступен
-    {
-        await Task.Delay(100);
-    }
-}
-
-// ✅ Корректно:
-[SingletonDIProvide]
-public class MyService
-{
-    public async Task InitializeAsync()  // public доступен
-    {
-        await Task.Delay(100);
-    }
-}
-```
+| **DM0013** | Error | Недопустимое имя свойства. Имя должно начинаться с буквы или подчёркивания и содержать только буквы, цифры или подчёркивания |
+| **DM0014** | Error | Имя свойства является зарезервированным ключевым словом C#. Используйте другое имя или добавьте префикс '@' в коде |
 
 ## Ограничения
 
@@ -439,47 +245,6 @@ public class MyService
 - **Одна сборка** — генератор работает только в рамках одной сборки (per-assembly ограничение Roslyn)
 - **Нет межсборочных ссылок** — `[SingletonDIProvide]`-типы из других сборок не поддерживаются
 - **`struct` запрещён** — только `class` может быть провайдером
-
-## Структура решения
-
-```
-SingletonDI/
-├── src/
-│   ├── SingletonDI.Attributes/     # Атрибуты
-│   │   ├── SingletonDIProvideAttribute.cs
-│   │   └── SingletonDIConsumeAttribute.cs
-│   │
-│   ├── SingletonDI.Generator/      # Incremental Source Generator
-│   │   ├── SingletonDIGenerator.cs # Главный файл генератора
-│   │   ├── DiagnosticDescriptors.cs
-│   │   ├── Emitters/               # Генераторы кода
-│   │   │   ├── ContainerEmitter.cs
-│   │   │   ├── ConsumerEmitter.cs
-│   │   │   ├── ExceptionHelperEmitter.cs
-│   │   │   └── SingletonInitializerEmitter.cs
-│   │   ├── Models/                 # Модели данных
-│   │   │   ├── ProviderModel.cs
-│   │   │   ├── ConsumerModel.cs
-│   │   │   └── CombinedModel.cs
-│   │   ├── Validators/             # Валидаторы
-│   │   │   ├── ProviderValidator.cs
-│   │   │   └── ConsumerValidator.cs
-│   │   └── Helpers/                # Вспомогательные классы
-│   │       ├── TopologicalSorter.cs
-│   │       └── PropertyNameResolver.cs
-│   │
-│   ├── SingletonDI.Refactoring/    # Code Refactoring провайдеры
-│   │   └── SingletonDIProvideRefactoringProvider.cs
-│   │
-│   └── SingletonDI.SampleApp/      # Пример использования
-│       ├── Program.cs
-│       └── Generated/              # Примеры сгенерированного кода
-│
-└── tests/
-    └── SingletonDI.Tests/          # Unit-тесты
-        ├── SingletonDIGeneratorTests.cs
-        └── DiagnosticErrorTests.cs
-```
 
 ## Лицензия
 
