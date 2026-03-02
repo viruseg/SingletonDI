@@ -10,7 +10,8 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
                                             string @namespace,
                                             bool hasInitializeAsyncMethod,
                                             bool isDisposable,
-                                            ImmutableArray<string> dependencies)
+                                            ImmutableArray<string> dependencies,
+                                            string? propertyName)
 {
     /// <summary>
     /// The fully qualified name of the provider type.
@@ -41,4 +42,10 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
     /// Dependencies of this provider (types it consumes via [SingletonDIConsume]).
     /// </summary>
     public ImmutableArray<string> Dependencies { get; } = dependencies;
+
+    /// <summary>
+    /// Custom property name for the singleton instance, if specified in the attribute.
+    /// If null, the default name "{TypeName}Instance" will be used.
+    /// </summary>
+    public string? PropertyName { get; } = propertyName;
 }

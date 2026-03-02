@@ -125,7 +125,18 @@ public static class Program
 ```csharp
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class SingletonDIProvideAttribute : Attribute
+{
+    /// <summary>
+    /// Опциональное пользовательское имя свойства для доступа к синглтону.
+    /// </summary>
+    public string? PropertyName { get; }
+
+    public SingletonDIProvideAttribute(string? propertyName = null) { }
+}
 ```
+
+**Параметры:**
+- `propertyName` (опционально) — пользовательское имя свойства для доступа к синглтону в потребителях. Если не указано, используется имя по умолчанию: `{TypeName}Instance`
 
 **Требования:**
 - Применим только к `class`
@@ -160,6 +171,13 @@ public class DataService
     }
 }
 
+// ✅ Корректно — с пользовательским именем свойства
+[SingletonDIProvide("_DbService")]
+public class DatabaseService
+{
+    // В потребителях будет доступно свойство _DbService вместо DatabaseServiceInstance
+}
+
 // ✅ Корректно — record class разрешён
 [SingletonDIProvide]
 public record class MyRecord(string Value);
@@ -171,6 +189,42 @@ public struct MyStruct { }  // DM0001
 // ❌ Ошибка — abstract class не поддерживается
 [SingletonDIProvide]
 public abstract class MyAbstract { }  // DM0002
+```
+
+**Имена свойств:**
+
+По умолчанию генератор создаёт свойства с суффиксом `Instance`:
+
+```csharp
+[SingletonDIProvide]
+public class DatabaseService { }
+
+[SingletonDIConsume(typeof(DatabaseService))]
+public partial class OrderService
+{
+    public void Process()
+    {
+        // Доступ через DatabaseServiceInstance
+        var db = DatabaseServiceInstance;
+    }
+}
+```
+
+С параметром `propertyName` можно указать пользовательское имя:
+
+```csharp
+[SingletonDIProvide("_db")]
+public class DatabaseService { }
+
+[SingletonDIConsume(typeof(DatabaseService))]
+public partial class OrderService
+{
+    public void Process()
+    {
+        // Доступ через пользовательское имя _db
+        var db = _db;
+    }
+}
 ```
 
 ### [SingletonDIConsume]
@@ -295,26 +349,26 @@ namespace MyApp
 {
     partial class OrderController
     {
-        public global::MyApp.DatabaseService DatabaseServiceInstance
+        protected global::MyApp.DatabaseService DatabaseServiceInstance
         {
             get
             {
-                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();
                 return global::DependencyManager.Generated.Internal.SingletonContainer.DatabaseService;
             }
         }
 
-        public global::MyApp.UserService UserServiceInstance
+        protected global::MyApp.UserService UserServiceInstance
         {
             get
             {
-                global::DependencyManager.Generated.Internal.SingletonContainer.ThrowIfNotInitialized();
                 return global::DependencyManager.Generated.Internal.SingletonContainer.UserService;
             }
         }
     }
 }
 ```
+
+**Важно:** Свойства генерируются с модификатором `protected`, что делает их доступными только внутри класса и его наследников.
 
 ### Разрешение конфликтов имён
 

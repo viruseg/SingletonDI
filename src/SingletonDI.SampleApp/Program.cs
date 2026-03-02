@@ -4,7 +4,7 @@ using SingletonDI.Attributes;
 namespace SingletonDI.SampleApp;
 
 // Example 1: Simple provider with synchronous initialization (constructor only)
-[SingletonDIProvide]
+[SingletonDIProvide("DBService")]
 public class DatabaseService
 {
     public string ConnectionString { get; private set; } = "Server=localhost;Database=Sample;Connected=true";
@@ -42,7 +42,7 @@ public partial class OrderService
     public OrderService()
     {
         Console.WriteLine("[OrderService] Constructor called - setting up order processing...");
-        Console.WriteLine($"[OrderService] Using database: {DatabaseService.ConnectionString}");
+        Console.WriteLine($"[OrderService] Using database: {DBService.ConnectionString}");
     }
 }
 
@@ -54,8 +54,8 @@ public partial class OrderController
     {
         // All dependencies are already initialized via SingletonInitializer
         Console.WriteLine("\n=== OrderController ===");
-        Console.WriteLine($"Database: {DatabaseService.ConnectionString}");
-        Console.WriteLine($"User: {UserService.UserName}");
+        Console.WriteLine($"Database: {DBService.ConnectionString}");
+        Console.WriteLine($"User: {UserServiceInstance.UserName}");
         Console.WriteLine("Order processed successfully!");
     }
 }

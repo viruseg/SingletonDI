@@ -16,7 +16,8 @@ internal static class ConsumerEmitter
     /// </summary>
     public static ImmutableDictionary<string, string> Generate(
         List<ConsumerModel> consumers,
-        ImmutableDictionary<string, string> propertyNames)
+        ImmutableDictionary<string, string> propertyNames,
+        ImmutableDictionary<string, string?> customPropertyNames)
     {
         if (consumers.Count == 0)
         {
@@ -29,7 +30,7 @@ internal static class ConsumerEmitter
 
         foreach (var consumer in validConsumers)
         {
-            var source = GenerateConsumerClass(consumer, propertyNames);
+            var source = GenerateConsumerClass(consumer, propertyNames, customPropertyNames);
             var fileName = $"{consumer.ShortName}.g.cs";
             result[fileName] = source;
         }
@@ -39,7 +40,8 @@ internal static class ConsumerEmitter
 
     private static string GenerateConsumerClass(
         ConsumerModel consumer,
-        ImmutableDictionary<string, string> propertyNames)
+        ImmutableDictionary<string, string> propertyNames,
+        ImmutableDictionary<string, string?> customPropertyNames)
     {
         var sb = new StringBuilder();
 
@@ -67,23 +69,35 @@ internal static class ConsumerEmitter
         // Generate properties for each dependency
         foreach (var dep in consumer.Dependencies)
         {
-            if (!propertyNames.TryGetValue(dep, out var propertyName))
+            if (!propertyNames.TryGetValue(dep, out var containerPropertyName))
             {
                 continue; // Provider not found
             }
 
             // Add global:: prefix for proper type resolution
             var formattedType = "global::" + PropertyNameResolver.FormatTypeName(dep);
-            var propertyAccessName = propertyName;
+
+            // Determine the property name for consumer
+            string consumerPropertyName;
+            if (customPropertyNames.TryGetValue(dep, out var customName) && !string.IsNullOrEmpty(customName))
+            {
+                // Use custom property name from attribute
+                consumerPropertyName = customName!;
+            }
+            else
+            {
+                // Use default: ContainerPropertyName + "Instance" suffix
+                consumerPropertyName = containerPropertyName + "Instance";
+            }
 
             sb.AppendLine($"        /// <summary>");
             sb.AppendLine($"        /// Gets the singleton instance of {formattedType}.");
             sb.AppendLine($"        /// </summary>");
-            sb.AppendLine($"        public {formattedType} {propertyAccessName}");
+            sb.AppendLine($"        protected {formattedType} {consumerPropertyName}");
             sb.AppendLine("        {");
             sb.AppendLine("            get");
             sb.AppendLine("            {");
-            sb.AppendLine($"                return global::DependencyManager.Generated.Internal.SingletonContainer.{propertyName};");
+            sb.AppendLine($"                return global::DependencyManager.Generated.Internal.SingletonContainer.{containerPropertyName};");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();

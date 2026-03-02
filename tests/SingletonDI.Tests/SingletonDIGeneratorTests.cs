@@ -29,12 +29,14 @@ public class SingletonDIGeneratorTests
                                       @namespace : "Test",
                                       hasInitializeAsyncMethod : true,
                                       isDisposable : false,
-                                      dependencies : ImmutableArray<string>.Empty);
+                                      dependencies : ImmutableArray<string>.Empty,
+                                      propertyName : null);
 
         // Assert
         Assert.Equal("Test.Provider", model.FullyQualifiedName);
         Assert.Equal("Provider", model.ShortName);
         Assert.True(model.HasInitializeAsyncMethod);
+        Assert.Null(model.PropertyName);
     }
 
     [Fact]
@@ -46,7 +48,8 @@ public class SingletonDIGeneratorTests
                                       @namespace : "Test",
                                       hasInitializeAsyncMethod : false,
                                       isDisposable : false,
-                                      dependencies : ImmutableArray<string>.Empty);
+                                      dependencies : ImmutableArray<string>.Empty,
+                                      propertyName : null);
 
         // Assert
         Assert.False(model.HasInitializeAsyncMethod);
@@ -77,7 +80,8 @@ public class SingletonDIGeneratorTests
                                          @namespace : "Test",
                                          hasInitializeAsyncMethod : false,
                                          isDisposable : false,
-                                         dependencies : ImmutableArray<string>.Empty);
+                                         dependencies : ImmutableArray<string>.Empty,
+                                         propertyName : null);
 
         var model = new CombinedModel(Providers: [provider],
                                       Consumers: ImmutableArray<ConsumerModel>.Empty,
@@ -98,5 +102,37 @@ public class SingletonDIGeneratorTests
 
         // Assert
         Assert.False(model.HasCircularDependency);
+    }
+
+    [Fact]
+    public void ProviderModel_WithCustomPropertyName_CanBeCreated()
+    {
+        // Arrange & Act
+        var model = new ProviderModel(fullyQualifiedName : "Test.DatabaseService",
+                                      shortName : "DatabaseService",
+                                      @namespace : "Test",
+                                      hasInitializeAsyncMethod : false,
+                                      isDisposable : false,
+                                      dependencies : ImmutableArray<string>.Empty,
+                                      propertyName : "_DbService");
+
+        // Assert
+        Assert.Equal("_DbService", model.PropertyName);
+    }
+
+    [Fact]
+    public void ProviderModel_WithNullPropertyName_UsesDefault()
+    {
+        // Arrange & Act
+        var model = new ProviderModel(fullyQualifiedName : "Test.UserService",
+                                      shortName : "UserService",
+                                      @namespace : "Test",
+                                      hasInitializeAsyncMethod : false,
+                                      isDisposable : false,
+                                      dependencies : ImmutableArray<string>.Empty,
+                                      propertyName : null);
+
+        // Assert
+        Assert.Null(model.PropertyName);
     }
 }

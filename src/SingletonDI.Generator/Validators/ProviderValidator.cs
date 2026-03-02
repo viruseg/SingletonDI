@@ -79,6 +79,9 @@ internal static class ProviderValidator
         // Get dependencies (if this provider also has [SingletonDIConsume])
         var dependencies = GetDependencies(typeSymbol, allProviderFullyQualifiedNames);
 
+        // Get custom property name from [SingletonDIProvide] attribute
+        var propertyName = GetPropertyName(typeSymbol);
+
         var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         return new ProviderModel(fullyQualifiedName : fqn,
@@ -86,7 +89,8 @@ internal static class ProviderValidator
                                  @namespace : typeSymbol.ContainingNamespace.ToDisplayString(),
                                  hasInitializeAsyncMethod : initializeAsyncMethod != null,
                                  isDisposable : isDisposable,
-                                 dependencies : dependencies);
+                                 dependencies : dependencies,
+                                 propertyName : propertyName);
     }
 
     /// <summary>
@@ -160,5 +164,32 @@ internal static class ProviderValidator
             }
         }
         return dependencies.ToImmutableArray();
+    }
+
+    /// <summary>
+    /// Gets the custom property name from [SingletonDIProvide] attribute.
+    /// Returns null if not specified.
+    /// </summary>
+    private static string? GetPropertyName(INamedTypeSymbol typeSymbol)
+    {
+        var provideAttr = typeSymbol.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute");
+
+        if (provideAttr == null)
+        {
+            return null;
+        }
+
+        // Check constructor arguments
+        if (provideAttr.ConstructorArguments.Length > 0)
+        {
+            var arg = provideAttr.ConstructorArguments[0];
+            if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string propertyName && !string.IsNullOrEmpty(propertyName))
+            {
+                return propertyName;
+            }
+        }
+
+        return null;
     }
 }

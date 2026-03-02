@@ -126,6 +126,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             // Resolve property names
             var propertyNames = PropertyNameResolver.ResolvePropertyNames(providerModels);
 
+            // Build custom property names dictionary (FQN -> custom property name or null)
+            var customPropertyNames = providerModels
+                .ToImmutableDictionary(p => p.FullyQualifiedName, p => p.PropertyName);
+
             // Generate container
             if (providerModels.Count > 0)
             {
@@ -159,7 +163,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     }
                 }
 
-                var consumerSources = ConsumerEmitter.Generate(consumerModels, propertyNames);
+                var consumerSources = ConsumerEmitter.Generate(consumerModels, propertyNames, customPropertyNames);
 
                 foreach (var p in consumerSources)
                 {
