@@ -70,7 +70,7 @@ public class CodeFixProviderTests
                            /// Лишнее свойство для проверки сохранения.
                            /// </summary>
                            public string Name { get; set; } = "Test";
-                       v
+                       
                            /// <summary>
                            /// Лишний метод.
                            /// </summary>
