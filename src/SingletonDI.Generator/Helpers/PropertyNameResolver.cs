@@ -55,7 +55,7 @@ internal static class PropertyNameResolver
 
     /// <summary>
     /// Gets a namespace prefix by replacing dots with underscores and removing
-    /// common prefixes like "global::".
+    /// common prefixes like "global::" and the root namespace.
     /// </summary>
     private static string GetNamespacePrefix(string namespaceName)
     {
@@ -65,6 +65,18 @@ internal static class PropertyNameResolver
         if (cleaned.StartsWith("global::"))
         {
             cleaned = cleaned.Substring("global::".Length);
+        }
+
+        // Remove root namespace (first part before dot)
+        var firstDotIndex = cleaned.IndexOf('.');
+        if (firstDotIndex > 0)
+        {
+            cleaned = cleaned.Substring(firstDotIndex + 1);
+        }
+        else
+        {
+            // If no dot, this is a root namespace - use empty string
+            return string.Empty;
         }
 
         // Replace dots with underscores

@@ -12,7 +12,7 @@ namespace SingletonDI.SampleApp
         {
             get
             {
-                return global::DependencyManager.Generated.Internal.SingletonContainer.SingletonDI_SampleApp_DatabaseService;
+                return global::DependencyManager.Generated.Internal.SingletonContainer.DatabaseService;
             }
         }
 

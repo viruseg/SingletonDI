@@ -109,6 +109,34 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 }
             }
 
+            // Check for duplicate property names (DM0001)
+            var propertyNameToProvider = new Dictionary<string, ProviderModel>();
+            foreach (var provider in providerModels)
+            {
+                if (provider.PropertyName != null)
+                {
+                    if (propertyNameToProvider.TryGetValue(provider.PropertyName, out var existingProvider))
+                    {
+                        // Report diagnostic for both providers - first one and the conflicting one
+                        spc.ReportDiagnostic(Diagnostic.Create(
+                            DiagnosticDescriptors.PropertyNameConflict,
+                            existingProvider.Location,
+                            provider.PropertyName,
+                            existingProvider.FullyQualifiedName,
+                            provider.FullyQualifiedName));
+
+                        spc.ReportDiagnostic(Diagnostic.Create(
+                            DiagnosticDescriptors.PropertyNameConflict,
+                            provider.Location,
+                            provider.PropertyName,
+                            existingProvider.FullyQualifiedName,
+                            provider.FullyQualifiedName));
+                        return;
+                    }
+                    propertyNameToProvider[provider.PropertyName] = provider;
+                }
+            }
+
             // Run topological sort by levels
             var sortResult = TopologicalSorter.SortByLevels(providerModels.ToImmutableArray());
 

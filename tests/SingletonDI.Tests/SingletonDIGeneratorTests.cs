@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Microsoft.CodeAnalysis;
 using Xunit;
 using SingletonDI.Generator;
 using SingletonDI.Generator.Models;
@@ -30,7 +31,8 @@ public class SingletonDIGeneratorTests
                                       hasInitializeAsyncMethod : true,
                                       isDisposable : false,
                                       dependencies : ImmutableArray<string>.Empty,
-                                      propertyName : null);
+                                      propertyName : null,
+                                      location : Location.None);
 
         // Assert
         Assert.Equal("Test.Provider", model.FullyQualifiedName);
@@ -49,7 +51,8 @@ public class SingletonDIGeneratorTests
                                       hasInitializeAsyncMethod : false,
                                       isDisposable : false,
                                       dependencies : ImmutableArray<string>.Empty,
-                                      propertyName : null);
+                                      propertyName : null,
+                                      location : Location.None);
 
         // Assert
         Assert.False(model.HasInitializeAsyncMethod);
@@ -81,7 +84,8 @@ public class SingletonDIGeneratorTests
                                          hasInitializeAsyncMethod : false,
                                          isDisposable : false,
                                          dependencies : ImmutableArray<string>.Empty,
-                                         propertyName : null);
+                                         propertyName : null,
+                                         location : Location.None);
 
         var model = new CombinedModel(Providers: [provider],
                                       Consumers: ImmutableArray<ConsumerModel>.Empty,
@@ -114,7 +118,8 @@ public class SingletonDIGeneratorTests
                                       hasInitializeAsyncMethod : false,
                                       isDisposable : false,
                                       dependencies : ImmutableArray<string>.Empty,
-                                      propertyName : "_DbService");
+                                      propertyName : "_DbService",
+                                      location : Location.None);
 
         // Assert
         Assert.Equal("_DbService", model.PropertyName);
@@ -130,7 +135,8 @@ public class SingletonDIGeneratorTests
                                       hasInitializeAsyncMethod : false,
                                       isDisposable : false,
                                       dependencies : ImmutableArray<string>.Empty,
-                                      propertyName : null);
+                                      propertyName : null,
+                                      location : Location.None);
 
         // Assert
         Assert.Null(model.PropertyName);

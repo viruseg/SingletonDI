@@ -226,6 +226,7 @@ public partial class OrderController { }
 
 | ID | Уровень | Описание |
 |---|---|---|
+| **DM0001** | Error | Дублирование имени свойства в `[SingletonDIProvide]` |
 | **DM0002** | Error | `[SingletonDIProvide]` применён к `abstract class` |
 | **DM0004** | Error | Класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров |
 | **DM0005** | Error | Метод `InitializeAsync` имеет недоступный модификатор доступа (должен быть `public`, `internal` или `protected internal`) |
@@ -238,6 +239,18 @@ public partial class OrderController { }
 | **DM0012** | Error | Метод `InitializeAsync` не может быть `static` |
 | **DM0013** | Error | Недопустимое имя свойства. Имя должно начинаться с буквы или подчёркивания и содержать только буквы, цифры или подчёркивания |
 | **DM0014** | Error | Имя свойства является зарезервированным ключевым словом C#. Используйте другое имя или добавьте префикс '@' в коде |
+
+### DM0001: Duplicate property name
+
+Возникает, когда несколько атрибутов `[SingletonDIProvide]` указывают одинаковое значение параметра `propertyName`. Каждое имя свойства должно быть уникальным.
+
+```csharp
+[SingletonDIProvide(propertyName: "DbService")]
+public class DatabaseService { }
+
+[SingletonDIProvide(propertyName: "DbService")]  // DM0001
+public class AnotherDatabaseService { }
+```
 
 ## Ограничения
 

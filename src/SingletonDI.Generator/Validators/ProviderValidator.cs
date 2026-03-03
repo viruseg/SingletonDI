@@ -82,16 +82,11 @@ internal static class ProviderValidator
 
         // Get custom property name from [SingletonDIProvide] attribute with validation
         var propertyName = GetPropertyName(typeSymbol, typeDecl, reportDiagnostic);
-        if (propertyName is null && typeSymbol.GetAttributes().Any(a =>
-            a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute" &&
-            a.ConstructorArguments.Length > 0 &&
-            a.ConstructorArguments[0].Value is string s && !string.IsNullOrEmpty(s)))
-        {
-            // Validation failed for non-empty property name
-            return null;
-        }
+        // Note: GetPropertyName returns null if not specified OR if validation failed
+        // In case of validation failure, it already reported the diagnostic
 
         var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var location = typeDecl.GetLocation();
 
         return new ProviderModel(fullyQualifiedName : fqn,
                                  shortName : typeSymbol.Name,
@@ -99,7 +94,8 @@ internal static class ProviderValidator
                                  hasInitializeAsyncMethod : initializeAsyncMethod != null,
                                  isDisposable : isDisposable,
                                  dependencies : dependencies,
-                                 propertyName : propertyName);
+                                 propertyName : propertyName,
+                                 location : location);
     }
 
     /// <summary>
@@ -192,38 +188,58 @@ internal static class ProviderValidator
             return null;
         }
 
+        string? propertyName = null;
+
         // Check constructor arguments
         if (provideAttr.ConstructorArguments.Length > 0)
         {
             var arg = provideAttr.ConstructorArguments[0];
-            if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string propertyName && !string.IsNullOrEmpty(propertyName))
+            if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string constructorValue && !string.IsNullOrEmpty(constructorValue))
             {
-                // Validate property name is a valid C# identifier
-                if (!SyntaxFacts.IsValidIdentifier(propertyName))
-                {
-                    var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
-                                   ?? typeDecl.Identifier.GetLocation();
-                    reportDiagnostic(Diagnostic.Create(
-                        DiagnosticDescriptors.InvalidPropertyName,
-                        location,
-                        propertyName));
-                    return null;
-                }
-
-                // Check if it's a reserved keyword
-                if (SyntaxFacts.GetKeywordKind(propertyName) != SyntaxKind.None)
-                {
-                    var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
-                                   ?? typeDecl.Identifier.GetLocation();
-                    reportDiagnostic(Diagnostic.Create(
-                        DiagnosticDescriptors.PropertyNameIsReservedKeyword,
-                        location,
-                        propertyName));
-                    return null;
-                }
-
-                return propertyName;
+                propertyName = constructorValue;
             }
+        }
+
+        // Check named arguments (PropertyName = "value")
+        if (propertyName == null)
+        {
+            var namedArg = provideAttr.NamedArguments
+                .FirstOrDefault(na => na.Key == "PropertyName");
+
+            if (namedArg.Value.Kind == TypedConstantKind.Primitive && namedArg.Value.Value is string namedValue && !string.IsNullOrEmpty(namedValue))
+            {
+                propertyName = namedValue;
+            }
+        }
+
+        // Validate property name if specified
+        if (!string.IsNullOrEmpty(propertyName))
+        {
+            // Validate property name is a valid C# identifier
+            if (!SyntaxFacts.IsValidIdentifier(propertyName!))
+            {
+                var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
+                               ?? typeDecl.Identifier.GetLocation();
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.InvalidPropertyName,
+                    location,
+                    propertyName));
+                return null;
+            }
+
+            // Check if it's a reserved keyword
+            if (SyntaxFacts.GetKeywordKind(propertyName!) != SyntaxKind.None)
+            {
+                var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
+                               ?? typeDecl.Identifier.GetLocation();
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.PropertyNameIsReservedKeyword,
+                    location,
+                    propertyName));
+                return null;
+            }
+
+            return propertyName;
         }
 
         return null;

@@ -13,13 +13,11 @@ namespace DependencyManager.Generated.Internal
         private static readonly object _lock = new object();
         private static global::System.Threading.Tasks.Task? _initializationTask;
 
-        private static SingletonDI.SampleApp2.DatabaseService2.DatabaseService? _SingletonDI_SampleApp2_DatabaseService;
-        private static SingletonDI.SampleApp.DatabaseService? _SingletonDI_SampleApp_DatabaseService;
+        private static SingletonDI.SampleApp.DatabaseService? _DatabaseService;
         private static SingletonDI.SampleApp.UserService? _UserService;
         private static SingletonDI.SampleApp.OrderService? _OrderService;
 
-        public static SingletonDI.SampleApp2.DatabaseService2.DatabaseService SingletonDI_SampleApp2_DatabaseService => _SingletonDI_SampleApp2_DatabaseService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp2.DatabaseService2.DatabaseService>();
-        public static SingletonDI.SampleApp.DatabaseService SingletonDI_SampleApp_DatabaseService => _SingletonDI_SampleApp_DatabaseService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.DatabaseService>();
+        public static SingletonDI.SampleApp.DatabaseService DatabaseService => _DatabaseService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.DatabaseService>();
         public static SingletonDI.SampleApp.UserService UserService => _UserService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.UserService>();
         public static SingletonDI.SampleApp.OrderService OrderService => _OrderService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.OrderService>();
 
@@ -53,8 +51,7 @@ namespace DependencyManager.Generated.Internal
             try
             {
                 // Level 0
-                _SingletonDI_SampleApp2_DatabaseService = new SingletonDI.SampleApp2.DatabaseService2.DatabaseService();
-                _SingletonDI_SampleApp_DatabaseService = new SingletonDI.SampleApp.DatabaseService();
+                _DatabaseService = new SingletonDI.SampleApp.DatabaseService();
                 _UserService = new SingletonDI.SampleApp.UserService();
 
                 await _UserService!.InitializeAsync().ConfigureAwait(false);

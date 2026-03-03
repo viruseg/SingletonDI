@@ -10,6 +10,18 @@ internal static class DiagnosticDescriptors
     private const string Category = "SingletonDI";
 
     /// <summary>
+    /// DM0001: Duplicate property name in [SingletonDIProvide] attributes.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PropertyNameConflict = Create(
+        "DM0001",
+        "Duplicate property name",
+        "Property name '{0}' is specified in multiple [SingletonDIProvide] attributes. " +
+        "Providers '{1}' and '{2}' have the same property name. " +
+        "Each provider must have a unique property name.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0002: [SingletonDIProvide] attribute cannot be used on abstract class.
     /// </summary>
     public static readonly DiagnosticDescriptor ProvideOnAbstractClass = Create(

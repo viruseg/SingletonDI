@@ -13,6 +13,60 @@ namespace SingletonDI.Tests;
 public class DiagnosticErrorTests
 {
     [Fact]
+    public void DM0001_DuplicatePropertyName()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              namespace MyApp.Services
+                              {
+                                  /// <summary>
+                                  /// First service with custom property name.
+                                  /// </summary>
+                                  [SingletonDIProvide("CustomService")]
+                                  public class FirstService
+                                  {
+                                      public void DoWork() { }
+                                  }
+
+                                  /// <summary>
+                                  /// Second service with the same custom property name.
+                                  /// </summary>
+                                  [SingletonDIProvide("CustomService")]
+                                  public class SecondService
+                                  {
+                                      public void DoOtherWork() { }
+                                  }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - should have two DM0001 diagnostics (one for each conflicting class)
+        var dm0001Diagnostics = diagnostics.Where(d => d.Id == "DM0001").ToList();
+        Assert.Equal(2, dm0001Diagnostics.Count);
+
+        // Verify both diagnostics have valid locations (not Location.None)
+        foreach (var dm0001 in dm0001Diagnostics)
+        {
+            Assert.Equal("Duplicate property name", dm0001.Descriptor.Title);
+            Assert.Contains("CustomService", dm0001.GetMessage());
+            Assert.Contains("FirstService", dm0001.GetMessage());
+            Assert.Contains("SecondService", dm0001.GetMessage());
+
+            // Verify Location is not None
+            Assert.NotEqual(Location.None, dm0001.Location);
+            Assert.True(dm0001.Location.IsInSource);
+        }
+
+        // Verify locations point to different classes
+        var locations = dm0001Diagnostics.Select(d => d.Location.GetLineSpan().StartLinePosition.Line).ToList();
+        Assert.Equal(2, locations.Distinct().Count()); // Two different lines
+    }
+
+    [Fact]
     public void DM0002_ProvideOnAbstractClass()
     {
         // Arrange

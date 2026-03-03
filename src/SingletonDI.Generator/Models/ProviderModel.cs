@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Microsoft.CodeAnalysis;
 
 namespace SingletonDI.Generator.Models;
 
@@ -11,7 +12,8 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
                                             bool hasInitializeAsyncMethod,
                                             bool isDisposable,
                                             ImmutableArray<string> dependencies,
-                                            string? propertyName)
+                                            string? propertyName,
+                                            Location location)
 {
     /// <summary>
     /// The fully qualified name of the provider type.
@@ -48,4 +50,10 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
     /// If null, the default name "{TypeName}Instance" will be used.
     /// </summary>
     public string? PropertyName { get; } = propertyName;
+
+    /// <summary>
+    /// The location of the provider type declaration in the source code.
+    /// Used for reporting diagnostics with precise location information.
+    /// </summary>
+    public Location Location { get; } = location;
 }
