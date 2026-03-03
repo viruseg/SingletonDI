@@ -22,32 +22,32 @@ internal static class PropertyNameResolver
 
         var result = ImmutableDictionary.CreateBuilder<string, string>();
 
-        // First, process providers with custom property names (they don't participate in grouping)
+        // First, determine all ShortName conflicts (considering ALL providers)
+        var allShortNameGroups = providers
+            .GroupBy(p => p.ShortName)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Providers with custom property names get their custom name
         foreach (var provider in providers.Where(p => !string.IsNullOrEmpty(p.PropertyName)))
         {
             result[provider.FullyQualifiedName] = provider.PropertyName!;
         }
 
-        // Then, group only providers without custom names
-        var providersNeedingName = providers.Where(p => string.IsNullOrEmpty(p.PropertyName)).ToList();
-        var shortNameGroups = providersNeedingName
-            .GroupBy(p => p.ShortName)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        foreach (var provider in providersNeedingName)
+        // Providers without custom name - check conflicts against all providers
+        foreach (var provider in providers.Where(p => string.IsNullOrEmpty(p.PropertyName)))
         {
             var shortName = provider.ShortName;
-            var group = shortNameGroups[shortName];
+            var allWithSameShortName = allShortNameGroups[shortName];
 
             string propertyName;
-            if (group.Count == 1)
+            if (allWithSameShortName.Count == 1)
             {
-                // No conflict - use short name
+                // No conflict - use ShortName
                 propertyName = shortName;
             }
             else
             {
-                // Conflict - use Namespace_TypeName format
+                // Conflict - use Namespace_ShortName format
                 var namespacePrefix = GetNamespacePrefix(provider.Namespace);
                 propertyName = $"{namespacePrefix}_{shortName}";
             }

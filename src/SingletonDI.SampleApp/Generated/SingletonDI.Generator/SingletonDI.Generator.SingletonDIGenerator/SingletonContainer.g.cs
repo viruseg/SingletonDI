@@ -16,20 +16,10 @@ namespace DependencyManager.Generated.Internal
         private static SingletonDI.SampleApp.DatabaseService? _DBService;
         private static SingletonDI.SampleApp.UserService? _UserService;
         private static SingletonDI.SampleApp.OrderService? _OrderService;
-        private static SampleNamespace0.ProvideA? _SampleNamespace0_ProvideA;
-        private static SampleNamespace1.ProvideA? _SampleNamespace1_ProvideA;
-        private static SampleNamespace2.ProvideA? _ProvideAName;
-        private static SampleNamespace3.ProvideA? _SampleNamespace3_ProvideA;
-        private static TestNamespace2.ProvideTest0? _ProvideTest0;
 
         public static SingletonDI.SampleApp.DatabaseService DBService => _DBService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.DatabaseService>();
         public static SingletonDI.SampleApp.UserService UserService => _UserService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.UserService>();
         public static SingletonDI.SampleApp.OrderService OrderService => _OrderService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.OrderService>();
-        public static SampleNamespace0.ProvideA SampleNamespace0_ProvideA => _SampleNamespace0_ProvideA ?? ExceptionHelper.ThrowNotInitialized<SampleNamespace0.ProvideA>();
-        public static SampleNamespace1.ProvideA SampleNamespace1_ProvideA => _SampleNamespace1_ProvideA ?? ExceptionHelper.ThrowNotInitialized<SampleNamespace1.ProvideA>();
-        public static SampleNamespace2.ProvideA ProvideAName => _ProvideAName ?? ExceptionHelper.ThrowNotInitialized<SampleNamespace2.ProvideA>();
-        public static SampleNamespace3.ProvideA SampleNamespace3_ProvideA => _SampleNamespace3_ProvideA ?? ExceptionHelper.ThrowNotInitialized<SampleNamespace3.ProvideA>();
-        public static TestNamespace2.ProvideTest0 ProvideTest0 => _ProvideTest0 ?? ExceptionHelper.ThrowNotInitialized<TestNamespace2.ProvideTest0>();
 
         /// <summary>
         /// Initializes all singletons asynchronously with parallel level processing.
@@ -63,11 +53,6 @@ namespace DependencyManager.Generated.Internal
                 // Level 0
                 _DBService = new SingletonDI.SampleApp.DatabaseService();
                 _UserService = new SingletonDI.SampleApp.UserService();
-                _SampleNamespace0_ProvideA = new SampleNamespace0.ProvideA();
-                _SampleNamespace1_ProvideA = new SampleNamespace1.ProvideA();
-                _ProvideAName = new SampleNamespace2.ProvideA();
-                _SampleNamespace3_ProvideA = new SampleNamespace3.ProvideA();
-                _ProvideTest0 = new TestNamespace2.ProvideTest0();
 
                 await _UserService!.InitializeAsync().ConfigureAwait(false);
 
