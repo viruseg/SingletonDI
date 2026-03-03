@@ -20,16 +20,21 @@ internal static class PropertyNameResolver
             return ImmutableDictionary<string, string>.Empty;
         }
 
-        var validProviders = providers;
+        var result = ImmutableDictionary.CreateBuilder<string, string>();
 
-        // Group by short name
-        var shortNameGroups = validProviders
+        // First, process providers with custom property names (they don't participate in grouping)
+        foreach (var provider in providers.Where(p => !string.IsNullOrEmpty(p.PropertyName)))
+        {
+            result[provider.FullyQualifiedName] = provider.PropertyName!;
+        }
+
+        // Then, group only providers without custom names
+        var providersNeedingName = providers.Where(p => string.IsNullOrEmpty(p.PropertyName)).ToList();
+        var shortNameGroups = providersNeedingName
             .GroupBy(p => p.ShortName)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var result = ImmutableDictionary.CreateBuilder<string, string>();
-
-        foreach (var provider in validProviders)
+        foreach (var provider in providersNeedingName)
         {
             var shortName = provider.ShortName;
             var group = shortNameGroups[shortName];
@@ -55,7 +60,7 @@ internal static class PropertyNameResolver
 
     /// <summary>
     /// Gets a namespace prefix by replacing dots with underscores and removing
-    /// common prefixes like "global::" and the root namespace.
+    /// common prefixes like "global::".
     /// </summary>
     private static string GetNamespacePrefix(string namespaceName)
     {
@@ -65,18 +70,6 @@ internal static class PropertyNameResolver
         if (cleaned.StartsWith("global::"))
         {
             cleaned = cleaned.Substring("global::".Length);
-        }
-
-        // Remove root namespace (first part before dot)
-        var firstDotIndex = cleaned.IndexOf('.');
-        if (firstDotIndex > 0)
-        {
-            cleaned = cleaned.Substring(firstDotIndex + 1);
-        }
-        else
-        {
-            // If no dot, this is a root namespace - use empty string
-            return string.Empty;
         }
 
         // Replace dots with underscores

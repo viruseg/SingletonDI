@@ -189,34 +189,37 @@ internal static class ProviderValidator
         }
 
         string? propertyName = null;
+        bool propertyNameWasSpecified = false;
 
         // Check constructor arguments
         if (provideAttr.ConstructorArguments.Length > 0)
         {
             var arg = provideAttr.ConstructorArguments[0];
-            if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string constructorValue && !string.IsNullOrEmpty(constructorValue))
+            if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string constructorValue)
             {
                 propertyName = constructorValue;
+                propertyNameWasSpecified = true;
             }
         }
 
         // Check named arguments (PropertyName = "value")
-        if (propertyName == null)
+        if (!propertyNameWasSpecified)
         {
             var namedArg = provideAttr.NamedArguments
                 .FirstOrDefault(na => na.Key == "PropertyName");
 
-            if (namedArg.Value.Kind == TypedConstantKind.Primitive && namedArg.Value.Value is string namedValue && !string.IsNullOrEmpty(namedValue))
+            if (namedArg.Value.Kind == TypedConstantKind.Primitive && namedArg.Value.Value is string namedValue)
             {
                 propertyName = namedValue;
+                propertyNameWasSpecified = true;
             }
         }
 
         // Validate property name if specified
-        if (!string.IsNullOrEmpty(propertyName))
+        if (propertyNameWasSpecified)
         {
-            // Validate property name is a valid C# identifier
-            if (!SyntaxFacts.IsValidIdentifier(propertyName!))
+            // Empty string is not a valid identifier
+            if (string.IsNullOrEmpty(propertyName) || !SyntaxFacts.IsValidIdentifier(propertyName!))
             {
                 var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
                                ?? typeDecl.Identifier.GetLocation();

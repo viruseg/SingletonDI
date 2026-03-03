@@ -31,7 +31,14 @@ internal static class ConsumerEmitter
         foreach (var consumer in validConsumers)
         {
             var source = GenerateConsumerClass(consumer, propertyNames, customPropertyNames);
-            var fileName = $"{consumer.ShortName}.g.cs";
+            // Use fully qualified name for file name to avoid collisions when multiple classes have the same short name
+            // Remove "global::" prefix if present and replace dots with underscores
+            var fqnForFileName = consumer.FullyQualifiedName;
+            if (fqnForFileName.StartsWith("global::"))
+            {
+                fqnForFileName = fqnForFileName.Substring("global::".Length);
+            }
+            var fileName = $"{fqnForFileName.Replace('.', '_')}.g.cs";
             result[fileName] = source;
         }
 
