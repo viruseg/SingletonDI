@@ -657,6 +657,58 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0013_InvalidPropertyName_EmptyName()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с невалидным именем свойства (пустая строка).
+                              /// </summary>
+                              [SingletonDIProvide("")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
+        Assert.NotNull(dm0013);
+        Assert.Contains("''", dm0013.GetMessage());
+    }
+
+    [Fact]
+    public void DM0013_InvalidPropertyName_EmptyName2()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Провайдер с невалидным именем свойства (пробелы).
+                              /// </summary>
+                              [SingletonDIProvide("   ")]
+                              public class MyService
+                              {
+                                  public void DoSomething() { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
+        Assert.NotNull(dm0013);
+        Assert.Contains("'   '", dm0013.GetMessage());
+    }
+
+    [Fact]
     public void DM0014_PropertyNameIsReservedKeyword()
     {
         // Arrange
