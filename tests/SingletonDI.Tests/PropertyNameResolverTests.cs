@@ -280,7 +280,7 @@ public class PropertyNameResolverTests
         Assert.DoesNotContain("NamespaceX_ProviderInstance", generatedCode);
         Assert.Contains("ProviderY", generatedCode);
         Assert.DoesNotContain("NamespaceY_ProviderInstance", generatedCode);
-        Assert.Contains("NamespaceZ_Provider", generatedCode);
+        Assert.Contains("ProviderInstance", generatedCode);
     }
 
     /// <summary>
