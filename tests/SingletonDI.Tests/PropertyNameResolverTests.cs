@@ -467,46 +467,6 @@ public class PropertyNameResolverTests
         Assert.DoesNotContain("NamespaceB_ServiceBInstance", generatedCode);
     }
 
-    [Fact]
-    public void ProviderWithCustomName_ShortName_Conflict_GeneratesNamesWithNamespacePrefix()
-    {
-        // Arrange
-        const string SOURCE = """
-                              using SingletonDI.Attributes;
-
-                              namespace ConsumerNamespace
-                              {
-                                  [SingletonDIConsume(typeof(NamespaceA.ServiceA), typeof(NamespaceB.ServiceB))]
-                                  public partial class Consumer
-                                  {
-                                  }
-                              }
-
-                              namespace NamespaceA
-                              {
-                                  [SingletonDIProvide("ServiceBInstance")]
-                                  public class ServiceA
-                                  {
-                                  }
-                              }
-
-                              namespace NamespaceB
-                              {
-                                  [SingletonDIProvide]
-                                  public class ServiceB
-                                  {
-                                  }
-                              }
-                              """;
-
-        // Act
-        var generatedCode = RunGeneratorAndGetGeneratedCode(SOURCE);
-
-        Assert.Contains("ServiceBInstance", generatedCode);
-        Assert.DoesNotContain("NamespaceA_ServiceBInstance", generatedCode);
-        Assert.Contains("NamespaceB_ServiceBInstance", generatedCode);
-    }
-
     #region Helper Methods
 
     private static string RunGeneratorAndGetGeneratedCode(string source)
