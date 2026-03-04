@@ -13,11 +13,11 @@ namespace DependencyManager.Generated.Internal
         private static readonly object _lock = new object();
         private static global::System.Threading.Tasks.Task? _initializationTask;
 
-        private static SingletonDI.SampleApp.DatabaseService? _DBService;
+        private static SingletonDI.SampleApp.DatabaseService? _SingletonDI_SampleApp_DatabaseServiceInstance;
         private static SingletonDI.SampleApp.UserService? _UserServiceInstance;
         private static SingletonDI.SampleApp.OrderService? _OrderServiceInstance;
 
-        public static SingletonDI.SampleApp.DatabaseService DBService => _DBService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.DatabaseService>();
+        public static SingletonDI.SampleApp.DatabaseService SingletonDI_SampleApp_DatabaseServiceInstance => _SingletonDI_SampleApp_DatabaseServiceInstance ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.DatabaseService>();
         public static SingletonDI.SampleApp.UserService UserServiceInstance => _UserServiceInstance ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.UserService>();
         public static SingletonDI.SampleApp.OrderService OrderServiceInstance => _OrderServiceInstance ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.OrderService>();
 
@@ -51,7 +51,7 @@ namespace DependencyManager.Generated.Internal
             try
             {
                 // Level 0
-                _DBService = new SingletonDI.SampleApp.DatabaseService();
+                _SingletonDI_SampleApp_DatabaseServiceInstance = new SingletonDI.SampleApp.DatabaseService();
                 _UserServiceInstance = new SingletonDI.SampleApp.UserService();
 
                 await _UserServiceInstance!.InitializeAsync().ConfigureAwait(false);

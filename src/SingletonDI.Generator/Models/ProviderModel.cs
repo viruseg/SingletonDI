@@ -13,7 +13,8 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
                                             bool isDisposable,
                                             ImmutableArray<string> dependencies,
                                             string? propertyName,
-                                            Location location)
+                                            Location location,
+                                            Location? propertyNameLocation)
 {
     /// <summary>
     /// The fully qualified name of the provider type.
@@ -56,4 +57,11 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
     /// Used for reporting diagnostics with precise location information.
     /// </summary>
     public Location Location { get; } = location;
+
+    /// <summary>
+    /// The location of the PropertyName argument in the [SingletonDIProvide] attribute.
+    /// Used for precise diagnostic highlighting of the property name string literal.
+    /// Null if no custom property name was specified.
+    /// </summary>
+    public Location? PropertyNameLocation { get; } = propertyNameLocation;
 }

@@ -32,6 +32,17 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0003: Property name conflicts with auto-generated property name.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PropertyNameConflictsWithGenerated = Create(
+        "DM0003",
+        "Property name conflicts with generated name",
+        "Property name '{0}' in [SingletonDIProvide] conflicts with auto-generated property name of provider '{1}'. " +
+        "Use a different property name to avoid ambiguity.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0004: [SingletonDIProvide] class must have a public parameterless constructor.
     /// </summary>
     public static readonly DiagnosticDescriptor ProvideMissingParameterlessConstructor = Create(

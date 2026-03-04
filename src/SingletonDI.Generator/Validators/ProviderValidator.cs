@@ -81,7 +81,7 @@ internal static class ProviderValidator
         var dependencies = GetDependencies(typeSymbol, allProviderFullyQualifiedNames);
 
         // Get custom property name from [SingletonDIProvide] attribute with validation
-        var propertyName = GetPropertyName(typeSymbol, typeDecl, reportDiagnostic);
+        var (propertyName, propertyNameLocation) = GetPropertyName(typeSymbol, typeDecl, reportDiagnostic);
         // Note: GetPropertyName returns null if not specified OR if validation failed
         // In case of validation failure, it already reported the diagnostic
 
@@ -95,7 +95,8 @@ internal static class ProviderValidator
                                  isDisposable : isDisposable,
                                  dependencies : dependencies,
                                  propertyName : propertyName,
-                                 location : location);
+                                 location : location,
+                                 propertyNameLocation : propertyNameLocation);
     }
 
     /// <summary>
@@ -173,9 +174,11 @@ internal static class ProviderValidator
 
     /// <summary>
     /// Gets the custom property name from [SingletonDIProvide] attribute with validation.
-    /// Returns null if not specified or if validation fails (diagnostic is reported in latter case).
+    /// Returns a tuple (propertyName, propertyNameLocation).
+    /// propertyName is null if not specified or if validation fails (diagnostic is reported in latter case).
+    /// propertyNameLocation is the location of the string literal argument for precise diagnostics.
     /// </summary>
-    private static string? GetPropertyName(
+    private static (string? propertyName, Location? propertyNameLocation) GetPropertyName(
         INamedTypeSymbol typeSymbol,
         TypeDeclarationSyntax typeDecl,
         Action<Diagnostic> reportDiagnostic)
@@ -185,11 +188,15 @@ internal static class ProviderValidator
 
         if (provideAttr == null)
         {
-            return null;
+            return (null, null);
         }
 
         string? propertyName = null;
+        Location? propertyNameLocation = null;
         bool propertyNameWasSpecified = false;
+
+        // Get the attribute syntax for precise location
+        var attributeSyntax = provideAttr.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
 
         // Check constructor arguments
         if (provideAttr.ConstructorArguments.Length > 0)
@@ -199,6 +206,12 @@ internal static class ProviderValidator
             {
                 propertyName = constructorValue;
                 propertyNameWasSpecified = true;
+
+                // Get location of the first argument (constructor argument)
+                if (attributeSyntax?.ArgumentList?.Arguments.FirstOrDefault() is { } firstArg)
+                {
+                    propertyNameLocation = firstArg.GetLocation();
+                }
             }
         }
 
@@ -212,39 +225,48 @@ internal static class ProviderValidator
             {
                 propertyName = namedValue;
                 propertyNameWasSpecified = true;
+
+                // Get location of the named argument
+                if (attributeSyntax?.ArgumentList != null)
+                {
+                    var namedArgSyntax = attributeSyntax.ArgumentList.Arguments
+                        .FirstOrDefault(a => a.NameColon?.Name.Identifier.ValueText == "PropertyName");
+                    if (namedArgSyntax != null)
+                    {
+                        propertyNameLocation = namedArgSyntax.GetLocation();
+                    }
+                }
             }
         }
 
         // Validate property name if specified
         if (propertyNameWasSpecified)
         {
+            var diagnosticLocation = propertyNameLocation ?? attributeSyntax?.GetLocation() ?? typeDecl.Identifier.GetLocation();
+
             // Empty string is not a valid identifier
             if (string.IsNullOrEmpty(propertyName) || !SyntaxFacts.IsValidIdentifier(propertyName!))
             {
-                var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
-                               ?? typeDecl.Identifier.GetLocation();
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.InvalidPropertyName,
-                    location,
+                    diagnosticLocation,
                     propertyName));
-                return null;
+                return (null, null);
             }
 
             // Check if it's a reserved keyword
             if (SyntaxFacts.GetKeywordKind(propertyName!) != SyntaxKind.None)
             {
-                var location = provideAttr.ApplicationSyntaxReference?.GetSyntax().GetLocation()
-                               ?? typeDecl.Identifier.GetLocation();
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.PropertyNameIsReservedKeyword,
-                    location,
+                    diagnosticLocation,
                     propertyName));
-                return null;
+                return (null, null);
             }
 
-            return propertyName;
+            return (propertyName, propertyNameLocation);
         }
 
-        return null;
+        return (null, null);
     }
 }

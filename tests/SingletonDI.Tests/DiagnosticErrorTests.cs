@@ -104,6 +104,240 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0003_PropertyNameConflictsWithShortName()
+    {
+        // Arrange - custom name conflicts with auto-generated short name
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp
+            {
+                [SingletonDIProvide]
+                public class DatabaseService { }
+
+                [SingletonDIProvide("DatabaseServiceInstance")]
+                public class UserService { }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Equal("Property name conflicts with generated name", dm0003.Descriptor.Title);
+        Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
+        Assert.Contains("DatabaseService", dm0003.GetMessage());
+
+        // Verify Location is not None and points to the argument
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0003_PropertyNameConflictsWithFullName()
+    {
+        // Arrange - custom name conflicts with auto-generated full name (namespace conflict)
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                [SingletonDIProvide]
+                public class DatabaseService { }
+            }
+
+            namespace MyApp.Other
+            {
+                [SingletonDIProvide]
+                public class DatabaseService { }
+            }
+
+            namespace MyApp.Third
+            {
+                // Conflicts with MyApp.Services.DatabaseService generated name
+                [SingletonDIProvide("MyApp_Services_DatabaseServiceInstance")]
+                public class UserService { }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Contains("MyApp_Services_DatabaseServiceInstance", dm0003.GetMessage());
+
+        // Verify Location is not None
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0003_PropertyNameConflictsWithOtherProvider()
+    {
+        // Arrange - custom name conflicts with another provider's generated name
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp
+            {
+                // Would generate "DatabaseServiceInstance" without custom name
+                [SingletonDIProvide]
+                public class DatabaseService { }
+
+                // Conflicts with DatabaseService's generated name
+                [SingletonDIProvide("DatabaseServiceInstance")]
+                public class UserService { }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - should report DM0003
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
+        Assert.Contains("DatabaseService", dm0003.GetMessage());
+
+        // Verify Location is not None
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0003_PropertyNameConflictsWithSelf_ShortName()
+    {
+        // Arrange - custom name conflicts with its own generated short name
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp
+            {
+                // Would generate "DatabaseServiceInstance" without custom name
+                [SingletonDIProvide("DatabaseServiceInstance")]
+                public class DatabaseService { }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - self-conflict IS an error
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
+        Assert.Contains("DatabaseService", dm0003.GetMessage());
+
+        // Verify Location is not None
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0003_PropertyNameConflictsWithSelf_ShortName2()
+    {
+        // Arrange - custom name conflicts with its own generated short name
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+            
+            namespace SingletonDI.SampleApp;
+            
+            [SingletonDIProvide("DatabaseServiceInstance")]
+            public class DatabaseService
+            {
+                public DatabaseService()
+                {
+                    
+                }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - self-conflict IS an error
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
+        Assert.Contains("DatabaseService", dm0003.GetMessage());
+
+        // Verify Location is not None
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0003_PropertyNameConflictsWithSelf_FullName()
+    {
+        // Arrange - custom name conflicts with its own generated full name (namespace conflict scenario)
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                // Would generate "MyApp_Services_DatabaseServiceInstance" due to conflict
+                [SingletonDIProvide]
+                public class DatabaseService { }
+            }
+
+            namespace MyApp.Other
+            {
+                // Would generate "MyApp_Other_DatabaseServiceInstance" due to conflict
+                [SingletonDIProvide("MyApp_Other_DatabaseServiceInstance")]
+                public class DatabaseService { }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - self-conflict IS an error
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Contains("MyApp_Other_DatabaseServiceInstance", dm0003.GetMessage());
+
+        // Verify Location is not None
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0003_PropertyNameConflictsWithSelf_FullName2()
+    {
+        // Arrange - custom name conflicts with its own generated full name (namespace conflict scenario)
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+            
+            namespace SingletonDI.SampleApp;
+
+            [SingletonDIProvide("SingletonDI_SampleApp_DatabaseServiceInstance")]
+            public class DatabaseService
+            {
+                public DatabaseService()
+                {
+                    
+                }
+            }
+            """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert - self-conflict IS an error
+        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
+        Assert.NotNull(dm0003);
+        Assert.Contains("MyApp_Other_DatabaseServiceInstance", dm0003.GetMessage());
+
+        // Verify Location is not None
+        Assert.NotEqual(Location.None, dm0003.Location);
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
     public void DM0004_ProvideMissingParameterlessConstructor()
     {
         // Arrange

@@ -61,6 +61,51 @@ internal static class PropertyNameResolver
     }
 
     /// <summary>
+    /// Resolves auto-generated property names for all providers, ignoring custom names.
+    /// This is used for DM0003 validation to detect conflicts between custom names
+    /// and auto-generated names.
+    /// </summary>
+    public static ImmutableDictionary<string, string> ResolveGeneratedPropertyNames(
+        List<ProviderModel> providers)
+    {
+        if (providers.Count == 0)
+        {
+            return ImmutableDictionary<string, string>.Empty;
+        }
+
+        var result = ImmutableDictionary.CreateBuilder<string, string>();
+
+        // Find ShortName conflicts among ALL providers (ignoring custom names)
+        var shortNameGroups = new HashSet<string>(
+            providers
+                .GroupBy(p => p.ShortName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key));
+
+        // Resolve names for all providers as if they had no custom names
+        foreach (var provider in providers)
+        {
+            string generatedName;
+
+            if (shortNameGroups.Contains(provider.ShortName))
+            {
+                // ShortName conflict - use namespace prefix with Instance suffix
+                var namespacePrefix = GetNamespacePrefix(provider.Namespace);
+                generatedName = $"{namespacePrefix}_{provider.ShortName}Instance";
+            }
+            else
+            {
+                // No conflict - use ShortName with Instance suffix
+                generatedName = $"{provider.ShortName}Instance";
+            }
+
+            result[provider.FullyQualifiedName] = generatedName;
+        }
+
+        return result.ToImmutable();
+    }
+
+    /// <summary>
     /// Gets a namespace prefix by replacing dots with underscores and removing
     /// common prefixes like "global::".
     /// </summary>

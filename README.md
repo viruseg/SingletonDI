@@ -228,6 +228,7 @@ public partial class OrderController { }
 |---|---|---|
 | **DM0001** | Error | Дублирование имени свойства в `[SingletonDIProvide]` |
 | **DM0002** | Error | `[SingletonDIProvide]` применён к `abstract class` |
+| **DM0003** | Error | Имя свойства в `[SingletonDIProvide]` совпадает с автоматически сгенерированным именем другого синглтона |
 | **DM0004** | Error | Класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров |
 | **DM0005** | Error | Метод `InitializeAsync` имеет недоступный модификатор доступа (должен быть `public`, `internal` или `protected internal`) |
 | **DM0006** | Error | `[SingletonDIConsume]` ссылается на тип без `[SingletonDIProvide]` |
@@ -250,6 +251,37 @@ public class DatabaseService { }
 
 [SingletonDIProvide(propertyName: "DbService")]  // DM0001
 public class AnotherDatabaseService { }
+```
+
+### DM0003: Property name conflicts with generated name
+
+Возникает, когда пользовательское имя свойства в `[SingletonDIProvide]` совпадает с автоматически сгенерированным именем другого синглтона.
+
+```csharp
+// Автоматически генерирует свойство "DatabaseServiceInstance"
+[SingletonDIProvide]
+public class DatabaseService { }
+
+// Ошибка DM0003: "DatabaseServiceInstance" совпадает с сгенерированным именем
+[SingletonDIProvide("DatabaseServiceInstance")]  // DM0003
+public class UserService { }
+```
+
+Это также работает для полных имён с префиксом namespace при конфликтах:
+
+```csharp
+namespace MyApp.Services
+{
+    [SingletonDIProvide]  // Генерирует "MyApp_Services_DatabaseServiceInstance"
+    public class DatabaseService { }
+}
+
+namespace MyApp.Other
+{
+    // Ошибка DM0003
+    [SingletonDIProvide("MyApp_Services_DatabaseServiceInstance")]
+    public class UserService { }
+}
 ```
 
 ## Ограничения

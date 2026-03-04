@@ -151,8 +151,38 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 return;
             }
 
-            // Resolve property names
+            // Resolve property names (final names including custom names)
             var propertyNames = PropertyNameResolver.ResolvePropertyNames(providerModels);
+
+            // Resolve auto-generated property names (without custom names) for DM0003 validation
+            var generatedPropertyNames = PropertyNameResolver.ResolveGeneratedPropertyNames(providerModels);
+
+            // Check for custom property names conflicting with auto-generated names (DM0003)
+            foreach (var provider in providerModels)
+            {
+                if (provider.PropertyName != null)
+                {
+                    // Check against auto-generated property names of ALL providers (including self)
+                    foreach (var kvp in generatedPropertyNames)
+                    {
+                        if (kvp.Value == provider.PropertyName)
+                        {
+                            // Find the provider whose auto-generated name conflicts
+                            var conflictingProvider = providerModels.First(p => p.FullyQualifiedName == kvp.Key);
+
+                            // Use precise location for the property name argument if available
+                            var diagnosticLocation = provider.PropertyNameLocation ?? provider.Location;
+
+                            spc.ReportDiagnostic(Diagnostic.Create(
+                                DiagnosticDescriptors.PropertyNameConflictsWithGenerated,
+                                diagnosticLocation,
+                                provider.PropertyName,
+                                conflictingProvider.FullyQualifiedName));
+                            return;
+                        }
+                    }
+                }
+            }
 
             // Build custom property names dictionary (FQN -> custom property name or null)
             var customPropertyNames = providerModels
