@@ -223,9 +223,9 @@ public class PropertyNameResolverTests
         var generatedCode = RunGeneratorAndGetGeneratedCode(SOURCE);
 
         // Assert - all three get namespace-prefixed names
-        Assert.Contains("NamespaceA_Service", generatedCode);
-        Assert.Contains("NamespaceB_Service", generatedCode);
-        Assert.Contains("NamespaceC_Service", generatedCode);
+        Assert.Contains("NamespaceA_ServiceInstance", generatedCode);
+        Assert.Contains("NamespaceB_ServiceInstance", generatedCode);
+        Assert.Contains("NamespaceC_ServiceInstance", generatedCode);
     }
 
     /// <summary>
@@ -465,6 +465,46 @@ public class PropertyNameResolverTests
         Assert.Contains("ServiceBInstance", generatedCode);
         Assert.DoesNotContain("NamespaceA_ServiceBInstance", generatedCode);
         Assert.DoesNotContain("NamespaceB_ServiceBInstance", generatedCode);
+    }
+
+    [Fact]
+    public void ProviderWithCustomName_ShortName_Conflict_GeneratesNamesWithNamespacePrefix()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              namespace ConsumerNamespace
+                              {
+                                  [SingletonDIConsume(typeof(NamespaceA.ServiceA), typeof(NamespaceB.ServiceB))]
+                                  public partial class Consumer
+                                  {
+                                  }
+                              }
+
+                              namespace NamespaceA
+                              {
+                                  [SingletonDIProvide("ServiceBInstance")]
+                                  public class ServiceA
+                                  {
+                                  }
+                              }
+
+                              namespace NamespaceB
+                              {
+                                  [SingletonDIProvide]
+                                  public class ServiceB
+                                  {
+                                  }
+                              }
+                              """;
+
+        // Act
+        var generatedCode = RunGeneratorAndGetGeneratedCode(SOURCE);
+
+        Assert.Contains("ServiceBInstance", generatedCode);
+        Assert.DoesNotContain("NamespaceA_ServiceBInstance", generatedCode);
+        Assert.Contains("NamespaceB_ServiceBInstance", generatedCode);
     }
 
     #region Helper Methods

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using SingletonDI.Generator.Models;
 
@@ -22,37 +23,38 @@ internal static class PropertyNameResolver
 
         var result = ImmutableDictionary.CreateBuilder<string, string>();
 
-        // First, determine all ShortName conflicts (considering ALL providers)
-        var allShortNameGroups = providers
-            .GroupBy(p => p.ShortName)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        // Step 1: Find ShortName conflicts among providers WITHOUT custom names
+        // Only providers without custom names participate in ShortName conflicts
+        var shortNameGroups = new HashSet<string>(
+            providers
+                .Where(p => string.IsNullOrEmpty(p.PropertyName))
+                .GroupBy(p => p.ShortName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key));
 
-        // Providers with custom property names get their custom name
-        foreach (var provider in providers.Where(p => !string.IsNullOrEmpty(p.PropertyName)))
+        // Step 2: Resolve names for all providers
+        foreach (var provider in providers)
         {
-            result[provider.FullyQualifiedName] = provider.PropertyName!;
-        }
+            string finalName;
 
-        // Providers without custom name - check conflicts against all providers
-        foreach (var provider in providers.Where(p => string.IsNullOrEmpty(p.PropertyName)))
-        {
-            var shortName = provider.ShortName;
-            var allWithSameShortName = allShortNameGroups[shortName];
-
-            string propertyName;
-            if (allWithSameShortName.Count == 1)
+            if (!string.IsNullOrEmpty(provider.PropertyName))
             {
-                // No conflict - use ShortName
-                propertyName = shortName;
+                // Provider with custom name uses it directly (no suffix)
+                finalName = provider.PropertyName!;
+            }
+            else if (shortNameGroups.Contains(provider.ShortName))
+            {
+                // ShortName conflict - use namespace prefix with Instance suffix
+                var namespacePrefix = GetNamespacePrefix(provider.Namespace);
+                finalName = $"{namespacePrefix}_{provider.ShortName}Instance";
             }
             else
             {
-                // Conflict - use Namespace_ShortName format
-                var namespacePrefix = GetNamespacePrefix(provider.Namespace);
-                propertyName = $"{namespacePrefix}_{shortName}";
+                // No conflict - use ShortName with Instance suffix
+                finalName = $"{provider.ShortName}Instance";
             }
 
-            result[provider.FullyQualifiedName] = propertyName;
+            result[provider.FullyQualifiedName] = finalName;
         }
 
         return result.ToImmutable();

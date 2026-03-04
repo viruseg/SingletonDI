@@ -14,12 +14,12 @@ namespace DependencyManager.Generated.Internal
         private static global::System.Threading.Tasks.Task? _initializationTask;
 
         private static SingletonDI.SampleApp.DatabaseService? _DBService;
-        private static SingletonDI.SampleApp.UserService? _UserService;
-        private static SingletonDI.SampleApp.OrderService? _OrderService;
+        private static SingletonDI.SampleApp.UserService? _UserServiceInstance;
+        private static SingletonDI.SampleApp.OrderService? _OrderServiceInstance;
 
         public static SingletonDI.SampleApp.DatabaseService DBService => _DBService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.DatabaseService>();
-        public static SingletonDI.SampleApp.UserService UserService => _UserService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.UserService>();
-        public static SingletonDI.SampleApp.OrderService OrderService => _OrderService ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.OrderService>();
+        public static SingletonDI.SampleApp.UserService UserServiceInstance => _UserServiceInstance ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.UserService>();
+        public static SingletonDI.SampleApp.OrderService OrderServiceInstance => _OrderServiceInstance ?? ExceptionHelper.ThrowNotInitialized<SingletonDI.SampleApp.OrderService>();
 
         /// <summary>
         /// Initializes all singletons asynchronously with parallel level processing.
@@ -52,12 +52,12 @@ namespace DependencyManager.Generated.Internal
             {
                 // Level 0
                 _DBService = new SingletonDI.SampleApp.DatabaseService();
-                _UserService = new SingletonDI.SampleApp.UserService();
+                _UserServiceInstance = new SingletonDI.SampleApp.UserService();
 
-                await _UserService!.InitializeAsync().ConfigureAwait(false);
+                await _UserServiceInstance!.InitializeAsync().ConfigureAwait(false);
 
                 // Level 1
-                _OrderService = new SingletonDI.SampleApp.OrderService();
+                _OrderServiceInstance = new SingletonDI.SampleApp.OrderService();
 
                 // Set initialized flag after successful completion
                 _isInitialized = true;

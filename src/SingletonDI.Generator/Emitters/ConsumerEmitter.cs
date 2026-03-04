@@ -93,8 +93,8 @@ internal static class ConsumerEmitter
             }
             else
             {
-                // Use default: ContainerPropertyName + "Instance" suffix
-                consumerPropertyName = containerPropertyName + "Instance";
+                // Имя в Container уже содержит "Instance", используем его напрямую
+                consumerPropertyName = containerPropertyName;
             }
 
             sb.AppendLine($"        /// <summary>");
