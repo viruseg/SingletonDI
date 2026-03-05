@@ -101,7 +101,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl);
                 if (typeSymbol != null)
                 {
-                    var model = ProviderValidator.Validate(typeDecl, typeSymbol, new HashSet<string>(data.ProviderFQNs), spc.ReportDiagnostic);
+                    var model = ProviderValidator.Validate(typeDecl, typeSymbol, [..data.ProviderFQNs], spc.ReportDiagnostic);
                     if (model.HasValue)
                     {
                         providerModels.Add(model.Value);
@@ -194,7 +194,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             if (providerModels.Count > 0)
             {
                 var containerSource = ContainerEmitter.Generate(
-                    providerModels.ToImmutableArray(),
+                    [..providerModels],
                     sortResult.Levels,
                     propertyNames);
 
@@ -213,13 +213,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 {
                     var semanticModel = data.Compilation.GetSemanticModel(typeDecl.SyntaxTree);
                     var typeSymbol = semanticModel.GetDeclaredSymbol(typeDecl);
-                    if (typeSymbol != null)
+
+                    if (typeSymbol == null) continue;
+
+                    var model = ConsumerValidator.Validate(typeDecl, typeSymbol, [..data.ProviderFQNs], spc.ReportDiagnostic);
+                    if (model.HasValue)
                     {
-                        var model = ConsumerValidator.Validate(typeDecl, typeSymbol, new HashSet<string>(data.ProviderFQNs), spc.ReportDiagnostic);
-                        if (model.HasValue)
-                        {
-                            consumerModels.Add(model.Value);
-                        }
+                        consumerModels.Add(model.Value);
                     }
                 }
 

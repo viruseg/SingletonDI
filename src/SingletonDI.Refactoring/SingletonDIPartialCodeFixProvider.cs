@@ -71,10 +71,10 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
         // but before other modifiers (static, sealed, abstract, etc.)
         var modifiers = typeDeclaration.Modifiers;
 
-        int insertIndex = 0;
-        bool foundAccessModifier = false;
+        var insertIndex = 0;
+        var foundAccessModifier = false;
 
-        for (int i = 0; i < modifiers.Count; i++)
+        for (var i = 0; i < modifiers.Count; i++)
         {
             var modifier = modifiers[i];
             if (IsAccessModifier(modifier.Kind()))

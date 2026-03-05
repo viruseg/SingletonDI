@@ -55,7 +55,7 @@ internal static class TopologicalSorter
         foreach (var provider in validProviders)
         {
             inDegree[provider.FullyQualifiedName] = 0;
-            adjacency[provider.FullyQualifiedName] = new List<string>();
+            adjacency[provider.FullyQualifiedName] = [];
         }
 
         // Build edges: for each provider that depends on other providers
@@ -128,7 +128,7 @@ internal static class TopologicalSorter
 
         if (TryFindCycleDFS(adjacency, startNode, visited, path, startNode))
         {
-            return ImmutableArray.CreateRange(path);
+            return [..path];
         }
 
         return ImmutableArray<string>.Empty;
@@ -152,10 +152,8 @@ internal static class TopologicalSorter
             return true;
         }
 
-        if (visited.Contains(node))
-            return false;
+        if (!visited.Add(node)) return false;
 
-        visited.Add(node);
         path.Add(node);
 
         if (adjacency.TryGetValue(node, out var neighbors))
@@ -203,14 +201,14 @@ internal static class TopologicalSorter
     {
         if (providers.IsEmpty)
         {
-            return new LevelSortResult(new List<List<ProviderModel>>(), ImmutableArray<string>.Empty);
+            return new LevelSortResult([], ImmutableArray<string>.Empty);
         }
 
         var validProviders = providers.ToList();
 
         if (validProviders.Count == 0)
         {
-            return new LevelSortResult(new List<List<ProviderModel>>(), ImmutableArray<string>.Empty);
+            return new LevelSortResult([], ImmutableArray<string>.Empty);
         }
 
         // Build provider dictionary for quick lookup
@@ -228,7 +226,7 @@ internal static class TopologicalSorter
         foreach (var provider in validProviders)
         {
             inDegree[provider.FullyQualifiedName] = 0;
-            adjacency[provider.FullyQualifiedName] = new List<string>();
+            adjacency[provider.FullyQualifiedName] = [];
         }
 
         // Build edges: for each provider that depends on other providers
@@ -277,7 +275,7 @@ internal static class TopologicalSorter
 
                 var cycle = FindCycle(adjacency, remainingWithDegree.FirstOrDefault() ?? string.Empty);
 
-                return new LevelSortResult(new List<List<ProviderModel>>(), cycle);
+                return new LevelSortResult([], cycle);
             }
 
             // Add current level to result

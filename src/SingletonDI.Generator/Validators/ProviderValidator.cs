@@ -169,7 +169,7 @@ internal static class ProviderValidator
                 }
             }
         }
-        return dependencies.ToImmutableArray();
+        return [..dependencies];
     }
 
     /// <summary>
@@ -193,7 +193,7 @@ internal static class ProviderValidator
 
         string? propertyName = null;
         Location? propertyNameLocation = null;
-        bool propertyNameWasSpecified = false;
+        var propertyNameWasSpecified = false;
 
         // Get the attribute syntax for precise location
         var attributeSyntax = provideAttr.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;

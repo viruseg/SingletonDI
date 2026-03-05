@@ -112,10 +112,11 @@ internal static class PropertyNameResolver
     /// </summary>
     public static IReadOnlyList<string> GetAllPossibleGeneratedNames(ProviderModel provider)
     {
-        var names = new List<string>();
-
-        // Short name format (always possible)
-        names.Add($"{provider.ShortName}Instance");
+        var names = new List<string>
+        {
+            // Short name format (always possible)
+            $"{provider.ShortName}Instance"
+        };
 
         // Full name format (with namespace prefix)
         var namespacePrefix = GetNamespacePrefix(provider.Namespace);
@@ -143,22 +144,6 @@ internal static class PropertyNameResolver
 
         // Replace dots with underscores
         return cleaned.Replace('.', '_');
-    }
-
-    /// <summary>
-    /// Generates property declaration with proper type reference.
-    /// </summary>
-    public static string GeneratePropertyDeclaration(
-        string propertyName,
-        string providerFullyQualifiedName,
-        bool useNullable = true)
-    {
-        var nullableMarker = useNullable ? "?" : "";
-
-        // Format the type name
-        var typeName = FormatTypeName(providerFullyQualifiedName);
-
-        return $"public {typeName}{nullableMarker} {propertyName} {{ get; }}";
     }
 
     /// <summary>

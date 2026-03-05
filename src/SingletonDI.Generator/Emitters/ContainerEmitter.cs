@@ -100,7 +100,7 @@ internal static class ContainerEmitter
         sb.AppendLine("            {");
 
         // Generate initialization code by levels
-        for (int levelIndex = 0; levelIndex < levels.Count; levelIndex++)
+        for (var levelIndex = 0; levelIndex < levels.Count; levelIndex++)
         {
             var level = levels[levelIndex];
             sb.AppendLine($"                // Level {levelIndex}");
@@ -204,25 +204,5 @@ internal static class ContainerEmitter
         sb.AppendLine("}");
 
         return sb.ToString();
-    }
-
-    /// <summary>
-    /// Builds constructor arguments string for a provider.
-    /// </summary>
-    private static string BuildConstructorArgs(ProviderModel provider, ImmutableDictionary<string, string> propertyNames)
-    {
-        if (provider.Dependencies.IsEmpty)
-        {
-            return string.Empty;
-        }
-
-        var args = new List<string>();
-        foreach (var dep in provider.Dependencies)
-        {
-            var fieldName = propertyNames.TryGetValue(dep, out var name) ? name : dep.Split('.').Last();
-            args.Add($"_{fieldName}");
-        }
-
-        return string.Join(", ", args);
     }
 }

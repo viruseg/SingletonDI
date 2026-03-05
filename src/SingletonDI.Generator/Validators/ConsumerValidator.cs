@@ -57,10 +57,10 @@ internal static class ConsumerValidator
             {
                 var argumentLocations = GetArgumentLocations(consumeAttrSyntax);
 
-                for (int i = 0; i < firstArg.Values.Length; i++)
+                for (var i = 0; i < firstArg.Values.Length; i++)
                 {
                     var element = firstArg.Values[i];
-                    if (element.Kind == TypedConstantKind.Type && element.Value is ITypeSymbol depTypeSymbol)
+                    if (element is { Kind: TypedConstantKind.Type, Value: ITypeSymbol depTypeSymbol })
                     {
                         var location = i < argumentLocations.Count ? argumentLocations[i] : null;
                         dependencyTypes.Add((depTypeSymbol, location));
