@@ -106,6 +106,28 @@ internal static class PropertyNameResolver
     }
 
     /// <summary>
+    /// Gets ALL possible generated property names for a provider.
+    /// This includes both short name format and full name format (with namespace prefix).
+    /// Used for DM0003 validation to catch conflicts with any potential generated name.
+    /// </summary>
+    public static IReadOnlyList<string> GetAllPossibleGeneratedNames(ProviderModel provider)
+    {
+        var names = new List<string>();
+
+        // Short name format (always possible)
+        names.Add($"{provider.ShortName}Instance");
+
+        // Full name format (with namespace prefix)
+        var namespacePrefix = GetNamespacePrefix(provider.Namespace);
+        if (!string.IsNullOrEmpty(namespacePrefix))
+        {
+            names.Add($"{namespacePrefix}_{provider.ShortName}Instance");
+        }
+
+        return names;
+    }
+
+    /// <summary>
     /// Gets a namespace prefix by replacing dots with underscores and removing
     /// common prefixes like "global::".
     /// </summary>

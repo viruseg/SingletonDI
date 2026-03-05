@@ -330,7 +330,7 @@ public class DiagnosticErrorTests
         // Assert - self-conflict IS an error
         var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
         Assert.NotNull(dm0003);
-        Assert.Contains("MyApp_Other_DatabaseServiceInstance", dm0003.GetMessage());
+        Assert.Contains("SingletonDI_SampleApp_DatabaseServiceInstance", dm0003.GetMessage());
 
         // Verify Location is not None
         Assert.NotEqual(Location.None, dm0003.Location);

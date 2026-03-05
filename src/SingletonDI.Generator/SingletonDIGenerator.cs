@@ -158,18 +158,20 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             var generatedPropertyNames = PropertyNameResolver.ResolveGeneratedPropertyNames(providerModels);
 
             // Check for custom property names conflicting with auto-generated names (DM0003)
+            // We check against ALL possible generated names for each provider:
+            // 1. Short name format: {ShortName}Instance
+            // 2. Full name format: {Namespace}_{ShortName}Instance
             foreach (var provider in providerModels)
             {
                 if (provider.PropertyName != null)
                 {
-                    // Check against auto-generated property names of ALL providers (including self)
-                    foreach (var kvp in generatedPropertyNames)
+                    // Check against all possible generated names of ALL providers (including self)
+                    foreach (var otherProvider in providerModels)
                     {
-                        if (kvp.Value == provider.PropertyName)
-                        {
-                            // Find the provider whose auto-generated name conflicts
-                            var conflictingProvider = providerModels.First(p => p.FullyQualifiedName == kvp.Key);
+                        var allPossibleNames = PropertyNameResolver.GetAllPossibleGeneratedNames(otherProvider);
 
+                        if (allPossibleNames.Contains(provider.PropertyName))
+                        {
                             // Use precise location for the property name argument if available
                             var diagnosticLocation = provider.PropertyNameLocation ?? provider.Location;
 
@@ -177,7 +179,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                                 DiagnosticDescriptors.PropertyNameConflictsWithGenerated,
                                 diagnosticLocation,
                                 provider.PropertyName,
-                                conflictingProvider.FullyQualifiedName));
+                                otherProvider.FullyQualifiedName));
                             return;
                         }
                     }
