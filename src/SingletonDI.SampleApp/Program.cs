@@ -69,7 +69,7 @@ public static class Program
         Console.WriteLine("Starting application...");
 
         // Explicitly initialize the singleton container
-        await SingletonInitializer.InitializeAsync();
+        await SingletonDIInitializer.InitializeAsync();
 
         // Use the consumer
         var controller = new OrderController();

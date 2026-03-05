@@ -22,7 +22,7 @@ internal static class SingletonInitializerEmitter
                      /// Provides public API for initializing the singleton container.
                      /// Call InitializeAsync() at application startup before accessing any singletons.
                      /// </summary>
-                     public static class SingletonInitializer
+                     public static class SingletonDIInitializer
                      {
                          /// <summary>
                          /// Initializes all singleton instances asynchronously.
@@ -30,7 +30,7 @@ internal static class SingletonInitializerEmitter
                          /// </summary>
                          /// <returns>A task that completes when all singletons are initialized.</returns>
                          public static global::System.Threading.Tasks.Task InitializeAsync() =>
-                             Internal.SingletonContainer.InitializeAsync();
+                             Internal.SingletonDIContainer.InitializeAsync();
                      }
                  }
                  """;

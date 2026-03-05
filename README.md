@@ -88,7 +88,7 @@ public static class Program
     public static async Task Main(string[] args)
     {
         // Инициализация всех синглтонов
-        await SingletonInitializer.InitializeAsync();
+        await SingletonDIInitializer.InitializeAsync();
 
         // Теперь можно использовать потребителей
         var controller = new OrderController();

@@ -198,11 +198,11 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     sortResult.Levels,
                     propertyNames);
 
-                spc.AddSource("SingletonContainer.g.cs", SourceText.From(containerSource, encoding: System.Text.Encoding.UTF8));
+                spc.AddSource("SingletonDIContainer.g.cs", SourceText.From(containerSource, encoding: System.Text.Encoding.UTF8));
 
                 // Generate SingletonInitializer
                 var initializerSource = SingletonInitializerEmitter.Generate();
-                spc.AddSource("SingletonInitializer.g.cs", SourceText.From(initializerSource, encoding: System.Text.Encoding.UTF8));
+                spc.AddSource("SingletonDIInitializer.g.cs", SourceText.From(initializerSource, encoding: System.Text.Encoding.UTF8));
             }
 
             // Generate consumer partial classes
