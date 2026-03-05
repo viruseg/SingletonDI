@@ -138,7 +138,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             }
 
             // Run topological sort by levels
-            var sortResult = TopologicalSorter.SortByLevels(providerModels.ToImmutableArray());
+            var sortResult = TopologicalSorter.SortByLevels([..providerModels]);
 
             // If there's a cycle, emit diagnostic
             if (sortResult.HasCycle)
