@@ -19,8 +19,9 @@ internal static class SingletonInitializerEmitter
                  namespace {{Namespace}}
                  {
                      /// <summary>
-                     /// Provides public API for initializing the singleton container.
+                     /// Provides public API for initializing and disposing the singleton container.
                      /// Call InitializeAsync() at application startup before accessing any singletons.
+                     /// Call RegisterShutdownHandlers() to enable graceful shutdown on OS signals.
                      /// </summary>
                      public static class SingletonDIInitializer
                      {
@@ -31,6 +32,25 @@ internal static class SingletonInitializerEmitter
                          /// <returns>A task that completes when all singletons are initialized.</returns>
                          public static global::System.Threading.Tasks.Task InitializeAsync() =>
                              Internal.SingletonDIContainer.InitializeAsync();
+
+                         /// <summary>
+                         /// Registers OS shutdown signal handlers for graceful disposal.
+                         /// On Linux/macOS: handles SIGINT, SIGTERM, SIGQUIT.
+                         /// On Windows: handles ProcessExit and CancelKeyPress.
+                         /// Should be called after InitializeAsync() completes successfully.
+                         /// </summary>
+                         public static void RegisterShutdownHandlers() =>
+                             Internal.SingletonDILifetime.Instance.RegisterShutdownHandlers();
+
+                         /// <summary>
+                         /// Disposes all disposable singleton instances asynchronously.
+                         /// Instances are disposed in reverse dependency order.
+                         /// Instances at the same level are disposed in parallel.
+                         /// Prefers IAsyncDisposable.DisposeAsync over IDisposable.Dispose when both are implemented.
+                         /// </summary>
+                         /// <returns>A task that completes when all disposable instances are disposed.</returns>
+                         public static global::System.Threading.Tasks.ValueTask DisposeAsync() =>
+                             Internal.SingletonDIContainer.DisposeAsync();
                      }
                  }
                  """;

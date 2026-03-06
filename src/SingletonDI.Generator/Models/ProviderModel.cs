@@ -11,6 +11,7 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
                                             string @namespace,
                                             bool hasInitializeAsyncMethod,
                                             bool isDisposable,
+                                            bool isAsyncDisposable,
                                             ImmutableArray<string> dependencies,
                                             string? propertyName,
                                             Location location,
@@ -40,6 +41,11 @@ public readonly record struct ProviderModel(string fullyQualifiedName,
     /// Whether the provider implements IDisposable.
     /// </summary>
     public bool IsDisposable { get; } = isDisposable;
+
+    /// <summary>
+    /// Whether the provider implements IAsyncDisposable.
+    /// </summary>
+    public bool IsAsyncDisposable { get; } = isAsyncDisposable;
 
     /// <summary>
     /// Dependencies of this provider (types it consumes via [SingletonDIConsume]).

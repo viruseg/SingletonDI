@@ -524,7 +524,7 @@ public class PropertyNameResolverTests
 
         // Add all referenced assemblies
         var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var assemblyName in new[] { "System.Runtime", "System.Collections", "System.Linq", "netstandard" })
+        foreach (var assemblyName in new[] { "System.Runtime", "System.Collections", "System.Linq", "netstandard", "System.Console", "System.Runtime.InteropServices.RuntimeInformation" })
         {
             var path = Path.Combine(assemblyPath, assemblyName + ".dll");
             if (File.Exists(path))

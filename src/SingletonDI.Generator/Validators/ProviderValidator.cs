@@ -93,6 +93,10 @@ internal static class ProviderValidator
         var isDisposable = typeSymbol.Interfaces.Any(i =>
             i.OriginalDefinition.ToDisplayString() == "System.IDisposable");
 
+        // Check for IAsyncDisposable
+        var isAsyncDisposable = typeSymbol.Interfaces.Any(i =>
+            i.OriginalDefinition.ToDisplayString() == "System.IAsyncDisposable");
+
         // Get dependencies (if this provider also has [SingletonDIConsume])
         var dependencies = GetDependencies(typeSymbol, allProviderFullyQualifiedNames);
 
@@ -109,6 +113,7 @@ internal static class ProviderValidator
                                  @namespace : typeSymbol.ContainingNamespace.ToDisplayString(),
                                  hasInitializeAsyncMethod : initializeAsyncMethod != null,
                                  isDisposable : isDisposable,
+                                 isAsyncDisposable : isAsyncDisposable,
                                  dependencies : dependencies,
                                  propertyName : propertyName,
                                  location : location,

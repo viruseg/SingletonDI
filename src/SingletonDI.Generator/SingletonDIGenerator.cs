@@ -203,6 +203,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 // Generate SingletonInitializer
                 var initializerSource = SingletonInitializerEmitter.Generate();
                 spc.AddSource("SingletonDIInitializer.g.cs", SourceText.From(initializerSource, encoding: System.Text.Encoding.UTF8));
+
+                // Generate SingletonDILifetime for shutdown handling
+                var lifetimeSource = LifetimeEmitter.Generate();
+                spc.AddSource("SingletonDILifetime.g.cs", SourceText.From(lifetimeSource, encoding: System.Text.Encoding.UTF8));
             }
 
             // Generate consumer partial classes

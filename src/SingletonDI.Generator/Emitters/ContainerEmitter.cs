@@ -174,31 +174,118 @@ internal static class ContainerEmitter
         sb.AppendLine("                ExceptionHelper.ThrowContainerNotInitialized();");
         sb.AppendLine("        }");
 
-        // Generate Dispose method if any provider is disposable
-        var disposableProviders = validProviders.Where(p => p.IsDisposable).ToList();
-        if (disposableProviders.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("        /// <summary>");
-            sb.AppendLine("        /// Disposes all disposable singleton instances.");
-            sb.AppendLine("        /// </summary>");
-            sb.AppendLine("        internal static void Dispose()");
-            sb.AppendLine("        {");
-            sb.AppendLine("            lock (_lock)");
-            sb.AppendLine("            {");
+        // Generate DisposeAsync method (always, even if no disposable providers)
+        var disposableProviders = validProviders.Where(p => p.IsDisposable || p.IsAsyncDisposable).ToList();
 
-            // Dispose in reverse order
-            foreach (var provider in disposableProviders.AsEnumerable().Reverse())
+        sb.AppendLine();
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine("        /// Disposes all disposable singleton instances asynchronously.");
+        sb.AppendLine("        /// Instances are disposed in reverse dependency order (from dependents to dependencies).");
+        sb.AppendLine("        /// Instances at the same level are disposed in parallel.");
+        sb.AppendLine("        /// Prefers IAsyncDisposable.DisposeAsync over IDisposable.Dispose when both are implemented.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine("        public static async global::System.Threading.Tasks.ValueTask DisposeAsync()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!_isInitialized) return;");
+        sb.AppendLine();
+        sb.AppendLine("            await DisposeInternalAsync().ConfigureAwait(false);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        /// <summary>");
+        sb.AppendLine("        /// Internal dispose logic. Disposes instances level by level in reverse order.");
+        sb.AppendLine("        /// </summary>");
+        sb.AppendLine("        private static async global::System.Threading.Tasks.ValueTask DisposeInternalAsync()");
+        sb.AppendLine("        {");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
+
+        // Dispose levels in reverse order
+        for (var levelIndex = levels.Count - 1; levelIndex >= 0; levelIndex--)
+        {
+            var level = levels[levelIndex];
+            var levelDisposableProviders = level.Where(p => p.IsDisposable || p.IsAsyncDisposable).ToList();
+
+            if (levelDisposableProviders.Count == 0)
             {
-                var fieldName = propertyNames.TryGetValue(provider.FullyQualifiedName, out var name) ? name : provider.ShortName;
-                sb.AppendLine($"                if (_{fieldName} is global::System.IDisposable disposable)");
-                sb.AppendLine($"                    disposable.Dispose();");
+                continue;
             }
 
+            sb.AppendLine($"                // Level {levelIndex} (reverse order)");
+
+            if (levelDisposableProviders.Count > 1)
+            {
+                // Multiple disposable providers at this level - run in parallel
+                sb.AppendLine("                await global::System.Threading.Tasks.Task.WhenAll(");
+
+                for (var i = 0; i < levelDisposableProviders.Count; i++)
+                {
+                    var provider = levelDisposableProviders[i];
+                    var fqn = provider.FullyQualifiedName;
+                    var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
+                    var comma = i < levelDisposableProviders.Count - 1 ? "," : "";
+
+                    if (provider.IsAsyncDisposable)
+                    {
+                        // Prefer IAsyncDisposable
+                        sb.AppendLine($"                    (_{fieldName} is global::System.IAsyncDisposable asyncDisposable{levelIndex}_{i}");
+                        sb.AppendLine($"                        ? asyncDisposable{levelIndex}_{i}.DisposeAsync().AsTask()");
+                        sb.AppendLine($"                        : (_{fieldName} is global::System.IDisposable disposable{levelIndex}_{i}");
+                        sb.AppendLine($"                            ? global::System.Threading.Tasks.Task.Run(() => disposable{levelIndex}_{i}.Dispose())");
+                        sb.AppendLine($"                            : global::System.Threading.Tasks.Task.CompletedTask)){comma}");
+                    }
+                    else
+                    {
+                        // Only IDisposable
+                        sb.AppendLine($"                    (_{fieldName} is global::System.IDisposable disposable{levelIndex}_{i}");
+                        sb.AppendLine($"                        ? global::System.Threading.Tasks.Task.Run(() => disposable{levelIndex}_{i}.Dispose())");
+                        sb.AppendLine($"                        : global::System.Threading.Tasks.Task.CompletedTask){comma}");
+                    }
+                }
+
+                sb.AppendLine("                ).ConfigureAwait(false);");
+            }
+            else
+            {
+                // Single disposable provider at this level
+                var provider = levelDisposableProviders[0];
+                var fqn = provider.FullyQualifiedName;
+                var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
+
+                if (provider.IsAsyncDisposable)
+                {
+                    sb.AppendLine($"                if (_{fieldName} is global::System.IAsyncDisposable asyncDisposable{levelIndex})");
+                    sb.AppendLine($"                    await asyncDisposable{levelIndex}.DisposeAsync().ConfigureAwait(false);");
+                    sb.AppendLine($"                else if (_{fieldName} is global::System.IDisposable disposable{levelIndex})");
+                    sb.AppendLine($"                    disposable{levelIndex}.Dispose();");
+                }
+                else
+                {
+                    sb.AppendLine($"                if (_{fieldName} is global::System.IDisposable disposable{levelIndex})");
+                    sb.AppendLine($"                    disposable{levelIndex}.Dispose();");
+                }
+            }
+
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("                // Clear all singleton references");
+        foreach (var provider in validProviders)
+        {
+            var fqn = provider.FullyQualifiedName;
+            var fieldName = propertyNames.TryGetValue(fqn, out var name) ? name : provider.ShortName;
+            sb.AppendLine($"                _{fieldName} = null;");
+        }
+
+        sb.AppendLine();
             sb.AppendLine("                _isInitialized = false;");
             sb.AppendLine("            }");
+            sb.AppendLine("            catch");
+            sb.AppendLine("            {");
+            sb.AppendLine("                // Ensure initialized flag is reset even on error");
+            sb.AppendLine("                _isInitialized = false;");
+            sb.AppendLine("                throw;");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
-        }
 
         sb.AppendLine("    }");
         sb.AppendLine("}");
