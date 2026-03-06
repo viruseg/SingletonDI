@@ -1,18 +1,19 @@
 # SingletonDI
 
-**SingletonDI** — это библиотека для декларативного управления singleton-зависимостями в .NET. Инструмент заменяет ручную регистрацию сервисов и настройку DI-контейнеров на систему атрибутов. Библиотека автоматически формирует граф зависимостей, управляет порядком создания объектов, их асинхронной инициализацией и корректным освобождением ресурсов. Строгий контроль на этапе компиляции гарантирует отсутствие типичных ошибок связывания во время выполнения приложения.
-## Возможности
+**SingletonDI** is a library for declarative management of singleton dependencies in .NET. The tool replaces manual service registration and DI container configuration with an attribute-based system. The library automatically builds the dependency graph, manages object creation order, their asynchronous initialization, and correct resource disposal. Strict compile-time control guarantees the absence of typical binding errors during application runtime.
 
-- **Декларативное описание зависимостей** — внедрение и предоставление сервисов настраивается через атрибуты `[SingletonDIProvide]` и `[SingletonDIConsume]` непосредственно в коде классов, без централизованных модулей регистрации.
-- **Отсутствие Reflection в runtime** — весь код для инстанцирования и внедрения генерируется на этапе сборки, что обеспечивает скорость выполнения на уровне прямого вызова конструкторов.
-- **Асинхронная инициализация** — поддержка метода `InitializeAsync()` для сервисов, требующих I/O операций при старте (подключение к БД, чтение конфигураций, сетевые запросы).
-- **Параллельный запуск** — сервисы, находящиеся на одном уровне графа зависимостей (не зависящие друг от друга), инициализируются параллельно для минимизации времени старта приложения.
-- **Автоматическое разрешение зависимостей** — встроенная топологическая сортировка гарантирует, что каждый сервис будет создан строго после инициализации всех его зависимостей.
-- **Compile-time валидация графа** — выявление циклических зависимостей, отсутствующих провайдеров и конфликтов имен происходит на этапе компиляции, предотвращая падения (runtime errors) при запуске приложения.
-- **Управление жизненным циклом** — автоматическое отслеживание объектов, реализующих `IDisposable` и `IAsyncDisposable`, с последующим их освобождением в обратном порядке (LIFO) при завершении работы.
-- **Потокобезопасность** — сгенерированный код обеспечивает безопасный доступ к экземплярам синглтонов при работе в многопоточной среде.
+## Features
 
-## Установка
+- **Declarative dependency description** — service injection and provisioning is configured through `[SingletonDIProvide]` and `[SingletonDIConsume]` attributes directly in class code, without centralized registration modules.
+- **No Reflection at runtime** — all code for instantiation and injection is generated at build time, ensuring execution speed at the level of direct constructor calls.
+- **Asynchronous initialization** — support for the `InitializeAsync()` method for services requiring I/O operations at startup (database connections, reading configurations, network requests).
+- **Parallel startup** — services at the same level of the dependency graph (not depending on each other) are initialized in parallel to minimize application startup time.
+- **Automatic dependency resolution** — built-in topological sorting guarantees that each service will be created strictly after all its dependencies are initialized.
+- **Compile-time graph validation** — detection of circular dependencies, missing providers, and name conflicts occurs at compile time, preventing runtime errors at application startup.
+- **Lifecycle management** — automatic tracking of objects implementing `IDisposable` and `IAsyncDisposable`, with their subsequent disposal in reverse order (LIFO) on shutdown.
+- **Thread safety** — generated code ensures safe access to singleton instances in multi-threaded environments.
+
+## Installation
 
 NuGet:
 
@@ -24,14 +25,14 @@ NuGet:
 dotnet add package SingletonDI
 ```
 
-## Быстрый старт
+## Quick Start
 
-### 1. Объявление singleton-провайдеров
+### 1. Declaring singleton providers
 
 ```csharp
 using SingletonDI.Attributes;
 
-// Простой singleton с синхронной инициализацией (через конструктор)
+// Simple singleton with synchronous initialization (via constructor)
 [SingletonDIProvide]
 public class DatabaseService
 {
@@ -39,12 +40,12 @@ public class DatabaseService
 
     public DatabaseService()
     {
-        // Код инициализации выполняется при создании экземпляра
+        // Initialization code executes when instance is created
         ConnectionString = "Server=localhost;Database=MyApp;Connected=true";
     }
 }
 
-// Singleton с асинхронной инициализацией
+// Singleton with asynchronous initialization
 [SingletonDIProvide]
 public class UserService
 {
@@ -52,14 +53,14 @@ public class UserService
 
     public async Task InitializeAsync()
     {
-        // Асинхронная загрузка данных
+        // Asynchronous data loading
         await LoadUserDataAsync();
         UserName = "LoadedUser";
     }
 }
 ```
 
-### 2. Объявление потребителей
+### 2. Declaring consumers
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
@@ -67,14 +68,14 @@ public partial class OrderController
 {
     public void ProcessOrder()
     {
-        // Доступ к синглтонам через сгенерированные свойства
+        // Access singletons through generated properties
         Console.WriteLine($"Database: {DatabaseServiceInstance.ConnectionString}");
         Console.WriteLine($"User: {UserServiceInstance.UserName}");
     }
 }
 ```
 
-### 3. Инициализация при старте приложения
+### 3. Initialization at application startup
 
 ```csharp
 using DependencyManager.Generated;
@@ -83,28 +84,28 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
-        // Инициализация всех синглтонов с автоматической регистрацией shutdown-обработчиков
+        // Initialize all singletons with automatic shutdown handler registration
         await SingletonDIInitializer.InitializeAsync();
 
-        // Теперь можно использовать потребителей
+        // Now consumers can be used
         var controller = new OrderController();
         controller.ProcessOrder();
     }
 }
 ```
 
-## Атрибуты
+## Attributes
 
 ### [SingletonDIProvide]
 
-Маркирует класс как singleton-провайдер. Генератор создаст экземпляр этого класса и будет управлять его жизненным циклом.
+Marks a class as a singleton provider. The generator will create an instance of this class and manage its lifecycle.
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class SingletonDIProvideAttribute : Attribute
 {
     /// <summary>
-    /// Опциональное пользовательское имя свойства для доступа к синглтону.
+    /// Optional custom property name for accessing the singleton.
     /// </summary>
     public string? PropertyName { get; }
 
@@ -112,46 +113,46 @@ public sealed class SingletonDIProvideAttribute : Attribute
 }
 ```
 
-**Параметры:**
-- `propertyName` (опционально) — пользовательское имя свойства для доступа к синглтону в потребителях. Если не указано, используется имя по умолчанию: `{TypeName}Instance`
+**Parameters:**
+- `propertyName` (optional) — custom property name for accessing the singleton in consumers. If not specified, the default name is used: `{TypeName}Instance`
 
-**Требования:**
-- Применим только к `class`
-- Класс должен иметь публичный конструктор без параметров
-- Класс не должен быть `abstract`
-- Не наследуется (каждый класс должен быть явно помечен)
+**Requirements:**
+- Applicable only to `class`
+- Class must have a public parameterless constructor
+- Class must not be `abstract`
+- Not inherited (each class must be explicitly marked)
 
-**Инициализация:**
-- Для синхронной инициализации используйте конструктор без параметров
-- Для асинхронной инициализации реализуйте метод `Task InitializeAsync()`
+**Initialization:**
+- For synchronous initialization, use a parameterless constructor
+- For asynchronous initialization, implement the `Task InitializeAsync()` method
 
-**Примеры:**
+**Examples:**
 
 ```csharp
-// Синхронная инициализация через конструктор
+// Synchronous initialization via constructor
 [SingletonDIProvide]
 public class MyService 
 { 
     public MyService()
     {
-        // Инициализация
+        // Initialization
     }
 }
 
-// Асинхронная инициализация через метод
+// Asynchronous initialization via method
 [SingletonDIProvide]
 public class DataService
 {
     public async Task InitializeAsync()
     {
-        // Асинхронная инициализация
+        // Asynchronous initialization
     }
 }
 ```
 
-**Имена свойств:**
+**Property names:**
 
-По умолчанию генератор создаёт свойства с суффиксом `Instance`:
+By default, the generator creates properties with the `Instance` suffix:
 
 ```csharp
 [SingletonDIProvide]
@@ -162,13 +163,13 @@ public partial class OrderService
 {
     public void Process()
     {
-        // Доступ через DatabaseServiceInstance
+        // Access via DatabaseServiceInstance
         var db = DatabaseServiceInstance;
     }
 }
 ```
 
-С параметром `propertyName` можно указать пользовательское имя:
+With the `propertyName` parameter, you can specify a custom name:
 
 ```csharp
 [SingletonDIProvide("_db")]
@@ -179,7 +180,7 @@ public partial class OrderService
 {
     public void Process()
     {
-        // Доступ через пользовательское имя _db
+        // Access via custom name _db
         var db = _db;
     }
 }
@@ -187,7 +188,7 @@ public partial class OrderService
 
 ### [SingletonDIConsume]
 
-Маркирует класс как потребителя singleton-зависимостей. Генератор создаст свойства для доступа к указанным синглтонам.
+Marks a class as a consumer of singleton dependencies. The generator will create properties for accessing the specified singletons.
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, 
@@ -200,25 +201,25 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 }
 ```
 
-**Требования:**
-- Класс должен быть объявлен как `partial`
-- Все указанные зависимости должны быть помечены `[SingletonDIProvide]`
-- Нельзя указывать сам класс в списке зависимостей (self-reference)
-- Нельзя дублировать типы в списке зависимостей
-- Наследуется (`Inherited = true`) — наследники автоматически получают те же зависимости
+**Requirements:**
+- Class must be declared as `partial`
+- All specified dependencies must be marked with `[SingletonDIProvide]`
+- Cannot specify the class itself in the dependency list (self-reference)
+- Cannot duplicate types in the dependency list
+- Inherited (`Inherited = true`) — inheritors automatically get the same dependencies
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
 public partial class OrderController { }
 ```
 
-### Разрешение конфликтов имён
+### Name conflict resolution
 
-При конфликте имён типов (например, `Foo.Bar` и `Baz.Bar`) генерируются имена с префиксом пространства имён.
+When type name conflicts occur (e.g., `Foo.Bar` and `Baz.Bar`), names with namespace prefix are generated.
 
-## API SingletonDIInitializer
+## SingletonDIInitializer API
 
-Генератор создаёт класс `SingletonDIInitializer` с методами для управления жизненным циклом синглтонов.
+The generator creates the `SingletonDIInitializer` class with methods for managing the singleton lifecycle.
 
 ### InitializeAsync
 
@@ -226,27 +227,27 @@ public partial class OrderController { }
 public static Task InitializeAsync(bool registerShutdownHandlers = true)
 ```
 
-Инициализирует все синглтоны в правильном порядке (топологическая сортировка по зависимостям).
+Initializes all singletons in the correct order (topological sorting by dependencies).
 
-**Параметры:**
-- `registerShutdownHandlers` (по умолчанию `true`):
-  - `true` — автоматически регистрирует обработчики shutdown для корректного освобождения ресурсов при завершении приложения
-  - `false` — не регистрирует обработчики (для сценариев с ручным управлением lifetime)
+**Parameters:**
+- `registerShutdownHandlers` (default `true`):
+  - `true` — automatically registers shutdown handlers for correct resource disposal on application termination
+  - `false` — does not register handlers (for scenarios with manual lifetime management)
 
-**Возвращает:** `Task`
+**Returns:** `Task`
 
-**Примеры:**
+**Examples:**
 
 ```csharp
-// Стандартное использование с автоматической регистрацией shutdown-обработчиков
+// Standard usage with automatic shutdown handler registration
 await SingletonDIInitializer.InitializeAsync();
 
-// Ручное управление lifetime (без автоматических shutdown-обработчиков)
+// Manual lifetime management (without automatic shutdown handlers)
 await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
 
-// ... работа с приложением ...
+// ... application work ...
 
-// Явный вызов освобождения ресурсов
+// Explicit resource disposal call
 await SingletonDIInitializer.DisposeAsync();
 ```
 
@@ -256,15 +257,15 @@ await SingletonDIInitializer.DisposeAsync();
 public static ValueTask DisposeAsync()
 ```
 
-Асинхронно освобождает все синглтоны, реализующие `IAsyncDisposable` или `IDisposable`.
+Asynchronously disposes all singletons implementing `IAsyncDisposable` or `IDisposable`.
 
-**Возвращает:** `ValueTask`
+**Returns:** `ValueTask`
 
-**Порядок освобождения:**
-- Синглтоны освобождаются в обратном порядке инициализации (LIFO)
-- Сначала вызывается `DisposeAsync()` для `IAsyncDisposable`, затем `Dispose()` для `IDisposable`
+**Disposal order:**
+- Singletons are disposed in reverse initialization order (LIFO)
+- `DisposeAsync()` is called first for `IAsyncDisposable`, then `Dispose()` for `IDisposable`
 
-**Пример:**
+**Example:**
 
 ```csharp
 public static async Task Main(string[] args)
@@ -273,22 +274,22 @@ public static async Task Main(string[] args)
     
     try
     {
-        // Работа приложения
+        // Application work
         await RunApplicationAsync();
     }
     finally
     {
-        // Явное освобождение ресурсов
+        // Explicit resource disposal
         await SingletonDIInitializer.DisposeAsync();
     }
 }
 ```
 
-## Диагностика
+## Diagnostics
 
-Генератор сообщает об ошибках на этапе компиляции:
+The generator reports errors at compile time:
 
-| ID | Уровень | Описание |
+| ID | Level | Description |
 |---|---|---|
 | **DM0001** | Error | Duplicate property name |
 | **DM0002** | Error | Cannot use [SingletonDIProvide] on abstract class |
@@ -308,7 +309,7 @@ public static async Task Main(string[] args)
 
 ### DM0001: Duplicate property name
 
-Возникает, когда несколько атрибутов `[SingletonDIProvide]` указывают одинаковое значение параметра `propertyName`. Каждое имя свойства должно быть уникальным.
+Occurs when multiple `[SingletonDIProvide]` attributes specify the same `propertyName` value. Each property name must be unique.
 
 ```csharp
 [SingletonDIProvide(propertyName: "DbService")]
@@ -320,7 +321,7 @@ public class AnotherDatabaseService { }
 
 ### DM0002: Cannot use [SingletonDIProvide] on abstract class
 
-Возникает, когда атрибут `[SingletonDIProvide]` применяется к абстрактному классу. Синглтон должен быть конкретным классом, который можно инстанцировать.
+Occurs when the `[SingletonDIProvide]` attribute is applied to an abstract class. A singleton must be a concrete class that can be instantiated.
 
 ```csharp
 [SingletonDIProvide]  // DM0002
@@ -329,30 +330,30 @@ public abstract class BaseService { }
 
 ### DM0003: Property name conflicts with generated name
 
-Возникает, когда пользовательское имя свойства в `[SingletonDIProvide]` совпадает с автоматически сгенерированным именем другого синглтона.
+Occurs when a custom property name in `[SingletonDIProvide]` matches the automatically generated name of another singleton.
 
 ```csharp
-// Автоматически генерирует свойство "DatabaseServiceInstance"
+// Automatically generates property "DatabaseServiceInstance"
 [SingletonDIProvide]
 public class DatabaseService { }
 
-// Ошибка DM0003: "DatabaseServiceInstance" совпадает с сгенерированным именем
+// Error DM0003: "DatabaseServiceInstance" matches a generated name
 [SingletonDIProvide("DatabaseServiceInstance")]  // DM0003
 public class UserService { }
 ```
 
-Это также работает для полных имён с префиксом namespace при конфликтах:
+This also works for full names with namespace prefix in case of conflicts:
 
 ```csharp
 namespace MyApp.Services
 {
-    [SingletonDIProvide]  // Генерирует "MyApp_Services_DatabaseServiceInstance"
+    [SingletonDIProvide]  // Generates "MyApp_Services_DatabaseServiceInstance"
     public class DatabaseService { }
 }
 
 namespace MyApp.Other
 {
-    // Ошибка DM0003
+    // Error DM0003
     [SingletonDIProvide("MyApp_Services_DatabaseServiceInstance")]
     public class UserService { }
 }
@@ -360,20 +361,20 @@ namespace MyApp.Other
 
 ### DM0004: Missing parameterless constructor
 
-Возникает, когда класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров. Генератор требует возможность создать экземпляр через `new()`.
+Occurs when a class with `[SingletonDIProvide]` does not have a public parameterless constructor. The generator requires the ability to create an instance via `new()`.
 
 ```csharp
 [SingletonDIProvide]  // DM0004
 public class DatabaseService
 {
-    // Нет конструктора без параметров, только с параметрами
+    // No parameterless constructor, only with parameters
     public DatabaseService(string connectionString) { }
 }
 ```
 
 ### DM0005: InitializeAsync method has inaccessible access modifier
 
-Возникает, когда метод `InitializeAsync` объявлен с недоступным модификатором доступа. Метод должен быть `public`, `internal` или `protected internal`.
+Occurs when the `InitializeAsync` method is declared with an inaccessible access modifier. The method must be `public`, `internal`, or `protected internal`.
 
 ```csharp
 [SingletonDIProvide]
@@ -385,10 +386,10 @@ public class DataService
 
 ### DM0006: Referenced type is not a provider
 
-Возникает, когда `[SingletonDIConsume]` ссылается на тип, который не помечен атрибутом `[SingletonDIProvide]`.
+Occurs when `[SingletonDIConsume]` references a type that is not marked with the `[SingletonDIProvide]` attribute.
 
 ```csharp
-// Класс без атрибута [SingletonDIProvide]
+// Class without [SingletonDIProvide] attribute
 public class SomeService { }
 
 [SingletonDIConsume(typeof(SomeService))]  // DM0006
@@ -397,18 +398,18 @@ public partial class Consumer { }
 
 ### DM0007: Consumer must be partial
 
-Возникает, когда класс с `[SingletonDIConsume]` не объявлен как `partial`. Генератор требует `partial` для добавления свойств.
+Occurs when a class with `[SingletonDIConsume]` is not declared as `partial`. The generator requires `partial` to add properties.
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService))]  // DM0007
-public class OrderController  // Отсутствует ключевое слово partial
+public class OrderController  // Missing partial keyword
 {
 }
 ```
 
 ### DM0008: Self-reference not allowed
 
-Возникает, когда класс указывает сам себя в `[SingletonDIConsume]`. Это приведёт к бесконечной рекурсии.
+Occurs when a class specifies itself in `[SingletonDIConsume]`. This would lead to infinite recursion.
 
 ```csharp
 [SingletonDIProvide]
@@ -418,21 +419,21 @@ public class SelfReferencingService { }
 
 ### DM0009: Circular dependency detected
 
-Возникает, когда обнаружена циклическая зависимость между провайдерами. Циклы приводят к невозможности корректной инициализации.
+Occurs when a circular dependency between providers is detected. Cycles make correct initialization impossible.
 
 ```csharp
 [SingletonDIProvide]
-[SingletonDIConsume(typeof(ServiceB))]  // DM0009: A зависит от B
+[SingletonDIConsume(typeof(ServiceB))]  // DM0009: A depends on B
 public partial class ServiceA { }
 
 [SingletonDIProvide]
-[SingletonDIConsume(typeof(ServiceA))]  // DM0009: B зависит от A
+[SingletonDIConsume(typeof(ServiceA))]  // DM0009: B depends on A
 public partial class ServiceB { }
 ```
 
 ### DM0010: Duplicate type in SingletonDIConsume attribute arguments
 
-Возникает, когда один и тот же тип указан несколько раз в `[SingletonDIConsume]`.
+Occurs when the same type is specified multiple times in `[SingletonDIConsume]`.
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]  // DM0010
@@ -441,19 +442,19 @@ public partial class OrderController { }
 
 ### DM0011: Type already declared in base class
 
-Возникает, когда наследник пытается указать тип в `[SingletonDIConsume]`, который уже был объявлен в базовом классе.
+Occurs when an inheritor tries to specify a type in `[SingletonDIConsume]` that was already declared in the base class.
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService))]
 public partial class BaseController { }
 
-[SingletonDIConsume(typeof(DatabaseService))]  // DM0011: уже объявлено в BaseController
+[SingletonDIConsume(typeof(DatabaseService))]  // DM0011: already declared in BaseController
 public partial class OrderController : BaseController { }
 ```
 
 ### DM0012: InitializeAsync method cannot be static
 
-Возникает, когда метод `InitializeAsync` объявлен как `static`. Метод инициализации должен быть экземплярным.
+Occurs when the `InitializeAsync` method is declared as `static`. The initialization method must be an instance method.
 
 ```csharp
 [SingletonDIProvide]
@@ -465,25 +466,25 @@ public class DataService
 
 ### DM0013: Invalid property name
 
-Возникает, когда имя свойства в `[SingletonDIProvide]` содержит недопустимые символы. Имя должно начинаться с буквы или подчёркивания и содержать только буквы, цифры или подчёркивания.
+Occurs when a property name in `[SingletonDIProvide]` contains invalid characters. The name must start with a letter or underscore and contain only letters, digits, or underscores.
 
 ```csharp
-[SingletonDIProvide("invalid-name")]  // DM0013: дефис недопустим
+[SingletonDIProvide("invalid-name")]  // DM0013: hyphen is not allowed
 public class DatabaseService { }
 ```
 
 ### DM0014: Property name is a reserved keyword
 
-Возникает, когда имя свойства в `[SingletonDIProvide]` является зарезервированным ключевым словом C#.
+Occurs when a property name in `[SingletonDIProvide]` is a reserved C# keyword.
 
 ```csharp
-[SingletonDIProvide("class")]  // DM0014: зарезервированное слово
+[SingletonDIProvide("class")]  // DM0014: reserved word
 public class DatabaseService { }
 ```
 
 ### DM0015: Generic types are not supported for singletons
 
-Возникает, когда атрибут `[SingletonDIProvide]` применяется к generic типу. SingletonDI не поддерживает generic типы как синглтоны, так как для каждого generic-параметра потребовался бы отдельный экземпляр.
+Occurs when the `[SingletonDIProvide]` attribute is applied to a generic type. SingletonDI does not support generic types as singletons, as a separate instance would be required for each generic parameter.
 
 ```csharp
 [SingletonDIProvide]  // Error DM0015
@@ -492,13 +493,13 @@ public class Repository<T>
 }
 ```
 
-## Ограничения
+## Limitations
 
-- **Только синглтоны** — библиотека не поддерживает Scoped или Transient lifestyle
-- **Одна сборка** — генератор работает только в рамках одной сборки (per-assembly ограничение Roslyn)
-- **Нет межсборочных ссылок** — `[SingletonDIProvide]`-типы из других сборок не поддерживаются
-- **`struct` запрещён** — только `class` может быть провайдером
+- **Singletons only** — the library does not support Scoped or Transient lifestyle
+- **Single assembly** — the generator only works within a single assembly (Roslyn per-assembly limitation)
+- **No cross-assembly references** — `[SingletonDIProvide]` types from other assemblies are not supported
+- **`struct` not allowed** — only `class` can be a provider
 
-## Лицензия
+## License
 
 MIT License
