@@ -426,7 +426,7 @@ public async Task DisposeOrder_ThreeIndependentThreads_CorrectOrder()
     
     // 3. Получаем типы
     var actionLogType = assembly.GetType("TestApp.ActionLog");
-    var containerType = assembly.GetType("DependencyManager.Generated.Internal.SingletonDIContainer");
+    var containerType = assembly.GetType("SingletonDI.Generated.Internal.SingletonDIContainer");
     
     // 4. Очищаем лог
     actionLogType.GetMethod("Clear")!.Invoke(null, null);

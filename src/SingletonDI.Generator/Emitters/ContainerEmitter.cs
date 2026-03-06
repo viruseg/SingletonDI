@@ -10,7 +10,7 @@ namespace SingletonDI.Generator.Emitters;
 /// </summary>
 internal static class ContainerEmitter
 {
-    private const string Namespace = "DependencyManager.Generated.Internal";
+    private const string Namespace = "SingletonDI.Generated.Internal";
 
     /// <summary>
     /// Generates the SingletonDIContainer class source code.

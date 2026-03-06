@@ -37,7 +37,7 @@ SingletonDI/
 
 ## Кодогенерация
 
-- Генерируется Container в `DependencyManager.Generated.Internal` namespace
+- Генерируется Container в `SingletonDI.Generated.Internal` namespace
 - Потребители получают partial class с property типами синглтонов
 - ExceptionHelper — генерируемый класс с [DoesNotReturn] методами
 

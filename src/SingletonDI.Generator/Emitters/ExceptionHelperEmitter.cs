@@ -5,7 +5,7 @@ namespace SingletonDI.Generator.Emitters;
 /// </summary>
 internal static class ExceptionHelperEmitter
 {
-    private const string Namespace = "DependencyManager.Generated.Internal";
+    private const string Namespace = "SingletonDI.Generated.Internal";
 
     /// <summary>
     /// Generates the ExceptionHelper class source code.

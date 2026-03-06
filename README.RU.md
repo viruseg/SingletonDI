@@ -77,7 +77,7 @@ public partial class OrderController
 ### 3. Инициализация при старте приложения
 
 ```csharp
-using DependencyManager.Generated;
+using SingletonDI.Generated;
 
 public static class Program
 {

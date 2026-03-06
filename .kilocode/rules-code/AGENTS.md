@@ -14,7 +14,7 @@ This file provides guidance to agents when working with code in this repository.
 ### Code generation rules
 
 - ExceptionHelper must be generated separately with `[DoesNotReturn]` attributes
-- Container class goes to `DependencyManager.Generated.Internal` namespace
+- Container class goes to `SingletonDI.Generated.Internal` namespace
 - Consumer properties use lazy initialization: `=> Container.Prop ?? throw ExceptionHelper.ThrowContainerNotInitialized()`
 - Namespace conflict resolution: `Namespace_TypeName` (underscore separator)
 

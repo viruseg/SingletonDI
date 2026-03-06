@@ -1,4 +1,4 @@
-using DependencyManager.Generated;
+using SingletonDI.Generated;
 using SingletonDI.Attributes;
 
 namespace SingletonDI.SampleApp;
