@@ -17,6 +17,8 @@ internal static class LifetimeEmitter
                using System.Collections.Generic;
                using System.Runtime.InteropServices;
                using System.Threading.Tasks;
+               using System.ComponentModel;
+               using System.Runtime.CompilerServices;
 
                namespace DependencyManager.Generated.Internal
                {
@@ -24,6 +26,8 @@ internal static class LifetimeEmitter
                    /// Handles OS shutdown signals and ensures proper disposal of singleton instances.
                    /// Register shutdown handlers at application startup to enable graceful shutdown.
                    /// </summary>
+                   [EditorBrowsable(EditorBrowsableState.Never)]
+                   [CompilerGenerated]
                    internal sealed class SingletonDILifetime : IDisposable
                    {
                        private static SingletonDILifetime? _instance;
