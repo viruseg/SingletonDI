@@ -87,7 +87,7 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
-        // Инициализация всех синглтонов
+        // Инициализация всех синглтонов с автоматической регистрацией shutdown-обработчиков
         await SingletonDIInitializer.InitializeAsync();
 
         // Теперь можно использовать потребителей
@@ -219,6 +219,74 @@ public partial class OrderController { }
 ### Разрешение конфликтов имён
 
 При конфликте имён типов (например, `Foo.Bar` и `Baz.Bar`) генерируются имена с префиксом пространства имён.
+
+## API SingletonDIInitializer
+
+Генератор создаёт класс `SingletonDIInitializer` с методами для управления жизненным циклом синглтонов.
+
+### InitializeAsync
+
+```csharp
+public static Task InitializeAsync(bool registerShutdownHandlers = true)
+```
+
+Инициализирует все синглтоны в правильном порядке (топологическая сортировка по зависимостям).
+
+**Параметры:**
+- `registerShutdownHandlers` (по умолчанию `true`):
+  - `true` — автоматически регистрирует обработчики shutdown для корректного освобождения ресурсов при завершении приложения
+  - `false` — не регистрирует обработчики (для сценариев с ручным управлением lifetime)
+
+**Возвращает:** `Task`
+
+**Примеры:**
+
+```csharp
+// Стандартное использование с автоматической регистрацией shutdown-обработчиков
+await SingletonDIInitializer.InitializeAsync();
+
+// Ручное управление lifetime (без автоматических shutdown-обработчиков)
+await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+
+// ... работа с приложением ...
+
+// Явный вызов освобождения ресурсов
+await SingletonDIInitializer.DisposeAsync();
+```
+
+### DisposeAsync
+
+```csharp
+public static ValueTask DisposeAsync()
+```
+
+Асинхронно освобождает все синглтоны, реализующие `IAsyncDisposable` или `IDisposable`.
+
+**Возвращает:** `ValueTask`
+
+**Порядок освобождения:**
+- Синглтоны освобождаются в обратном порядке инициализации (LIFO)
+- Сначала вызывается `DisposeAsync()` для `IAsyncDisposable`, затем `Dispose()` для `IDisposable`
+
+**Пример:**
+
+```csharp
+public static async Task Main(string[] args)
+{
+    await SingletonDIInitializer.InitializeAsync();
+    
+    try
+    {
+        // Работа приложения
+        await RunApplicationAsync();
+    }
+    finally
+    {
+        // Явное освобождение ресурсов
+        await SingletonDIInitializer.DisposeAsync();
+    }
+}
+```
 
 ## Диагностика
 
