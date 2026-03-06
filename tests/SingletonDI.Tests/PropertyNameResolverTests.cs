@@ -43,6 +43,15 @@ public class PropertyNameResolverTests
                         service.DoWork();
                     }
                 }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServiceFromDerived()
+                    {
+                        MyService service = MyServiceInstance;
+                        service.DoWork();
+                    }
+                }
             }
             """;
 
@@ -78,6 +87,15 @@ public class PropertyNameResolverTests
                         service.DoWork();
                     }
                 }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServiceFromDerived()
+                    {
+                        MyService service = CustomService;
+                        service.DoWork();
+                    }
+                }
             }
             """;
 
@@ -108,6 +126,15 @@ public class PropertyNameResolverTests
                 public partial class Consumer
                 {
                     public void UseService()
+                    {
+                        GlobalService service = GlobalServiceInstance;
+                        service.DoWork();
+                    }
+                }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServiceFromDerived()
                     {
                         GlobalService service = GlobalServiceInstance;
                         service.DoWork();
@@ -153,6 +180,15 @@ public class PropertyNameResolverTests
                 public partial class Consumer
                 {
                     public void UseServices()
+                    {
+                        NamespaceA.Service a = NamespaceA_ServiceInstance;
+                        NamespaceB.Service b = NamespaceB_ServiceInstance;
+                    }
+                }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServicesFromDerived()
                     {
                         NamespaceA.Service a = NamespaceA_ServiceInstance;
                         NamespaceB.Service b = NamespaceB_ServiceInstance;
@@ -206,6 +242,16 @@ public class PropertyNameResolverTests
                         NamespaceC.Service c = NamespaceC_ServiceInstance;
                     }
                 }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServicesFromDerived()
+                    {
+                        NamespaceA.Service a = NamespaceA_ServiceInstance;
+                        NamespaceB.Service b = NamespaceB_ServiceInstance;
+                        NamespaceC.Service c = NamespaceC_ServiceInstance;
+                    }
+                }
             }
             """;
 
@@ -248,6 +294,15 @@ public class PropertyNameResolverTests
                 public partial class Consumer
                 {
                     public void UseRepositories()
+                    {
+                        Company.Project.Services.Repository servicesRepo = Company_Project_Services_RepositoryInstance;
+                        Company.Project.Data.Repository dataRepo = Company_Project_Data_RepositoryInstance;
+                    }
+                }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseRepositoriesFromDerived()
                     {
                         Company.Project.Services.Repository servicesRepo = Company_Project_Services_RepositoryInstance;
                         Company.Project.Data.Repository dataRepo = Company_Project_Data_RepositoryInstance;
@@ -298,6 +353,15 @@ public class PropertyNameResolverTests
                         NamespaceB.Service regular = ServiceInstance;
                     }
                 }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServicesFromDerived()
+                    {
+                        NamespaceA.Service custom = CustomService;
+                        NamespaceB.Service regular = ServiceInstance;
+                    }
+                }
             }
             """;
 
@@ -340,6 +404,16 @@ public class PropertyNameResolverTests
                 public partial class Consumer
                 {
                     public void UseProviders()
+                    {
+                        NamespaceX.Provider x = ProviderX;
+                        NamespaceY.Provider y = ProviderY;
+                        NamespaceZ.Provider z = ProviderInstance;
+                    }
+                }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseProvidersFromDerived()
                     {
                         NamespaceX.Provider x = ProviderX;
                         NamespaceY.Provider y = ProviderY;
@@ -394,6 +468,16 @@ public class PropertyNameResolverTests
                         NamespaceC.ConflictingService c = NamespaceC_ConflictingServiceInstance;
                     }
                 }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServicesFromDerived()
+                    {
+                        NamespaceA.UniqueService unique = UniqueServiceInstance;
+                        NamespaceB.ConflictingService b = NamespaceB_ConflictingServiceInstance;
+                        NamespaceC.ConflictingService c = NamespaceC_ConflictingServiceInstance;
+                    }
+                }
             }
             """;
 
@@ -441,6 +525,15 @@ public class PropertyNameResolverTests
                         NamespaceB.ServiceB b = ServiceBInstance;
                     }
                 }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServicesFromDerived()
+                    {
+                        NamespaceA.ServiceA a = ServiceB;
+                        NamespaceB.ServiceB b = ServiceBInstance;
+                    }
+                }
             }
             """;
 
@@ -477,6 +570,343 @@ public class PropertyNameResolverTests
                     {
                         OuterClass.NestedService service = NestedServiceInstance;
                         service.DoWork();
+                    }
+                }
+
+                public class DerivedConsumer : Consumer
+                {
+                    public void UseServiceFromDerived()
+                    {
+                        OuterClass.NestedService service = NestedServiceInstance;
+                        service.DoWork();
+                    }
+                }
+            }
+            """;
+
+        var compilationErrors = CompilationErrors(SOURCE);
+
+        Assert.Empty(compilationErrors);
+    }
+
+    #endregion
+
+    #region TC13-TC15: Inheritance Chain Tests
+
+    /// <summary>
+    /// TC13: Inheritance chain - Class A with SingletonDIConsume, Class B inherits from A with additional SingletonDIConsume.
+    /// Expected: Both classes have access to their declared dependencies
+    /// </summary>
+    [Fact]
+    public void TC13_InheritanceChain_TwoLevelsWithConsumeAttribute_GeneratesCorrectProperties()
+    {
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                [SingletonDIProvide]
+                public class BaseService
+                {
+                    public void DoBaseWork() { }
+                }
+
+                [SingletonDIProvide]
+                public class DerivedService
+                {
+                    public void DoDerivedWork() { }
+                }
+
+                // Base consumer with BaseService
+                [SingletonDIConsume(typeof(BaseService))]
+                public partial class ConsumerA
+                {
+                    public void UseBaseService()
+                    {
+                        BaseService service = BaseServiceInstance;
+                        service.DoBaseWork();
+                    }
+                }
+
+                // Derived consumer with additional DerivedService
+                [SingletonDIConsume(typeof(DerivedService))]
+                public partial class ConsumerB : ConsumerA
+                {
+                    public void UseBothServices()
+                    {
+                        BaseService baseService = BaseServiceInstance;
+                        DerivedService derivedService = DerivedServiceInstance;
+                        baseService.DoBaseWork();
+                        derivedService.DoDerivedWork();
+                    }
+                }
+            }
+            """;
+
+        var compilationErrors = CompilationErrors(SOURCE);
+
+        Assert.Empty(compilationErrors);
+    }
+
+    /// <summary>
+    /// TC14: Three-level inheritance chain with SingletonDIConsume at each level.
+    /// Expected: All levels have access to their declared dependencies
+    /// </summary>
+    [Fact]
+    public void TC14_InheritanceChain_ThreeLevelsWithConsumeAttribute_GeneratesCorrectProperties()
+    {
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                [SingletonDIProvide]
+                public class ServiceA
+                {
+                    public void DoWorkA() { }
+                }
+
+                [SingletonDIProvide]
+                public class ServiceB
+                {
+                    public void DoWorkB() { }
+                }
+
+                [SingletonDIProvide]
+                public class ServiceC
+                {
+                    public void DoWorkC() { }
+                }
+
+                // Level 1: ConsumerA consumes ServiceA
+                [SingletonDIConsume(typeof(ServiceA))]
+                public partial class ConsumerA
+                {
+                    public void UseServiceA()
+                    {
+                        ServiceA service = ServiceAInstance;
+                        service.DoWorkA();
+                    }
+                }
+
+                // Level 2: ConsumerB inherits from ConsumerA and consumes ServiceB
+                [SingletonDIConsume(typeof(ServiceB))]
+                public partial class ConsumerB : ConsumerA
+                {
+                    public void UseServicesAandB()
+                    {
+                        ServiceA serviceA = ServiceAInstance;
+                        ServiceB serviceB = ServiceBInstance;
+                        serviceA.DoWorkA();
+                        serviceB.DoWorkB();
+                    }
+                }
+
+                // Level 3: ConsumerC inherits from ConsumerB and consumes ServiceC
+                [SingletonDIConsume(typeof(ServiceC))]
+                public partial class ConsumerC : ConsumerB
+                {
+                    public void UseAllServices()
+                    {
+                        ServiceA serviceA = ServiceAInstance;
+                        ServiceB serviceB = ServiceBInstance;
+                        ServiceC serviceC = ServiceCInstance;
+                        serviceA.DoWorkA();
+                        serviceB.DoWorkB();
+                        serviceC.DoWorkC();
+                    }
+                }
+            }
+            """;
+
+        var compilationErrors = CompilationErrors(SOURCE);
+
+        Assert.Empty(compilationErrors);
+    }
+
+    /// <summary>
+    /// TC15: Inheritance chain with conflicting provider names at different levels.
+    /// Expected: Namespaced properties are correctly generated for all levels
+    /// </summary>
+    [Fact]
+    public void TC15_InheritanceChain_WithConflictingNames_GeneratesNamespacedProperties()
+    {
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace NamespaceA
+            {
+                [SingletonDIProvide]
+                public class Service { }
+            }
+
+            namespace NamespaceB
+            {
+                [SingletonDIProvide]
+                public class Service { }
+            }
+
+            namespace NamespaceC
+            {
+                [SingletonDIProvide]
+                public class Service { }
+            }
+
+            namespace ConsumerNamespace
+            {
+                // Level 1: ConsumerA consumes NamespaceA.Service
+                [SingletonDIConsume(typeof(NamespaceA.Service))]
+                public partial class ConsumerA
+                {
+                    public void UseServiceA()
+                    {
+                        NamespaceA.Service service = NamespaceA_ServiceInstance;
+                    }
+                }
+
+                // Level 2: ConsumerB inherits from ConsumerA and adds NamespaceB.Service
+                [SingletonDIConsume(typeof(NamespaceB.Service))]
+                public partial class ConsumerB : ConsumerA
+                {
+                    public void UseServicesAandB()
+                    {
+                        NamespaceA.Service serviceA = NamespaceA_ServiceInstance;
+                        NamespaceB.Service serviceB = NamespaceB_ServiceInstance;
+                    }
+                }
+
+                // Level 3: ConsumerC inherits from ConsumerB and adds NamespaceC.Service
+                [SingletonDIConsume(typeof(NamespaceC.Service))]
+                public partial class ConsumerC : ConsumerB
+                {
+                    public void UseAllServices()
+                    {
+                        NamespaceA.Service serviceA = NamespaceA_ServiceInstance;
+                        NamespaceB.Service serviceB = NamespaceB_ServiceInstance;
+                        NamespaceC.Service serviceC = NamespaceC_ServiceInstance;
+                    }
+                }
+            }
+            """;
+
+        var compilationErrors = CompilationErrors(SOURCE);
+
+        Assert.Empty(compilationErrors);
+    }
+
+    /// <summary>
+    /// TC16: Inheritance chain where derived class does NOT have SingletonDIConsume.
+    /// Expected: Derived class can still access base class properties through inheritance
+    /// </summary>
+    [Fact]
+    public void TC16_InheritanceChain_DerivedWithoutConsumeAttribute_AccessesBaseProperties()
+    {
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                [SingletonDIProvide]
+                public class MyService
+                {
+                    public void DoWork() { }
+                }
+
+                // Base consumer with SingletonDIConsume
+                [SingletonDIConsume(typeof(MyService))]
+                public partial class ConsumerBase
+                {
+                    public void UseService()
+                    {
+                        MyService service = MyServiceInstance;
+                        service.DoWork();
+                    }
+                }
+
+                // Derived consumer WITHOUT SingletonDIConsume - inherits property from base
+                public class ConsumerDerived : ConsumerBase
+                {
+                    public void UseServiceFromDerived()
+                    {
+                        // Access the generated property from base class
+                        MyService service = MyServiceInstance;
+                        service.DoWork();
+                    }
+                }
+            }
+            """;
+
+        var compilationErrors = CompilationErrors(SOURCE);
+
+        Assert.Empty(compilationErrors);
+    }
+
+    /// <summary>
+    /// TC17: Inheritance chain with custom property names at different levels.
+    /// Expected: Custom names are preserved across inheritance chain
+    /// </summary>
+    [Fact]
+    public void TC17_InheritanceChain_WithCustomNames_GeneratesCorrectProperties()
+    {
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                [SingletonDIProvide("PrimaryDatabase")]
+                public class DatabaseService
+                {
+                    public void ExecuteQuery() { }
+                }
+
+                [SingletonDIProvide("CacheStore")]
+                public class CacheService
+                {
+                    public void GetCachedData() { }
+                }
+
+                [SingletonDIProvide("Logger")]
+                public class LoggingService
+                {
+                    public void Log() { }
+                }
+
+                // Level 1: ConsumerA uses DatabaseService with custom name
+                [SingletonDIConsume(typeof(DatabaseService))]
+                public partial class ConsumerA
+                {
+                    public void UseDatabase()
+                    {
+                        DatabaseService db = PrimaryDatabase;
+                        db.ExecuteQuery();
+                    }
+                }
+
+                // Level 2: ConsumerB adds CacheService with custom name
+                [SingletonDIConsume(typeof(CacheService))]
+                public partial class ConsumerB : ConsumerA
+                {
+                    public void UseDatabaseAndCache()
+                    {
+                        DatabaseService db = PrimaryDatabase;
+                        CacheService cache = CacheStore;
+                        db.ExecuteQuery();
+                        cache.GetCachedData();
+                    }
+                }
+
+                // Level 3: ConsumerC adds LoggingService with custom name
+                [SingletonDIConsume(typeof(LoggingService))]
+                public partial class ConsumerC : ConsumerB
+                {
+                    public void UseAllServices()
+                    {
+                        DatabaseService db = PrimaryDatabase;
+                        CacheService cache = CacheStore;
+                        LoggingService logger = Logger;
+                        db.ExecuteQuery();
+                        cache.GetCachedData();
+                        logger.Log();
                     }
                 }
             }
