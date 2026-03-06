@@ -226,21 +226,21 @@ public partial class OrderController { }
 
 | ID | Уровень | Описание |
 |---|---|---|
-| **DM0001** | Error | Дублирование имени свойства в `[SingletonDIProvide]` |
-| **DM0002** | Error | `[SingletonDIProvide]` применён к `abstract class` |
-| **DM0003** | Error | Имя свойства в `[SingletonDIProvide]` совпадает с автоматически сгенерированным именем другого синглтона |
-| **DM0004** | Error | Класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров |
-| **DM0005** | Error | Метод `InitializeAsync` имеет недоступный модификатор доступа (должен быть `public`, `internal` или `protected internal`) |
-| **DM0006** | Error | `[SingletonDIConsume]` ссылается на тип без `[SingletonDIProvide]` |
-| **DM0007** | Error | Класс с `[SingletonDIConsume]` не объявлен как `partial` |
-| **DM0008** | Error | Класс с `[SingletonDIConsume]` ссылается сам на себя (self-reference) |
-| **DM0009** | Error | Обнаружена циклическая зависимость между провайдерами |
-| **DM0010** | Error | Дублирование типа в аргументах `[SingletonDIConsume]` |
-| **DM0011** | Error | Тип уже объявлен в базовом классе |
-| **DM0012** | Error | Метод `InitializeAsync` не может быть `static` |
-| **DM0013** | Error | Недопустимое имя свойства. Имя должно начинаться с буквы или подчёркивания и содержать только буквы, цифры или подчёркивания |
-| **DM0014** | Error | Имя свойства является зарезервированным ключевым словом C#. Используйте другое имя или добавьте префикс '@' в коде |
-| **DM0015** | Error | Generic типы не поддерживаются для синглтонов |
+| **DM0001** | Error | Duplicate property name |
+| **DM0002** | Error | Cannot use [SingletonDIProvide] on abstract class |
+| **DM0003** | Error | Property name conflicts with generated name |
+| **DM0004** | Error | Missing parameterless constructor |
+| **DM0005** | Error | InitializeAsync method has inaccessible access modifier |
+| **DM0006** | Error | Referenced type is not a provider |
+| **DM0007** | Error | Consumer must be partial |
+| **DM0008** | Error | Self-reference not allowed |
+| **DM0009** | Error | Circular dependency detected |
+| **DM0010** | Error | Duplicate type in SingletonDIConsume attribute arguments |
+| **DM0011** | Error | Type already declared in base class |
+| **DM0012** | Error | InitializeAsync method cannot be static |
+| **DM0013** | Error | Invalid property name |
+| **DM0014** | Error | Property name is a reserved keyword |
+| **DM0015** | Error | Generic types are not supported for singletons |
 
 ### DM0001: Duplicate property name
 
