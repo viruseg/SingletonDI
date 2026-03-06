@@ -254,6 +254,15 @@ public class DatabaseService { }
 public class AnotherDatabaseService { }
 ```
 
+### DM0002: Cannot use [SingletonDIProvide] on abstract class
+
+Возникает, когда атрибут `[SingletonDIProvide]` применяется к абстрактному классу. Синглтон должен быть конкретным классом, который можно инстанцировать.
+
+```csharp
+[SingletonDIProvide]  // DM0002
+public abstract class BaseService { }
+```
+
 ### DM0003: Property name conflicts with generated name
 
 Возникает, когда пользовательское имя свойства в `[SingletonDIProvide]` совпадает с автоматически сгенерированным именем другого синглтона.
@@ -285,6 +294,129 @@ namespace MyApp.Other
 }
 ```
 
+### DM0004: Missing parameterless constructor
+
+Возникает, когда класс с `[SingletonDIProvide]` не имеет публичного конструктора без параметров. Генератор требует возможность создать экземпляр через `new()`.
+
+```csharp
+[SingletonDIProvide]  // DM0004
+public class DatabaseService
+{
+    // Нет конструктора без параметров, только с параметрами
+    public DatabaseService(string connectionString) { }
+}
+```
+
+### DM0005: InitializeAsync method has inaccessible access modifier
+
+Возникает, когда метод `InitializeAsync` объявлен с недоступным модификатором доступа. Метод должен быть `public`, `internal` или `protected internal`.
+
+```csharp
+[SingletonDIProvide]
+public class DataService
+{
+    private Task InitializeAsync() { return Task.CompletedTask; }  // DM0005
+}
+```
+
+### DM0006: Referenced type is not a provider
+
+Возникает, когда `[SingletonDIConsume]` ссылается на тип, который не помечен атрибутом `[SingletonDIProvide]`.
+
+```csharp
+// Класс без атрибута [SingletonDIProvide]
+public class SomeService { }
+
+[SingletonDIConsume(typeof(SomeService))]  // DM0006
+public partial class Consumer { }
+```
+
+### DM0007: Consumer must be partial
+
+Возникает, когда класс с `[SingletonDIConsume]` не объявлен как `partial`. Генератор требует `partial` для добавления свойств.
+
+```csharp
+[SingletonDIConsume(typeof(DatabaseService))]  // DM0007
+public class OrderController  // Отсутствует ключевое слово partial
+{
+}
+```
+
+### DM0008: Self-reference not allowed
+
+Возникает, когда класс указывает сам себя в `[SingletonDIConsume]`. Это приведёт к бесконечной рекурсии.
+
+```csharp
+[SingletonDIProvide]
+[SingletonDIConsume(typeof(SelfReferencingService))]  // DM0008
+public class SelfReferencingService { }
+```
+
+### DM0009: Circular dependency detected
+
+Возникает, когда обнаружена циклическая зависимость между провайдерами. Циклы приводят к невозможности корректной инициализации.
+
+```csharp
+[SingletonDIProvide]
+[SingletonDIConsume(typeof(ServiceB))]  // DM0009: A зависит от B
+public partial class ServiceA { }
+
+[SingletonDIProvide]
+[SingletonDIConsume(typeof(ServiceA))]  // DM0009: B зависит от A
+public partial class ServiceB { }
+```
+
+### DM0010: Duplicate type in SingletonDIConsume attribute arguments
+
+Возникает, когда один и тот же тип указан несколько раз в `[SingletonDIConsume]`.
+
+```csharp
+[SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]  // DM0010
+public partial class OrderController { }
+```
+
+### DM0011: Type already declared in base class
+
+Возникает, когда наследник пытается указать тип в `[SingletonDIConsume]`, который уже был объявлен в базовом классе.
+
+```csharp
+[SingletonDIConsume(typeof(DatabaseService))]
+public partial class BaseController { }
+
+[SingletonDIConsume(typeof(DatabaseService))]  // DM0011: уже объявлено в BaseController
+public partial class OrderController : BaseController { }
+```
+
+### DM0012: InitializeAsync method cannot be static
+
+Возникает, когда метод `InitializeAsync` объявлен как `static`. Метод инициализации должен быть экземплярным.
+
+```csharp
+[SingletonDIProvide]
+public class DataService
+{
+    public static Task InitializeAsync() { return Task.CompletedTask; }  // DM0012
+}
+```
+
+### DM0013: Invalid property name
+
+Возникает, когда имя свойства в `[SingletonDIProvide]` содержит недопустимые символы. Имя должно начинаться с буквы или подчёркивания и содержать только буквы, цифры или подчёркивания.
+
+```csharp
+[SingletonDIProvide("invalid-name")]  // DM0013: дефис недопустим
+public class DatabaseService { }
+```
+
+### DM0014: Property name is a reserved keyword
+
+Возникает, когда имя свойства в `[SingletonDIProvide]` является зарезервированным ключевым словом C#.
+
+```csharp
+[SingletonDIProvide("class")]  // DM0014: зарезервированное слово
+public class DatabaseService { }
+```
+
 ### DM0015: Generic types are not supported for singletons
 
 Возникает, когда атрибут `[SingletonDIProvide]` применяется к generic типу. SingletonDI не поддерживает generic типы как синглтоны, так как для каждого generic-параметра потребовался бы отдельный экземпляр.
@@ -294,7 +426,6 @@ namespace MyApp.Other
 public class Repository<T>
 {
 }
-```
 ```
 
 ## Ограничения
