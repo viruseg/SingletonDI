@@ -11,7 +11,7 @@ namespace SingletonDI.SampleApp;
 /// Level 0: Configuration service - base singleton with no dependencies.
 /// </summary>
 [SingletonDIProvide]
-public class ConfigService : IDisposable
+public sealed class ConfigService : IDisposable
 {
     private bool _disposed;
 
@@ -34,7 +34,7 @@ public class ConfigService : IDisposable
 /// Level 0: Logger service - base singleton with no dependencies.
 /// </summary>
 [SingletonDIProvide]
-public class LoggerService : IDisposable
+public sealed class LoggerService : IDisposable
 {
     private bool _disposed;
 
@@ -65,7 +65,7 @@ public class LoggerService : IDisposable
 /// </summary>
 [SingletonDIProvide]
 [SingletonDIConsume(typeof(ConfigService))]
-public partial class DatabaseService : IDisposable
+public sealed partial class DatabaseService : IDisposable
 {
     private bool _disposed;
 
@@ -93,7 +93,7 @@ public partial class DatabaseService : IDisposable
 /// </summary>
 [SingletonDIProvide]
 [SingletonDIConsume(typeof(ConfigService), typeof(LoggerService))]
-public partial class CacheService : IDisposable
+public sealed partial class CacheService : IDisposable
 {
     private bool _disposed;
 
@@ -125,7 +125,7 @@ public partial class CacheService : IDisposable
 /// </summary>
 [SingletonDIProvide]
 [SingletonDIConsume(typeof(DatabaseService), typeof(CacheService))]
-public partial class UserRepository : IDisposable
+public sealed partial class UserRepository : IDisposable
 {
     private bool _disposed;
 
@@ -154,7 +154,7 @@ public partial class UserRepository : IDisposable
 /// </summary>
 [SingletonDIProvide]
 [SingletonDIConsume(typeof(DatabaseService))]
-public partial class ProductRepository : IDisposable
+public sealed partial class ProductRepository : IDisposable
 {
     private bool _disposed;
 
@@ -187,7 +187,7 @@ public partial class ProductRepository : IDisposable
 /// </summary>
 [SingletonDIProvide]
 [SingletonDIConsume(typeof(UserRepository), typeof(LoggerService))]
-public partial class UserService : IDisposable
+public sealed partial class UserService : IDisposable
 {
     private bool _disposed;
 
@@ -217,7 +217,7 @@ public partial class UserService : IDisposable
 /// </summary>
 [SingletonDIProvide]
 [SingletonDIConsume(typeof(ProductRepository), typeof(CacheService))]
-public partial class ProductService : IDisposable
+public sealed partial class ProductService : IDisposable
 {
     private bool _disposed;
 
@@ -250,7 +250,7 @@ public partial class ProductService : IDisposable
 /// Consumer class that uses UserService and ProductService.
 /// </summary>
 [SingletonDIConsume(typeof(UserService), typeof(ProductService))]
-public partial class AppController
+public sealed partial class AppController
 {
     public void Run()
     {
@@ -274,19 +274,26 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
-        Console.WriteLine("========================================");
-        Console.WriteLine("SingletonDI Demo - 4 Levels of Dependencies");
-        Console.WriteLine("========================================\n");
+        try
+        {
+            Console.WriteLine("========================================");
+            Console.WriteLine("SingletonDI Demo - 4 Levels of Dependencies");
+            Console.WriteLine("========================================\n");
 
-        Console.WriteLine("--- INITIALIZATION PHASE ---");
+            Console.WriteLine("--- INITIALIZATION PHASE ---");
 
-        // Initialize all singletons in dependency order
-        await SingletonDIInitializer.InitializeAsync();
+            // Initialize all singletons in dependency order
+            await SingletonDIInitializer.InitializeAsync();
 
-        Console.WriteLine("\n--- EXECUTION PHASE ---");
+            Console.WriteLine("\n--- EXECUTION PHASE ---");
 
-        // Use the consumer
-        var controller = new AppController();
-        controller.Run();
+            // Use the consumer
+            var controller = new AppController();
+            controller.Run();
+        }
+        finally
+        {
+            await SingletonDIInitializer.DisposeAsync();
+        }
     }
 }
