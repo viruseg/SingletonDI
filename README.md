@@ -240,6 +240,7 @@ public partial class OrderController { }
 | **DM0012** | Error | Метод `InitializeAsync` не может быть `static` |
 | **DM0013** | Error | Недопустимое имя свойства. Имя должно начинаться с буквы или подчёркивания и содержать только буквы, цифры или подчёркивания |
 | **DM0014** | Error | Имя свойства является зарезервированным ключевым словом C#. Используйте другое имя или добавьте префикс '@' в коде |
+| **DM0015** | Error | Generic типы не поддерживаются для синглтонов |
 
 ### DM0001: Duplicate property name
 
@@ -282,6 +283,18 @@ namespace MyApp.Other
     [SingletonDIProvide("MyApp_Services_DatabaseServiceInstance")]
     public class UserService { }
 }
+```
+
+### DM0015: Generic types are not supported for singletons
+
+Возникает, когда атрибут `[SingletonDIProvide]` применяется к generic типу. SingletonDI не поддерживает generic типы как синглтоны, так как для каждого generic-параметра потребовался бы отдельный экземпляр.
+
+```csharp
+[SingletonDIProvide]  // Error DM0015
+public class Repository<T>
+{
+}
+```
 ```
 
 ## Ограничения

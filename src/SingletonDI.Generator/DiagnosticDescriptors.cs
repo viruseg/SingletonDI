@@ -152,6 +152,16 @@ internal static class DiagnosticDescriptors
         Category,
         DiagnosticSeverity.Error);
 
+    /// <summary>
+    /// DM0015: Generic types are not supported for singletons.
+    /// </summary>
+    public static readonly DiagnosticDescriptor GenericTypeNotSupported = Create(
+        "DM0015",
+        "Generic types are not supported for singletons",
+        "Generic type '{0}' cannot be a singleton. Generic types are not supported.",
+        Category,
+        DiagnosticSeverity.Error);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

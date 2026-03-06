@@ -1043,6 +1043,96 @@ public class DiagnosticErrorTests
         Assert.DoesNotContain(diagnostics, d => d.Id is "DM0013" or "DM0014");
     }
 
+    [Fact]
+    public void DM0015_GenericTypeNotSupported()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Generic repository - not supported as singleton.
+                              /// </summary>
+                              [SingletonDIProvide]
+                              public class Repository<T>
+                              {
+                                  public T GetById(int id) => default;
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
+        Assert.NotNull(dm0015);
+        Assert.Equal("Generic types are not supported for singletons", dm0015.Descriptor.Title);
+        Assert.Contains("Repository", dm0015.GetMessage());
+        Assert.Contains("Generic type", dm0015.GetMessage());
+
+        // Verify Location is on the attribute, not the class identifier
+        Assert.NotEqual(Location.None, dm0015.Location);
+        Assert.True(dm0015.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0015_GenericTypeNotSupported_CustomName()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Generic repository - not supported as singleton.
+                              /// </summary>
+                              [SingletonDIProvide("Repository")]
+                              public class Repository<T>
+                              {
+                                  public T GetById(int id) => default;
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
+        Assert.NotNull(dm0015);
+        Assert.Equal("Generic types are not supported for singletons", dm0015.Descriptor.Title);
+        Assert.Contains("Repository", dm0015.GetMessage());
+        Assert.Contains("Generic type", dm0015.GetMessage());
+
+        // Verify Location is on the attribute, not the class identifier
+        Assert.NotEqual(Location.None, dm0015.Location);
+        Assert.True(dm0015.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0015_GenericTypeNotSupported_MultipleTypeParameters()
+    {
+        // Arrange
+        const string SOURCE = """
+                              using SingletonDI.Attributes;
+
+                              /// <summary>
+                              /// Generic service with multiple type parameters.
+                              /// </summary>
+                              [SingletonDIProvide]
+                              public class Service<TKey, TValue>
+                              {
+                                  public void Process(TKey key, TValue value) { }
+                              }
+                              """;
+
+        // Act
+        var diagnostics = RunGenerator(SOURCE);
+
+        // Assert
+        var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
+        Assert.NotNull(dm0015);
+        Assert.Contains("Service", dm0015.GetMessage());
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         var compilation = CreateCompilation(source);

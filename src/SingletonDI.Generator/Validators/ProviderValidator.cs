@@ -21,6 +21,22 @@ internal static class ProviderValidator
         HashSet<string> allProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
+        // DM0015: Generic types are not supported
+        if (typeSymbol.IsGenericType || typeSymbol.TypeParameters.Length > 0)
+        {
+            // Get the attribute syntax for precise location
+            var provideAttr = typeSymbol.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute");
+            var attributeSyntax = provideAttr?.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+            var diagnosticLocation = attributeSyntax?.GetLocation() ?? typeDecl.Identifier.GetLocation();
+
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.GenericTypeNotSupported,
+                diagnosticLocation,
+                typeSymbol.Name));
+            return null;
+        }
+
         // DM0002: Cannot be abstract class
         if (typeSymbol.IsAbstract)
         {
