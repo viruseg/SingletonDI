@@ -581,9 +581,226 @@ public class CodeFixProviderTests
         await VerifyConsumerCodeFixAsync(test, expected, "DM0010");
     }
 
-#endregion
+    #endregion
 
-#region Helper Methods
+    #region SingletonDIPartialCodeFixProvider Tests
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_ToSealedClass()
+    {
+        // sealed class without partial - fix should add partial before 'class' keyword
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   /// <summary>
+                   /// Сервис-провайдер.
+                   /// </summary>
+                   [SingletonDIProvide]
+                   public class MyService 
+                   { 
+                       public int GetValue() => 42;
+                   }
+
+                   /// <summary>
+                   /// Консьюмер без модификатора partial.
+                   /// </summary>
+                   [SingletonDIConsume(typeof(MyService))]
+                   public sealed class MyConsumer
+                   {
+                       private string _name = "Consumer";
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       /// <summary>
+                       /// Сервис-провайдер.
+                       /// </summary>
+                       [SingletonDIProvide]
+                       public class MyService 
+                       { 
+                           public int GetValue() => 42;
+                       }
+
+                       /// <summary>
+                       /// Консьюмер без модификатора partial.
+                       /// </summary>
+                       [SingletonDIConsume(typeof(MyService))]
+                       public sealed partial class MyConsumer
+                       {
+                           private string _name = "Consumer";
+                       }
+                       """;
+
+        await VerifyPartialCodeFixAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_ToAbstractClass()
+    {
+        // abstract class without partial - fix should add partial before 'class' keyword
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService 
+                   { 
+                       public int GetValue() => 42;
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   public abstract class MyConsumer
+                   {
+                       private string _name = "Consumer";
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService 
+                       { 
+                           public int GetValue() => 42;
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       public abstract partial class MyConsumer
+                       {
+                           private string _name = "Consumer";
+                       }
+                       """;
+
+        await VerifyPartialCodeFixAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_ToStaticClass()
+    {
+        // static class without partial - fix should add partial before 'class' keyword
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService 
+                   { 
+                       public int GetValue() => 42;
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   public static class MyConsumer
+                   {
+                       private static string _name = "Consumer";
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService 
+                       { 
+                           public int GetValue() => 42;
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       public static partial class MyConsumer
+                       {
+                           private static string _name = "Consumer";
+                       }
+                       """;
+
+        await VerifyPartialCodeFixAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_ToInternalSealedClass()
+    {
+        // internal sealed class without partial - fix should add partial before 'class' keyword
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService 
+                   { 
+                       public int GetValue() => 42;
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   internal sealed class MyConsumer
+                   {
+                       private string _name = "Consumer";
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService 
+                       { 
+                           public int GetValue() => 42;
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       internal sealed partial class MyConsumer
+                       {
+                           private string _name = "Consumer";
+                       }
+                       """;
+
+        await VerifyPartialCodeFixAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_ToPrivateNestedSealedClass()
+    {
+        // private nested sealed class without partial - fix should add partial before 'class' keyword
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService 
+                   { 
+                       public int GetValue() => 42;
+                   }
+
+                   public class Container
+                   {
+                       [SingletonDIConsume(typeof(MyService))]
+                       private sealed class MyConsumer
+                       {
+                           private string _name = "Consumer";
+                       }
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService 
+                       { 
+                           public int GetValue() => 42;
+                       }
+
+                       public class Container
+                       {
+                           [SingletonDIConsume(typeof(MyService))]
+                           private sealed partial class MyConsumer
+                           {
+                               private string _name = "Consumer";
+                           }
+                       }
+                       """;
+
+        await VerifyPartialCodeFixAsync(test, expected, "DM0007");
+    }
+
+    #endregion
+
+    #region Helper Methods
 
     private static async Task VerifyProviderCodeFixAsync(string testSource, string expectedSource, string diagnosticId)
     {
@@ -594,6 +811,12 @@ public class CodeFixProviderTests
     private static async Task VerifyConsumerCodeFixAsync(string testSource, string expectedSource, string diagnosticId)
     {
         var codeFixProvider = new SingletonDIConsumerCodeFixProvider();
+        await VerifyCodeFixAsync(testSource, expectedSource, diagnosticId, codeFixProvider);
+    }
+
+    private static async Task VerifyPartialCodeFixAsync(string testSource, string expectedSource, string diagnosticId)
+    {
+        var codeFixProvider = new SingletonDIPartialCodeFixProvider();
         await VerifyCodeFixAsync(testSource, expectedSource, diagnosticId, codeFixProvider);
     }
 
@@ -638,6 +861,10 @@ public class CodeFixProviderTests
         else if (codeFixProvider is SingletonDIConsumerCodeFixProvider)
         {
             newRoot = ApplyConsumerFix(root, node);
+        }
+        else if (codeFixProvider is SingletonDIPartialCodeFixProvider)
+        {
+            newRoot = ApplyDM0007Fix(root, node);
         }
 
         Assert.NotNull(newRoot);
@@ -801,6 +1028,25 @@ public class CodeFixProviderTests
         var newAttribute = attributeSyntax.WithArgumentList(newArgumentList);
 
         return root.ReplaceNode(attributeSyntax, newAttribute);
+    }
+
+    private static SyntaxNode ApplyDM0007Fix(SyntaxNode root, SyntaxNode node)
+    {
+        var typeDeclaration = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
+        Assert.NotNull(typeDeclaration);
+
+        // The 'partial' modifier must appear immediately before 'class', 'struct', 'record', or 'interface'.
+        // Insert at the end of the modifiers list (right before the type keyword)
+        var modifiers = typeDeclaration.Modifiers;
+        var insertIndex = modifiers.Count;
+
+        var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
+            .WithTrailingTrivia(SyntaxFactory.Space);
+
+        var newModifiers = modifiers.Insert(insertIndex, partialToken);
+
+        var newTypeDeclaration = typeDeclaration.WithModifiers(newModifiers);
+        return root.ReplaceNode(typeDeclaration, newTypeDeclaration);
     }
 
     private static bool IsAccessModifier(SyntaxKind kind)

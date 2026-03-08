@@ -66,39 +66,14 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
         TypeDeclarationSyntax typeDeclaration,
         CancellationToken cancellationToken)
     {
-        // Find the position where 'partial' should be inserted
-        // It should come after any access modifiers (public, internal, private, protected)
-        // but before other modifiers (static, sealed, abstract, etc.)
+        // The 'partial' modifier must appear immediately before 'class', 'struct', 'record', or 'interface'.
+        // According to C# specification, it should be the last modifier before the type keyword.
+        // Correct order: public sealed partial class MyClass
+        // Incorrect order: public partial sealed class MyClass
         var modifiers = typeDeclaration.Modifiers;
 
-        var insertIndex = 0;
-        var foundAccessModifier = false;
-
-        for (var i = 0; i < modifiers.Count; i++)
-        {
-            var modifier = modifiers[i];
-            if (IsAccessModifier(modifier.Kind()))
-            {
-                insertIndex = i + 1;
-                foundAccessModifier = true;
-            }
-            else if (foundAccessModifier)
-            {
-                // Found a non-access modifier after access modifiers, insert before it
-                insertIndex = i;
-                break;
-            }
-        }
-
-        // If no access modifiers found, insert at the beginning
-        if (!foundAccessModifier && modifiers.Count > 0)
-        {
-            // Check if first modifier is static - partial should come after static
-            if (modifiers[0].IsKind(SyntaxKind.StaticKeyword))
-            {
-                insertIndex = 1;
-            }
-        }
+        // Insert 'partial' at the end of the modifiers list (right before the type keyword)
+        var insertIndex = modifiers.Count;
 
         var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
             .WithTrailingTrivia(SyntaxFactory.Space);
@@ -114,10 +89,5 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
 
         var newRoot = root.ReplaceNode(typeDeclaration, newTypeDeclaration);
         return document.WithSyntaxRoot(newRoot);
-    }
-
-    private static bool IsAccessModifier(SyntaxKind kind)
-    {
-        return kind is SyntaxKind.PublicKeyword or SyntaxKind.PrivateKeyword or SyntaxKind.ProtectedKeyword or SyntaxKind.InternalKeyword;
     }
 }
