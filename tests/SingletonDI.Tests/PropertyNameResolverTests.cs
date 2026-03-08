@@ -43,8 +43,9 @@ public class PropertyNameResolverTests
                         service.DoWork();
                     }
                 }
-
-                public class DerivedConsumer : Consumer
+            
+                [SingletonDIConsume(typeof(MyService))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServiceFromDerived()
                     {
@@ -88,7 +89,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(MyService))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServiceFromDerived()
                     {
@@ -132,7 +134,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(GlobalService))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServiceFromDerived()
                     {
@@ -186,7 +189,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(NamespaceA.Service), typeof(NamespaceB.Service))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServicesFromDerived()
                     {
@@ -243,7 +247,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(NamespaceA.Service), typeof(NamespaceB.Service), typeof(NamespaceC.Service))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServicesFromDerived()
                     {
@@ -300,7 +305,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(Company.Project.Services.Repository), typeof(Company.Project.Data.Repository))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseRepositoriesFromDerived()
                     {
@@ -354,7 +360,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(NamespaceA.Service), typeof(NamespaceB.Service))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServicesFromDerived()
                     {
@@ -411,7 +418,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(NamespaceX.Provider), typeof(NamespaceY.Provider), typeof(NamespaceZ.Provider))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseProvidersFromDerived()
                     {
@@ -469,7 +477,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(NamespaceA.UniqueService), typeof(NamespaceB.ConflictingService), typeof(NamespaceC.ConflictingService))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServicesFromDerived()
                     {
@@ -526,7 +535,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(NamespaceA.ServiceA), typeof(NamespaceB.ServiceB))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServicesFromDerived()
                     {
@@ -573,7 +583,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                public class DerivedConsumer : Consumer
+                [SingletonDIConsume(typeof(OuterClass.NestedService))]
+                public partial class DerivedConsumer : Consumer
                 {
                     public void UseServiceFromDerived()
                     {
@@ -629,7 +640,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Derived consumer with additional DerivedService
-                [SingletonDIConsume(typeof(DerivedService))]
+                [SingletonDIConsume(typeof(BaseService), typeof(DerivedService))]
                 public partial class ConsumerB : ConsumerA
                 {
                     public void UseBothServices()
@@ -690,7 +701,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Level 2: ConsumerB inherits from ConsumerA and consumes ServiceB
-                [SingletonDIConsume(typeof(ServiceB))]
+                [SingletonDIConsume(typeof(ServiceA), typeof(ServiceB))]
                 public partial class ConsumerB : ConsumerA
                 {
                     public void UseServicesAandB()
@@ -703,7 +714,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Level 3: ConsumerC inherits from ConsumerB and consumes ServiceC
-                [SingletonDIConsume(typeof(ServiceC))]
+                [SingletonDIConsume(typeof(ServiceA), typeof(ServiceB), typeof(ServiceC))]
                 public partial class ConsumerC : ConsumerB
                 {
                     public void UseAllServices()
@@ -765,7 +776,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Level 2: ConsumerB inherits from ConsumerA and adds NamespaceB.Service
-                [SingletonDIConsume(typeof(NamespaceB.Service))]
+                [SingletonDIConsume(typeof(NamespaceA.Service), typeof(NamespaceB.Service))]
                 public partial class ConsumerB : ConsumerA
                 {
                     public void UseServicesAandB()
@@ -776,7 +787,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Level 3: ConsumerC inherits from ConsumerB and adds NamespaceC.Service
-                [SingletonDIConsume(typeof(NamespaceC.Service))]
+                [SingletonDIConsume(typeof(NamespaceA.Service), typeof(NamespaceB.Service), typeof(NamespaceC.Service))]
                 public partial class ConsumerC : ConsumerB
                 {
                     public void UseAllServices()
@@ -823,8 +834,8 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                // Derived consumer WITHOUT SingletonDIConsume - inherits property from base
-                public class ConsumerDerived : ConsumerBase
+                [SingletonDIConsume(typeof(MyService))]
+                public partial class ConsumerDerived : ConsumerBase
                 {
                     public void UseServiceFromDerived()
                     {
@@ -883,7 +894,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Level 2: ConsumerB adds CacheService with custom name
-                [SingletonDIConsume(typeof(CacheService))]
+                [SingletonDIConsume(typeof(DatabaseService), typeof(CacheService))]
                 public partial class ConsumerB : ConsumerA
                 {
                     public void UseDatabaseAndCache()
@@ -896,7 +907,7 @@ public class PropertyNameResolverTests
                 }
 
                 // Level 3: ConsumerC adds LoggingService with custom name
-                [SingletonDIConsume(typeof(LoggingService))]
+                [SingletonDIConsume(typeof(DatabaseService), typeof(CacheService), typeof(LoggingService))]
                 public partial class ConsumerC : ConsumerB
                 {
                     public void UseAllServices()
