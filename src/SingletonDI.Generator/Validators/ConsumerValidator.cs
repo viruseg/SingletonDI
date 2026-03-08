@@ -107,8 +107,6 @@ internal static class ConsumerValidator
             }
         }
 
-        // DM0011: Check for duplicates in base classes
-        var baseClassTypes = GetTypesFromBaseClasses(typeSymbol);
         var dependencies = ImmutableArray.CreateBuilder<string>();
 
         foreach (var (depType, location) in dependencyTypes)
@@ -118,17 +116,6 @@ internal static class ConsumerValidator
             // Skip duplicates in attribute arguments (already reported as DM0010)
             if (duplicateTypes.Contains(depFqn))
             {
-                continue;
-            }
-
-            // DM0011: Check if type is already declared in base class
-            if (baseClassTypes.TryGetValue(depFqn, out var baseClassName))
-            {
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.ConsumeDuplicateInBaseClass,
-                    location ?? typeDecl.Identifier.GetLocation(),
-                    depType.Name,
-                    baseClassName));
                 continue;
             }
 
@@ -208,52 +195,5 @@ internal static class ConsumerValidator
         }
 
         return locations;
-    }
-
-    /// <summary>
-    /// Gets all types declared in [SingletonDIConsume] attributes on base classes.
-    /// </summary>
-    private static Dictionary<string, string> GetTypesFromBaseClasses(INamedTypeSymbol typeSymbol)
-    {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var currentBase = typeSymbol.BaseType;
-
-        while (currentBase != null)
-        {
-            var baseConsumeAttr = currentBase.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIConsumeAttribute");
-
-            if (baseConsumeAttr != null && baseConsumeAttr.ConstructorArguments.Length > 0)
-            {
-                var firstArg = baseConsumeAttr.ConstructorArguments[0];
-
-                if (firstArg.Kind == TypedConstantKind.Array)
-                {
-                    foreach (var element in firstArg.Values)
-                    {
-                        if (element is { Kind: TypedConstantKind.Type, Value: ITypeSymbol depType })
-                        {
-                            var depFqn = depType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                            if (!result.ContainsKey(depFqn))
-                            {
-                                result[depFqn] = currentBase.Name;
-                            }
-                        }
-                    }
-                }
-                else if (firstArg is { Kind: TypedConstantKind.Type, Value: ITypeSymbol singleType })
-                {
-                    var depFqn = singleType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    if (!result.ContainsKey(depFqn))
-                    {
-                        result[depFqn] = currentBase.Name;
-                    }
-                }
-            }
-
-            currentBase = currentBase.BaseType;
-        }
-
-        return result;
     }
 }

@@ -741,63 +741,6 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
-    public void DM0011_ConsumeDuplicateInBaseClass()
-    {
-        // Arrange
-        const string SOURCE = """
-                              using SingletonDI.Attributes;
-
-                              /// <summary>
-                              /// Сервис для потребления.
-                              /// </summary>
-                              [SingletonDIProvide]
-                              public class MyService 
-                              { 
-                                  // Метод сервиса
-                                  public void Execute() { }
-                              }
-
-                              /// <summary>
-                              /// Базовый консьюмер.
-                              /// </summary>
-                              [SingletonDIConsume(typeof(MyService))]
-                              public partial class BaseConsumer
-                              {
-                                  // Поле базового класса
-                                  protected int _baseValue;
-                                  
-                                  /// <summary>
-                                  /// Метод базового класса.
-                                  /// </summary>
-                                  public void BaseMethod() { }
-                              }
-
-                              /// <summary>
-                              /// Производный консьюмер с дублирующейся зависимостью.
-                              /// </summary>
-                              [SingletonDIConsume(typeof(MyService))]  // Уже есть в BaseConsumer!
-                              public partial class DerivedConsumer : BaseConsumer
-                              {
-                                  // Поле производного класса
-                                  private string _derivedName;
-                                  
-                                  /* Метод производного класса */
-                                  public void DerivedMethod() { }
-                              }
-                              """;
-
-        // Act
-        var diagnostics = RunGenerator(SOURCE);
-
-        // Assert
-        var dm0011 = diagnostics.FirstOrDefault(d => d.Id == "DM0011");
-        Assert.NotNull(dm0011);
-        Assert.Contains("MyService", dm0011.GetMessage());
-        Assert.Contains("BaseConsumer", dm0011.GetMessage());
-        Assert.Contains("already declared in base class", dm0011.GetMessage());
-    }
-
-    [Fact]
     public void DM0012_InitializeAsyncCannotBeStatic()
     {
         // Arrange

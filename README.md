@@ -301,7 +301,6 @@ The generator reports errors at compile time:
 | **DM0008** | Error | Self-reference not allowed |
 | **DM0009** | Error | Circular dependency detected |
 | **DM0010** | Error | Duplicate type in SingletonDIConsume attribute arguments |
-| **DM0011** | Error | Type already declared in base class |
 | **DM0012** | Error | InitializeAsync method cannot be static |
 | **DM0013** | Error | Invalid property name |
 | **DM0014** | Error | Property name is a reserved keyword |
@@ -438,18 +437,6 @@ Occurs when the same type is specified multiple times in `[SingletonDIConsume]`.
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]  // DM0010
 public partial class OrderController { }
-```
-
-### DM0011: Type already declared in base class
-
-Occurs when an inheritor tries to specify a type in `[SingletonDIConsume]` that was already declared in the base class.
-
-```csharp
-[SingletonDIConsume(typeof(DatabaseService))]
-public partial class BaseController { }
-
-[SingletonDIConsume(typeof(DatabaseService))]  // DM0011: already declared in BaseController
-public partial class OrderController : BaseController { }
 ```
 
 ### DM0012: InitializeAsync method cannot be static

@@ -15,7 +15,6 @@ namespace SingletonDI.Refactoring;
 /// <summary>
 /// Provides code fixes for Consumer-related diagnostics:
 /// - DM0010: Removes duplicate type from SingletonDIConsume attribute
-/// - DM0011: Removes type that is already provided by base class
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(SingletonDIConsumerCodeFixProvider))]
 [Shared]
@@ -25,13 +24,11 @@ public class SingletonDIConsumerCodeFixProvider : CodeFixProvider
     /// Diagnostic IDs that this provider can fix.
     /// </summary>
     private const string DM0010 = "DM0010";
-    private const string DM0011 = "DM0011";
 
     private const string DM0010Title = "Remove duplicate type";
-    private const string DM0011Title = "Remove type from attribute";
 
     /// <inheritdoc />
-    public override ImmutableArray<string> FixableDiagnosticIds => [DM0010, DM0011];
+    public override ImmutableArray<string> FixableDiagnosticIds => [DM0010];
 
     /// <inheritdoc />
     public override FixAllProvider? GetFixAllProvider() =>
@@ -63,29 +60,14 @@ public class SingletonDIConsumerCodeFixProvider : CodeFixProvider
             if (attributeSyntax is null)
                 continue;
 
-            switch (diagnostic.Id)
+            if (diagnostic.Id == DM0010)
             {
-                case DM0010:
-                    {
-                        var action = CodeAction.Create(
-                            DM0010Title,
-                            ct => RemoveArgumentFromAttributeAsync(context.Document, attributeSyntax, attributeArgument, ct),
-                            DM0010Title);
+                var action = CodeAction.Create(
+                    DM0010Title,
+                    ct => RemoveArgumentFromAttributeAsync(context.Document, attributeSyntax, attributeArgument, ct),
+                    DM0010Title);
 
-                        context.RegisterCodeFix(action, diagnostic);
-                    }
-                    break;
-
-                case DM0011:
-                    {
-                        var action = CodeAction.Create(
-                            DM0011Title,
-                            ct => RemoveArgumentFromAttributeAsync(context.Document, attributeSyntax, attributeArgument, ct),
-                            DM0011Title);
-
-                        context.RegisterCodeFix(action, diagnostic);
-                    }
-                    break;
+                context.RegisterCodeFix(action, diagnostic);
             }
         }
     }

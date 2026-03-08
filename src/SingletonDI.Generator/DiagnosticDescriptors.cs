@@ -113,16 +113,6 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
-    /// DM0011: Type already declared in base class.
-    /// </summary>
-    public static readonly DiagnosticDescriptor ConsumeDuplicateInBaseClass = Create(
-        "DM0011",
-        "Type already declared in base class",
-        "Type '{0}' is already declared in base class '{1}'. Remove the duplicate declaration.",
-        Category,
-        DiagnosticSeverity.Error);
-
-    /// <summary>
     /// DM0012: InitializeAsync method cannot be static.
     /// </summary>
     public static readonly DiagnosticDescriptor InitializeAsyncIsStatic = Create(
