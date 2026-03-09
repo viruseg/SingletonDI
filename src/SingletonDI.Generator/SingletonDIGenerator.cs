@@ -19,11 +19,11 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // First, register the ExceptionHelper to be emitted always
+        // First, register the __ExceptionHelper__ to be emitted always
         context.RegisterSourceOutput(context.CompilationProvider, (spc, compilation) =>
         {
-            // Always emit ExceptionHelper
-            spc.AddSource("ExceptionHelper.g.cs", SourceText.From(ExceptionHelperEmitter.Generate(), encoding: System.Text.Encoding.UTF8));
+            // Always emit __ExceptionHelper__
+            spc.AddSource("__ExceptionHelper__.g.cs", SourceText.From(ExceptionHelperEmitter.Generate(), encoding: System.Text.Encoding.UTF8));
         });
 
         // Get provider types - types with [SingletonDIProvide] attribute
@@ -198,15 +198,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     sortResult.Levels,
                     propertyNames);
 
-                spc.AddSource("SingletonDIContainer.g.cs", SourceText.From(containerSource, encoding: System.Text.Encoding.UTF8));
+                spc.AddSource("__SingletonDIContainer__.g.cs", SourceText.From(containerSource, encoding: System.Text.Encoding.UTF8));
 
                 // Generate SingletonInitializer
                 var initializerSource = SingletonInitializerEmitter.Generate();
                 spc.AddSource("SingletonDIInitializer.g.cs", SourceText.From(initializerSource, encoding: System.Text.Encoding.UTF8));
 
-                // Generate SingletonDILifetime for shutdown handling
+                // Generate __SingletonDILifetime__ for shutdown handling
                 var lifetimeSource = LifetimeEmitter.Generate();
-                spc.AddSource("SingletonDILifetime.g.cs", SourceText.From(lifetimeSource, encoding: System.Text.Encoding.UTF8));
+                spc.AddSource("__SingletonDILifetime__.g.cs", SourceText.From(lifetimeSource, encoding: System.Text.Encoding.UTF8));
             }
 
             // Generate consumer partial classes

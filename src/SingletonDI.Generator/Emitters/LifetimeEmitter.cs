@@ -1,12 +1,12 @@
 namespace SingletonDI.Generator.Emitters;
 
 /// <summary>
-/// Emits the SingletonDILifetime class for handling OS shutdown signals.
+/// Emits the __SingletonDILifetime__ class for handling OS shutdown signals.
 /// </summary>
 internal static class LifetimeEmitter
 {
     /// <summary>
-    /// Generates the SingletonDILifetime class source code.
+    /// Generates the __SingletonDILifetime__ class source code.
     /// </summary>
     public static string Generate()
     {
@@ -20,7 +20,7 @@ internal static class LifetimeEmitter
                using System.ComponentModel;
                using System.Runtime.CompilerServices;
 
-               namespace SingletonDI.Generated.Internal
+               namespace __SDI.Generated.Internal__
                {
                    /// <summary>
                    /// Handles OS shutdown signals and ensures proper disposal of singleton instances.
@@ -28,9 +28,9 @@ internal static class LifetimeEmitter
                    /// </summary>
                    [EditorBrowsable(EditorBrowsableState.Never)]
                    [CompilerGenerated]
-                   internal sealed class SingletonDILifetime : IDisposable
+                   internal sealed class __SingletonDILifetime__ : IDisposable
                    {
-                       private static SingletonDILifetime? _instance;
+                       private static __SingletonDILifetime__? _instance;
                        private static readonly object _lock = new object();
                        
                        private IEnumerable<IDisposable>? _posixRegistrations;
@@ -39,7 +39,7 @@ internal static class LifetimeEmitter
                        /// <summary>
                        /// Gets the singleton instance of the lifetime manager.
                        /// </summary>
-                       public static SingletonDILifetime Instance
+                       public static __SingletonDILifetime__ Instance
                        {
                            get
                            {
@@ -47,14 +47,14 @@ internal static class LifetimeEmitter
                                {
                                    lock (_lock)
                                    {
-                                       _instance ??= new SingletonDILifetime();
+                                       _instance ??= new __SingletonDILifetime__();
                                    }
                                }
                                return _instance;
                            }
                        }
 
-                       private SingletonDILifetime()
+                       private __SingletonDILifetime__()
                        {
                        }
 
@@ -123,7 +123,7 @@ internal static class LifetimeEmitter
                        {
                            try
                            {
-                               await SingletonDIContainer.DisposeAsync().ConfigureAwait(false);
+                               await __SingletonDIContainer__.DisposeAsync().ConfigureAwait(false);
                            }
                            catch
                            {

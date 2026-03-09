@@ -104,7 +104,7 @@ internal static class ConsumerEmitter
             sb.AppendLine("        {");
             sb.AppendLine("            get");
             sb.AppendLine("            {");
-            sb.AppendLine($"                return global::SingletonDI.Generated.Internal.SingletonDIContainer.{containerPropertyName};");
+            sb.AppendLine($"                return global::__SDI.Generated.Internal__.__SingletonDIContainer__.{containerPropertyName};");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();

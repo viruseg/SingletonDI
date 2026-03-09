@@ -152,8 +152,8 @@ public class SingletonDisposeOrderTests
         // Get types via reflection
         var actionLogType = assembly.GetType("TestApp.ActionLog")
                             ?? throw new InvalidOperationException("Could not find TestApp.ActionLog type");
-        var containerType = assembly.GetType("SingletonDI.Generated.Internal.SingletonDIContainer")
-                            ?? throw new InvalidOperationException("Could not find SingletonDIContainer type");
+        var containerType = assembly.GetType("__SDI.Generated.Internal__.__SingletonDIContainer__")
+                            ?? throw new InvalidOperationException("Could not find __SingletonDIContainer__ type");
 
         // Clear log before test
         var clearMethod = actionLogType.GetMethod("Clear")
@@ -266,7 +266,7 @@ public class SingletonDisposeOrderTests
 
         var assembly = LoadAssembly(compilation);
         var actionLogType = assembly.GetType("TestApp.ActionLog")!;
-        var containerType = assembly.GetType("SingletonDI.Generated.Internal.SingletonDIContainer")!;
+        var containerType = assembly.GetType("__SDI.Generated.Internal__.__SingletonDIContainer__")!;
 
         actionLogType.GetMethod("Clear")!.Invoke(null, null);
 
