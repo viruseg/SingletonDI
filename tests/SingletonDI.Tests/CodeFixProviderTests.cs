@@ -1,10 +1,6 @@
-using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-using SingletonDI.Generator;
 using SingletonDI.Refactoring;
 using Xunit;
 
@@ -16,6 +12,33 @@ namespace SingletonDI.Tests;
 /// </summary>
 public class CodeFixProviderTests
 {
+    [Fact]
+    public async Task DM0004_ProductionProviderRegistersAndAppliesCodeFix()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class Service
+            {
+                private Service()
+                {
+                }
+            }
+            """;
+
+        var result = await CodeFixTestHarness.ApplyFirstAsync(
+            source,
+            "DM0004",
+            new SingletonDIProviderCodeFixProvider(),
+            "Add public parameterless constructor");
+
+        Assert.Equal("Add public parameterless constructor", result.Action.Title);
+        var compilation = await result.Document.Project.GetCompilationAsync();
+        Assert.NotNull(compilation);
+        Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Id == "DM0004");
+    }
+
 #region SingletonDIProviderCodeFixProvider Tests
 
     [Fact]
@@ -826,235 +849,28 @@ public class CodeFixProviderTests
         string diagnosticId,
         CodeFixProvider codeFixProvider)
     {
-        // Create compilation with the test source
-        var compilation = CreateCompilation(testSource);
-
-        // Run generator to get diagnostics
-        var generator = new SingletonDIGenerator();
-        var driver = CSharpGeneratorDriver.Create(generator);
-        driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var generatorDiagnostics);
-
-        // Find the target diagnostic
-        var targetDiagnostic = generatorDiagnostics.FirstOrDefault(d => d.Id == diagnosticId);
-        Assert.NotNull(targetDiagnostic);
-
-        // Get the syntax tree from the compilation
-        var syntaxTree = outputCompilation.SyntaxTrees.First();
-        var root = await syntaxTree.GetRootAsync();
-
-        // Find the node at the diagnostic location
-        var node = root.FindNode(targetDiagnostic.Location.SourceSpan);
-
-        // Apply the code fix based on the diagnostic ID and provider type
-        SyntaxNode newRoot = null!;
-
-        if (codeFixProvider is SingletonDIProviderCodeFixProvider)
+        var expectedTitle = (codeFixProvider, diagnosticId) switch
         {
-            newRoot = diagnosticId switch
-            {
-                "DM0004" => ApplyDM0004Fix(root, node),
-                "DM0005" => ApplyDM0005Fix(root, node),
-                "DM0012" => ApplyDM0012Fix(root, node),
-                _ => throw new ArgumentException($"Unknown diagnostic ID: {diagnosticId}")
-            };
-        }
-        else if (codeFixProvider is SingletonDIConsumerCodeFixProvider)
-        {
-            newRoot = ApplyConsumerFix(root, node);
-        }
-        else if (codeFixProvider is SingletonDIPartialCodeFixProvider)
-        {
-            newRoot = ApplyDM0007Fix(root, node);
-        }
+            (SingletonDIProviderCodeFixProvider, "DM0004") => "Add public parameterless constructor",
+            (SingletonDIProviderCodeFixProvider, "DM0005") => "Make method public",
+            (SingletonDIProviderCodeFixProvider, "DM0012") => "Remove static modifier",
+            (SingletonDIConsumerCodeFixProvider, "DM0010") => "Remove duplicate type",
+            (SingletonDIPartialCodeFixProvider, "DM0007") => "Add 'partial' modifier",
+            _ => throw new ArgumentException($"Unknown diagnostic/provider combination: {diagnosticId}")
+        };
 
-        Assert.NotNull(newRoot);
-
-        // Get the fixed source
-        var fixedSource = newRoot.NormalizeWhitespace().ToFullString();
-
-        // Normalize whitespace for comparison
+        var result = await CodeFixTestHarness.ApplyFirstAsync(
+            testSource,
+            diagnosticId,
+            codeFixProvider,
+            expectedTitle);
+        var fixedSource = (await result.Document.GetTextAsync()).ToString();
         var normalizedExpected = NormalizeWhitespace(expectedSource);
 
-        Assert.Equal(normalizedExpected, fixedSource);
-    }
-
-    private static SyntaxNode ApplyDM0004Fix(SyntaxNode root, SyntaxNode node)
-    {
-        var typeDeclaration = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
-        Assert.NotNull(typeDeclaration);
-
-        // Check if there's an existing parameterless constructor
-        var existingParameterlessCtor = typeDeclaration.Members
-            .OfType<ConstructorDeclarationSyntax>()
-            .FirstOrDefault(c => c.ParameterList.Parameters.Count == 0);
-
-        if (existingParameterlessCtor is not null)
-        {
-            // Change the existing constructor's accessibility to public
-            // Preserve the leading trivia (comments, XML docs) from the original constructor
-            var leadingTrivia = existingParameterlessCtor.GetLeadingTrivia();
-            var newModifiers = MakePublicModifiers(existingParameterlessCtor.Modifiers);
-            var newConstructor = existingParameterlessCtor
-                .WithModifiers(newModifiers)
-                .WithLeadingTrivia(leadingTrivia);
-            var newMembers = typeDeclaration.Members.Replace(existingParameterlessCtor, newConstructor);
-            var newTypeDeclaration = typeDeclaration.WithMembers(newMembers);
-            return root.ReplaceNode(typeDeclaration, newTypeDeclaration);
-        }
-        else
-        {
-            // No parameterless constructor exists, create a new public one
-            var constructor = SyntaxFactory.ConstructorDeclaration(typeDeclaration.Identifier)
-                                           .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
-                                           .WithBody(SyntaxFactory.Block());
-
-            var newMembers = typeDeclaration.Members.Insert(0, constructor);
-            var newTypeDeclaration = typeDeclaration.WithMembers(newMembers);
-
-            return root.ReplaceNode(typeDeclaration, newTypeDeclaration);
-        }
-    }
-
-    private static SyntaxTokenList MakePublicModifiers(SyntaxTokenList existingModifiers)
-    {
-        // Remove all access modifiers and add public at the beginning
-        var newModifiers = SyntaxFactory.TokenList();
-
-        foreach (var modifier in existingModifiers)
-        {
-            if (!IsAccessModifier(modifier.Kind()))
-            {
-                newModifiers = newModifiers.Add(modifier);
-            }
-        }
-
-        // Insert public at the beginning
-        newModifiers = newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
-
-        return newModifiers;
-    }
-
-    private static SyntaxNode ApplyDM0005Fix(SyntaxNode root, SyntaxNode node)
-    {
-        var methodDeclaration = node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
-        Assert.NotNull(methodDeclaration);
-
-        // Preserve the leading trivia (comments, XML docs) from the original method
-        var leadingTrivia = methodDeclaration.GetLeadingTrivia();
-
-        var modifiers = methodDeclaration.Modifiers;
-        var newModifiers = SyntaxFactory.TokenList();
-        var hasAccessModifier = false;
-
-        foreach (var modifier in modifiers)
-        {
-            if (IsAccessModifier(modifier.Kind()))
-            {
-                if (!hasAccessModifier)
-                {
-                    newModifiers = newModifiers.Add(SyntaxFactory.Token(SyntaxKind.PublicKeyword));
-                    hasAccessModifier = true;
-                }
-            }
-            else
-            {
-                newModifiers = newModifiers.Add(modifier);
-            }
-        }
-
-        if (!hasAccessModifier)
-        {
-            newModifiers = newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
-        }
-
-        var newMethodDeclaration = methodDeclaration
-            .WithModifiers(newModifiers)
-            .WithLeadingTrivia(leadingTrivia);
-        return root.ReplaceNode(methodDeclaration, newMethodDeclaration);
-    }
-
-    private static SyntaxNode ApplyDM0012Fix(SyntaxNode root, SyntaxNode node)
-    {
-        var methodDeclaration = node.FirstAncestorOrSelf<MethodDeclarationSyntax>();
-        Assert.NotNull(methodDeclaration);
-
-        // Preserve the leading trivia (comments, XML docs) from the original method
-        var leadingTrivia = methodDeclaration.GetLeadingTrivia();
-
-        var newModifiers = SyntaxFactory.TokenList(
-            methodDeclaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.StaticKeyword)));
-
-        var newMethodDeclaration = methodDeclaration
-            .WithModifiers(newModifiers)
-            .WithLeadingTrivia(leadingTrivia);
-        return root.ReplaceNode(methodDeclaration, newMethodDeclaration);
-    }
-
-    private static SyntaxNode ApplyConsumerFix(SyntaxNode root, SyntaxNode node)
-    {
-        var typeOfExpression = node.FirstAncestorOrSelf<TypeOfExpressionSyntax>();
-        Assert.NotNull(typeOfExpression);
-
-        var attributeArgument = typeOfExpression.Parent as AttributeArgumentSyntax;
-        Assert.NotNull(attributeArgument);
-
-        var attributeSyntax = attributeArgument.FirstAncestorOrSelf<AttributeSyntax>();
-        Assert.NotNull(attributeSyntax);
-
-        var argumentList = attributeSyntax.ArgumentList;
-        Assert.NotNull(argumentList);
-
-        var newArguments = argumentList.Arguments.Remove(attributeArgument);
-
-        // If no arguments remain, remove the entire attribute
-        if (newArguments.Count == 0)
-        {
-            var attributeList = attributeSyntax.Parent as AttributeListSyntax;
-            Assert.NotNull(attributeList);
-
-            if (attributeList.Attributes.Count == 1)
-            {
-                // Use KeepLeadingTrivia to preserve comments and XML docs
-                return root.RemoveNode(attributeList, SyntaxRemoveOptions.KeepLeadingTrivia)!;
-            }
-
-            var newAttributeList = attributeList.RemoveNode(attributeSyntax, SyntaxRemoveOptions.KeepNoTrivia);
-            Assert.NotNull(newAttributeList);
-
-            return root.ReplaceNode(attributeList, newAttributeList);
-        }
-
-        var newArgumentList = argumentList.WithArguments(newArguments);
-        var newAttribute = attributeSyntax.WithArgumentList(newArgumentList);
-
-        return root.ReplaceNode(attributeSyntax, newAttribute);
-    }
-
-    private static SyntaxNode ApplyDM0007Fix(SyntaxNode root, SyntaxNode node)
-    {
-        var typeDeclaration = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
-        Assert.NotNull(typeDeclaration);
-
-        // The 'partial' modifier must appear immediately before 'class', 'struct', 'record', or 'interface'.
-        // Insert at the end of the modifiers list (right before the type keyword)
-        var modifiers = typeDeclaration.Modifiers;
-        var insertIndex = modifiers.Count;
-
-        var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
-            .WithTrailingTrivia(SyntaxFactory.Space);
-
-        var newModifiers = modifiers.Insert(insertIndex, partialToken);
-
-        var newTypeDeclaration = typeDeclaration.WithModifiers(newModifiers);
-        return root.ReplaceNode(typeDeclaration, newTypeDeclaration);
-    }
-
-    private static bool IsAccessModifier(SyntaxKind kind)
-    {
-        return kind is SyntaxKind.PublicKeyword
-            or SyntaxKind.PrivateKeyword
-            or SyntaxKind.ProtectedKeyword
-            or SyntaxKind.InternalKeyword;
+        Assert.Equal(normalizedExpected, NormalizeWhitespace(fixedSource));
+        var compilation = await result.Document.Project.GetCompilationAsync();
+        Assert.NotNull(compilation);
+        Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Id == diagnosticId);
     }
 
     private static string NormalizeWhitespace(string source)
@@ -1062,32 +878,6 @@ public class CodeFixProviderTests
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetRoot();
         return root.NormalizeWhitespace().ToFullString();
-    }
-
-    private static CSharpCompilation CreateCompilation(string source)
-    {
-        var references = new List<MetadataReference>
-        {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(SingletonDI.Attributes.SingletonDIProvideAttribute).Assembly.Location),
-        };
-
-        var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var assemblyName in new[] { "System.Runtime", "System.Collections", "System.Linq", "netstandard" })
-        {
-            var path = Path.Combine(assemblyPath, assemblyName + ".dll");
-            if (File.Exists(path))
-            {
-                references.Add(MetadataReference.CreateFromFile(path));
-            }
-        }
-
-        return CSharpCompilation.Create(
-            "TestAssembly",
-            [CSharpSyntaxTree.ParseText(source)],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
     }
 
 #endregion
