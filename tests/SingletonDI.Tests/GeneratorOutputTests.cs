@@ -121,6 +121,75 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_ReportsUnsupportedCSharpVersionBeforeAddingSource()
+    {
+        var parseOptions = new CSharpParseOptions(
+            LanguageVersion.CSharp7_3,
+            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        var compilation = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            parseOptions);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+
+        var diagnostic = Assert.Single(runResult.Diagnostics, item => item.Id == "DM0027");
+        Assert.Equal("Generated code requires C# 9 or newer", diagnostic.Descriptor.Title);
+        Assert.Contains("CSharp7_3", diagnostic.GetMessage());
+        Assert.Empty(runResult.Results.SelectMany(result => result.GeneratedSources));
+    }
+
+    [Fact]
+    public void Generator_ReportsFileScopedConsumerRequiresCSharp10()
+    {
+        var parseOptions = new CSharpParseOptions(
+            LanguageVersion.CSharp9,
+            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        var compilation = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            namespace App;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public partial class Consumer
+            {
+            }
+            """,
+            parseOptions);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+
+        var diagnostic = Assert.Single(runResult.Diagnostics, item => item.Id == "DM0028");
+        Assert.Equal("File-scoped consumers require C# 10", diagnostic.Descriptor.Title);
+        Assert.Contains("CSharp9", diagnostic.GetMessage());
+        Assert.Empty(runResult.Results.SelectMany(result => result.GeneratedSources));
+    }
+
+    [Fact]
     public void Generator_GeneratedSourcesCompileAndExposeTypedRegistration()
     {
         const string source = """

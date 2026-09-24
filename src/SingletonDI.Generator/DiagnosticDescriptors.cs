@@ -242,6 +242,26 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0027: Generated source requires a newer C# language version.
+    /// </summary>
+    public static readonly DiagnosticDescriptor GeneratedLanguageVersionNotSupported = Create(
+        "DM0027",
+        "Generated code requires C# 9 or newer",
+        "Generated SingletonDI code requires C# 9 or newer, but the effective language version is '{0}'.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0028: A file-scoped consumer requires C# 10 or newer.
+    /// </summary>
+    public static readonly DiagnosticDescriptor FileScopedConsumerLanguageVersionNotSupported = Create(
+        "DM0028",
+        "File-scoped consumers require C# 10",
+        "File-scoped consumer declarations require C# 10 or newer, but the effective language version is '{0}'.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

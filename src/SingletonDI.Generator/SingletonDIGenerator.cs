@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
@@ -22,6 +23,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     {
         var generatorOptions = context.AnalyzerConfigOptionsProvider
             .Select(static (optionsProvider, _) => ReadGeneratorOptions(optionsProvider));
+        var languageSupport = context.CompilationProvider
+            .Select(static (compilation, _) => GetLanguageSupport(compilation));
+
+        context.RegisterSourceOutput(
+            context.CompilationProvider,
+            static (sourceProductionContext, compilation) =>
+                ReportLanguageDiagnostics(compilation, sourceProductionContext.ReportDiagnostic));
 
         var providerCandidates = context.SyntaxProvider
             .ForAttributeWithMetadataName(
@@ -68,11 +76,17 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         var providerInputs = providerCandidates
             .Collect()
+            .Combine(languageSupport)
             .Combine(generatorOptions)
             .WithTrackingName("ProviderModuleOutput");
         context.RegisterSourceOutput(providerInputs, (sourceProductionContext, input) =>
         {
-            var (candidates, options) = input;
+            var ((candidates, language), options) = input;
+            if (!language.CanEmit)
+            {
+                return;
+            }
+
             ReportProviderCandidateDiagnostics(candidates, sourceProductionContext.ReportDiagnostic);
             if (options.IsCompositionRoot)
             {
@@ -91,7 +105,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(compositionInputs, (sourceProductionContext, input) =>
         {
             var (((candidates, consumerDeclarationsForRoot), compilation), options) = input;
-            if (!options.IsCompositionRoot)
+            if (!CanEmitGeneratedSource(compilation) || !options.IsCompositionRoot)
             {
                 return;
             }
@@ -112,8 +126,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(consumerInputs, (sourceProductionContext, input) =>
         {
             var (((consumerDeclarationsForOutput, compilation), providerCandidatesForOutput), options) = input;
-            if ((consumerDeclarationsForOutput.IsDefault || consumerDeclarationsForOutput.IsEmpty) &&
-                (options.IsCompositionRoot || !IsExecutable(options, compilation)))
+            if (!CanEmitGeneratedSource(compilation) ||
+                ((consumerDeclarationsForOutput.IsDefault || consumerDeclarationsForOutput.IsEmpty) &&
+                 (options.IsCompositionRoot || !IsExecutable(options, compilation))))
             {
                 return;
             }
@@ -691,6 +706,126 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         }
 
         return compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication;
+    }
+
+    private static void ReportLanguageDiagnostics(
+        Compilation compilation,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        var inputLocation = FindGeneratorAttributeLocation(compilation, "SingletonDIConsume") ??
+            FindGeneratorAttributeLocation(compilation, "SingletonDIProvide");
+        if (inputLocation is null)
+        {
+            return;
+        }
+
+        var effectiveVersion = GetEffectiveLanguageVersion(compilation);
+        if (effectiveVersion.CompareTo(LanguageVersion.CSharp9) < 0)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.GeneratedLanguageVersionNotSupported,
+                inputLocation,
+                effectiveVersion));
+        }
+
+        var fileScopedLocation = FindFileScopedConsumerLocation(compilation);
+        if (fileScopedLocation is not null &&
+            effectiveVersion.CompareTo(LanguageVersion.CSharp10) < 0)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.FileScopedConsumerLanguageVersionNotSupported,
+                fileScopedLocation,
+                effectiveVersion));
+        }
+    }
+
+    private readonly record struct LanguageSupport(
+        LanguageVersion EffectiveVersion,
+        bool HasFileScopedConsumer)
+    {
+        public bool CanEmit =>
+            EffectiveVersion.CompareTo(LanguageVersion.CSharp9) >= 0 &&
+            (!HasFileScopedConsumer || EffectiveVersion.CompareTo(LanguageVersion.CSharp10) >= 0);
+    }
+
+    private static bool CanEmitGeneratedSource(Compilation compilation)
+    {
+        return GetLanguageSupport(compilation).CanEmit;
+    }
+
+    private static LanguageSupport GetLanguageSupport(Compilation compilation)
+    {
+        return new LanguageSupport(
+            GetEffectiveLanguageVersion(compilation),
+            FindFileScopedConsumerLocation(compilation) is not null);
+    }
+
+    private static LanguageVersion GetEffectiveLanguageVersion(Compilation compilation)
+    {
+        return compilation.SyntaxTrees
+            .Select(tree => tree.Options)
+            .OfType<CSharpParseOptions>()
+            .Select(options => LanguageVersionFacts.MapSpecifiedToEffectiveVersion(options.LanguageVersion))
+            .OrderBy(version => (int)version)
+            .FirstOrDefault();
+    }
+
+    private static Location? FindGeneratorAttributeLocation(
+        Compilation compilation,
+        string attributeName)
+    {
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            foreach (var typeDeclaration in tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
+            {
+                foreach (var attribute in typeDeclaration.AttributeLists
+                             .SelectMany(attributeList => attributeList.Attributes))
+                {
+                    if (IsAttribute(attribute, attributeName))
+                    {
+                        return attribute.GetLocation();
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static Location? FindFileScopedConsumerLocation(Compilation compilation)
+    {
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            foreach (var typeDeclaration in tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
+            {
+                if (!typeDeclaration.Ancestors().OfType<FileScopedNamespaceDeclarationSyntax>().Any() ||
+                    !typeDeclaration.AttributeLists
+                        .SelectMany(attributeList => attributeList.Attributes)
+                        .Any(attribute => IsAttribute(attribute, "SingletonDIConsume")))
+                {
+                    continue;
+                }
+
+                return typeDeclaration.Ancestors()
+                    .OfType<FileScopedNamespaceDeclarationSyntax>()
+                    .First()
+                    .GetLocation();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsAttribute(AttributeSyntax attribute, string name)
+    {
+        var attributeName = attribute.Name switch
+        {
+            QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+            AliasQualifiedNameSyntax alias => alias.Name.Identifier.Text,
+            SimpleNameSyntax simple => simple.Identifier.Text,
+            _ => attribute.Name.ToString(),
+        };
+        return attributeName == name || attributeName == name + "Attribute";
     }
 
     private static GeneratorOptions ReadGeneratorOptions(AnalyzerConfigOptionsProvider optionsProvider)
