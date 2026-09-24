@@ -40,6 +40,7 @@
 - Несколько независимых process-wide composition roots.
 - Reflection-based service discovery.
 - Поддержка C# 7.3. Generated module initializer требует C# 9; более старый `LangVersion` получает явную diagnostic до генерации.
+- File-scoped consumer declarations требуют C# 10; при C# 9 такой consumer получает отдельную feature diagnostic.
 - Изменение стратегии names, кроме исправления нестабильных hint names и member collisions.
 - Публикация NuGet-пакета и изменение git remote.
 
@@ -62,7 +63,7 @@
 - `private` для struct, record struct и sealed class;
 - `protected` для unsealed class, чтобы derived-класс мог использовать унаследованный consumer без повторного атрибута.
 
-Если containing type не является partial, nested consumer получает отдельную diagnostic: partial declaration нельзя открыть без изменения containing type. Generic, nested, struct, record и file consumers получают compile-and-run tests. Keyword-escaped identifiers сохраняются при генерации.
+Если containing type не является partial, nested consumer получает отдельную diagnostic: partial declaration нельзя открыть без изменения containing type. Generic, nested, struct, record и file consumers получают compile-and-run tests; file-scoped source требует C# 10. Keyword-escaped identifiers сохраняются при генерации.
 
 Hint name строится из sanitized fully qualified identity и стабильного hash. В hint name не попадают `<`, `>`, `,`, assembly separators и другие недопустимые символы. Два разных consumer-а не могут перезаписать generated source друг друга.
 
