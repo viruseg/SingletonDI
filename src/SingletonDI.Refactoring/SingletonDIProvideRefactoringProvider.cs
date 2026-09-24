@@ -74,8 +74,10 @@ public class SingletonDIProvideRefactoringProvider : CodeRefactoringProvider
 
     private static bool IsTaskType(ITypeSymbol type)
     {
-        return type.ToDisplayString() == "System.Threading.Tasks.Task" ||
-               type.ToDisplayString() == "Task";
+        var originalDefinition = type.OriginalDefinition;
+        return originalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) is
+            "global::System.Threading.Tasks.Task" or
+            "global::System.Threading.Tasks.ValueTask";
     }
 
     private static async Task<Document> AddInitializeAsyncMethodAsync(
@@ -83,18 +85,15 @@ public class SingletonDIProvideRefactoringProvider : CodeRefactoringProvider
         ClassDeclarationSyntax classDeclaration,
         CancellationToken cancellationToken)
     {
-        var taskCompletedTask = SyntaxFactory.MemberAccessExpression(
-            SyntaxKind.SimpleMemberAccessExpression,
-            SyntaxFactory.IdentifierName("Task"),
-            SyntaxFactory.IdentifierName("CompletedTask")
-        );
+        var taskCompletedTask = SyntaxFactory.ParseExpression(
+            "global::System.Threading.Tasks.Task.CompletedTask");
 
         var returnStatement = SyntaxFactory.ReturnStatement(taskCompletedTask);
 
         var body = SyntaxFactory.Block(returnStatement);
 
         var method = SyntaxFactory.MethodDeclaration(
-                                      SyntaxFactory.ParseTypeName("Task"),
+                                      SyntaxFactory.ParseTypeName("global::System.Threading.Tasks.Task"),
                                       "InitializeAsync")
                                   .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
                                   .WithBody(body)

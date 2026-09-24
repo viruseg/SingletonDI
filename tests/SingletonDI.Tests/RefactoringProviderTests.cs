@@ -115,6 +115,89 @@ public sealed class RefactoringProviderTests
     }
 
     [Fact]
+    public async Task DoesNotOfferActionWhenValueTaskInitializerExists()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class Service
+            {
+                public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+            }
+            """;
+        var context = await RefactoringTestHarness.CreateAsync(source);
+        var declaration = (await context.Document.GetSyntaxRootAsync())!
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Single();
+        var actions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declaration.Identifier.Span,
+            new SingletonDIProvideRefactoringProvider());
+
+        Assert.Empty(actions);
+    }
+
+    [Fact]
+    public async Task OffersActionForInitializerWithParameters()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class Service
+            {
+                public Task InitializeAsync(int value) => Task.CompletedTask;
+            }
+            """;
+        var context = await RefactoringTestHarness.CreateAsync(source);
+        var declaration = (await context.Document.GetSyntaxRootAsync())!
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Single();
+        var actions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declaration.Identifier.Span,
+            new SingletonDIProvideRefactoringProvider());
+
+        var action = Assert.Single(actions);
+        var changedDocument = await RefactoringTestHarness.ApplyAsync(context, action);
+        var compilation = await changedDocument.Project.GetCompilationAsync();
+        Assert.NotNull(compilation);
+        Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public async Task AddsCompilableTaskWithoutTaskUsing()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class Service
+            {
+            }
+            """;
+        var context = await RefactoringTestHarness.CreateAsync(source);
+        var declaration = (await context.Document.GetSyntaxRootAsync())!
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .Single();
+        var actions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declaration.Identifier.Span,
+            new SingletonDIProvideRefactoringProvider());
+        var action = Assert.Single(actions);
+        var changedDocument = await RefactoringTestHarness.ApplyAsync(context, action);
+        var compilation = await changedDocument.Project.GetCompilationAsync();
+        Assert.NotNull(compilation);
+        Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public async Task HonorsCancellation()
     {
         const string source = """
