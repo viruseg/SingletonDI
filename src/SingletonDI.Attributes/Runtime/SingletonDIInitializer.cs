@@ -215,7 +215,7 @@ public static class SingletonDIInitializer
 
     private static void RegisterShutdownHandlers()
     {
-        _shutdownManager ??= new ShutdownManager(static () => DisposeAsync());
+        _shutdownManager ??= new ShutdownManager(static () => DisposeAsync(), Environment.Exit);
         _shutdownManager.Register();
     }
 }

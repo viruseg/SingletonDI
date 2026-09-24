@@ -10,6 +10,87 @@ public sealed class SingletonDIInitializerTests
     private static readonly SemaphoreSlim TestGate = new(1, 1);
 
     [Fact]
+    public async Task ShutdownManager_CancelKeyPressCancelsAndTerminatesOnce()
+    {
+        var disposeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCount = 0;
+        var terminateCount = 0;
+        var exitCode = 0;
+        var manager = new ShutdownManager(
+            () =>
+            {
+                Interlocked.Increment(ref disposeCount);
+                disposeStarted.TrySetResult(true);
+                return new ValueTask(releaseDispose.Task);
+            },
+            code =>
+            {
+                Interlocked.Increment(ref terminateCount);
+                Volatile.Write(ref exitCode, code);
+            });
+        var cancelled = false;
+
+        var shutdown = manager.HandleCancelKeyPressForTesting(() => cancelled = true);
+        await disposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(cancelled);
+        Assert.Equal(0, Volatile.Read(ref terminateCount));
+
+        releaseDispose.TrySetResult(true);
+        await shutdown;
+        Assert.Equal(130, Volatile.Read(ref exitCode));
+
+        var secondShutdown = manager.HandleCancelKeyPressForTesting(() => cancelled = true);
+        await secondShutdown;
+
+        Assert.Equal(1, Volatile.Read(ref disposeCount));
+        Assert.Equal(1, Volatile.Read(ref terminateCount));
+    }
+
+    [Theory]
+    [InlineData(130)]
+    [InlineData(143)]
+    [InlineData(131)]
+    public async Task ShutdownManager_PosixSignalCancelsAndUsesExitCode(int expectedExitCode)
+    {
+        var disposeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCount = 0;
+        var terminateCount = 0;
+        var exitCode = 0;
+        var manager = new ShutdownManager(
+            () =>
+            {
+                Interlocked.Increment(ref disposeCount);
+                disposeStarted.TrySetResult(true);
+                return new ValueTask(releaseDispose.Task);
+            },
+            code =>
+            {
+                Interlocked.Increment(ref terminateCount);
+                Volatile.Write(ref exitCode, code);
+            });
+        var cancelled = false;
+
+        var shutdown = manager.HandlePosixSignalForTesting(() => cancelled = true, expectedExitCode);
+        await disposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(cancelled);
+        Assert.Equal(0, Volatile.Read(ref terminateCount));
+
+        releaseDispose.TrySetResult(true);
+        await shutdown;
+        Assert.Equal(expectedExitCode, Volatile.Read(ref exitCode));
+
+        var secondShutdown = manager.HandlePosixSignalForTesting(() => cancelled = true, expectedExitCode);
+        await secondShutdown;
+
+        Assert.Equal(1, Volatile.Read(ref disposeCount));
+        Assert.Equal(1, Volatile.Read(ref terminateCount));
+    }
+
+    [Fact]
     public async Task InitializeAsync_ConcurrentTrueRequestRegistersShutdownHandlers()
     {
         await TestGate.WaitAsync();

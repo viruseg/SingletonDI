@@ -9,14 +9,18 @@ namespace SingletonDI.Generated;
 internal sealed class ShutdownManager : IDisposable
 {
     private readonly Func<ValueTask> _dispose;
+    private readonly Action<int> _terminateProcess;
     private readonly object _sync = new();
     private IDisposable[]? _posixRegistrations;
+    private Task? _disposeTask;
+    private Task? _shutdownTask;
     private bool _registered;
     private bool _disposed;
 
-    internal ShutdownManager(Func<ValueTask> dispose)
+    internal ShutdownManager(Func<ValueTask> dispose, Action<int> terminateProcess)
     {
         _dispose = dispose ?? throw new ArgumentNullException(nameof(dispose));
+        _terminateProcess = terminateProcess ?? throw new ArgumentNullException(nameof(terminateProcess));
     }
 
     internal void Register()
@@ -86,13 +90,29 @@ internal sealed class ShutdownManager : IDisposable
 
     private void OnProcessExit(object? sender, EventArgs e)
     {
-        BeginDispose();
+        _ = GetDisposeTask();
     }
 
     private void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
     {
-        e.Cancel = true;
-        BeginDispose();
+        _ = HandleCancelKeyPress(e);
+    }
+
+    internal Task HandleCancelKeyPress(ConsoleCancelEventArgs args)
+    {
+        args.Cancel = true;
+        return BeginSignalShutdown(130);
+    }
+
+    internal Task HandleCancelKeyPressForTesting(Action cancel)
+    {
+        if (cancel is null)
+        {
+            throw new ArgumentNullException(nameof(cancel));
+        }
+
+        cancel();
+        return BeginSignalShutdown(130);
     }
 
 #if NET8_0_OR_GREATER
@@ -102,9 +122,15 @@ internal sealed class ShutdownManager : IDisposable
         {
             _posixRegistrations = new IDisposable[]
             {
-                PosixSignalRegistration.Create(PosixSignal.SIGINT, HandlePosixSignal),
-                PosixSignalRegistration.Create(PosixSignal.SIGTERM, HandlePosixSignal),
-                PosixSignalRegistration.Create(PosixSignal.SIGQUIT, HandlePosixSignal)
+                PosixSignalRegistration.Create(
+                    PosixSignal.SIGINT,
+                    context => HandlePosixSignal(context, 130)),
+                PosixSignalRegistration.Create(
+                    PosixSignal.SIGTERM,
+                    context => HandlePosixSignal(context, 143)),
+                PosixSignalRegistration.Create(
+                    PosixSignal.SIGQUIT,
+                    context => HandlePosixSignal(context, 131))
             };
         }
         catch (PlatformNotSupportedException)
@@ -113,26 +139,86 @@ internal sealed class ShutdownManager : IDisposable
         }
     }
 
-    private void HandlePosixSignal(PosixSignalContext context)
+    private void HandlePosixSignal(PosixSignalContext context, int exitCode)
     {
         context.Cancel = true;
-        BeginDispose();
+        _ = BeginSignalShutdown(exitCode);
     }
 #endif
 
-    private void BeginDispose()
+    internal Task HandlePosixSignalForTesting(Action cancel, int exitCode)
     {
-        _ = DisposeAsyncSafely();
+        if (cancel is null)
+        {
+            throw new ArgumentNullException(nameof(cancel));
+        }
+
+        cancel();
+        return BeginSignalShutdown(exitCode);
     }
 
-    private async Task DisposeAsyncSafely()
+    private Task BeginSignalShutdown(int exitCode)
+    {
+        TaskCompletionSource<bool> completion;
+        lock (_sync)
+        {
+            if (_shutdownTask is not null)
+            {
+                return _shutdownTask;
+            }
+
+            completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _shutdownTask = completion.Task;
+        }
+
+        _ = CompleteSignalShutdownAsync(exitCode, completion);
+        return completion.Task;
+    }
+
+    private async Task CompleteSignalShutdownAsync(
+        int exitCode,
+        TaskCompletionSource<bool> completion)
+    {
+        try
+        {
+            await GetDisposeTask().ConfigureAwait(false);
+            _terminateProcess(exitCode);
+            completion.TrySetResult(true);
+        }
+        catch (Exception exception)
+        {
+            completion.TrySetException(exception);
+        }
+    }
+
+    private Task GetDisposeTask()
+    {
+        TaskCompletionSource<bool> completion;
+        lock (_sync)
+        {
+            if (_disposeTask is not null)
+            {
+                return _disposeTask;
+            }
+
+            completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _disposeTask = completion.Task;
+        }
+
+        _ = CompleteDisposeAsync(completion);
+        return completion.Task;
+    }
+
+    private async Task CompleteDisposeAsync(TaskCompletionSource<bool> completion)
     {
         try
         {
             await _dispose().ConfigureAwait(false);
+            completion.TrySetResult(true);
         }
         catch
         {
+            completion.TrySetResult(false);
         }
     }
 }
