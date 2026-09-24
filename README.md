@@ -330,6 +330,12 @@ public partial class OrderController { }
 
 When type name conflicts occur (e.g., `Foo.Bar` and `Baz.Bar`), names with namespace prefix are generated.
 
+## Package compatibility
+
+Version `1.1.0` targets `netstandard2.0` and `net8.0`. The packed generator and refactoring assemblies use the Roslyn `4.8` API baseline and are verified with SDK `8.0.131`, `9.0.121`, and `10.0.401`. Generated source requires C# 9 or later; file-scoped consumer declarations require C# 10 or later.
+
+The package places the generator and refactoring assemblies under `analyzers/dotnet/cs`, so consumers receive them automatically through the `SingletonDI` package reference.
+
 ## SingletonDIInitializer API
 
 The SingletonDI runtime supplies the process-wide `SingletonDIInitializer` class. Generated provider modules register into this runtime registry, and generated consumer properties resolve from it.
