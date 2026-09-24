@@ -28,7 +28,7 @@ public class SingletonDIConsumerCodeFixProvider : CodeFixProvider
     private const string DM0010Title = "Remove duplicate type";
 
     /// <inheritdoc />
-    public override ImmutableArray<string> FixableDiagnosticIds => [DM0010];
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(DM0010);
 
     /// <inheritdoc />
     public override FixAllProvider? GetFixAllProvider() =>

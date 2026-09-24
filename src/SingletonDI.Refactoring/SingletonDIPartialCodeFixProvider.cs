@@ -23,7 +23,7 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
     private const string Title = "Add 'partial' modifier";
 
     /// <inheritdoc />
-    public override ImmutableArray<string> FixableDiagnosticIds => [DiagnosticId];
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(DiagnosticId);
 
     /// <inheritdoc />
     public override FixAllProvider? GetFixAllProvider() =>

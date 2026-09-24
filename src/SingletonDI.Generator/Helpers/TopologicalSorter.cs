@@ -459,7 +459,7 @@ internal static class TopologicalSorter
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var path = new List<string>();
         return TryFindCycleDFS(adjacency, startNode, visited, path)
-            ? [..path]
+            ? path.ToImmutableArray()
             : ImmutableArray<string>.Empty;
     }
 

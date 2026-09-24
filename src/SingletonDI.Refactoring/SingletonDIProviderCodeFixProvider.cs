@@ -34,7 +34,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
     private const string DM0012Title = "Remove static modifier";
 
     /// <inheritdoc />
-    public override ImmutableArray<string> FixableDiagnosticIds => [DM0004, DM0005, DM0012];
+    public override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create(DM0004, DM0005, DM0012);
 
     /// <inheritdoc />
     public override FixAllProvider? GetFixAllProvider() =>

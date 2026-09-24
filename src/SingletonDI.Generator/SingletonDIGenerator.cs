@@ -154,7 +154,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         }
 
         var sortResult = TopologicalSorter.SortByLevels(
-            [..providerModels],
+            providerModels.ToImmutableArray(),
             serviceTypeMapResult.IdentityMap);
         if (sortResult.HasCycle)
         {
@@ -166,7 +166,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         }
 
         var moduleSource = ProviderModuleEmitter.Generate(
-            [..providerModels],
+            providerModels.ToImmutableArray(),
             ImmutableArray<ProviderAssemblyModel>.Empty,
             isCompositionRoot: false);
         AddProviderModuleSource(sourceProductionContext, moduleSource);
@@ -342,7 +342,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         if (allProviders.Count > 0)
         {
             var sortResult = TopologicalSorter.SortByLevels(
-                [..allProviders],
+                allProviders.ToImmutableArray(),
                 serviceTypeMapResult.IdentityMap);
             if (sortResult.HasCycle)
             {
@@ -362,7 +362,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         }
 
         var moduleSource = ProviderModuleEmitter.Generate(
-            [..localProviders],
+            localProviders.ToImmutableArray(),
             externalProviderAssemblies,
             isCompositionRoot: true);
         AddProviderModuleSource(sourceProductionContext, moduleSource);
