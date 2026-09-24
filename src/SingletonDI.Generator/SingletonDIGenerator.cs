@@ -207,7 +207,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         var hasInvalidGraph = false;
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(allProviders);
-        var relevantProviderIdentities = new HashSet<ServiceTypeIdentity>();
+        var propertyNameDependencySets = new List<ImmutableArray<ServiceTypeIdentity>>();
         foreach (var conflict in serviceTypeMapResult.Conflicts)
         {
             hasInvalidGraph = true;
@@ -236,13 +236,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         foreach (var dependencySet in referencedConsumerDependencies)
         {
+            propertyNameDependencySets.Add(dependencySet);
             foreach (var dependency in dependencySet)
             {
-                AddRelevantProvider(
-                    dependency,
-                    allProviders,
-                    serviceTypeMapResult.IdentityMap,
-                    relevantProviderIdentities);
                 if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependency))
                 {
                     AddMissingDependency(missingDependencies, dependency, Location.None);
@@ -274,17 +270,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 continue;
             }
 
-            foreach (var dependency in consumerModel.Value.Dependencies)
-            {
-                var dependencyIdentity = dependency.Identity ??
+            var dependencyIdentities = consumerModel.Value.Dependencies
+                .Select(dependency => dependency.Identity ??
                     new ServiceTypeIdentity(
                         dependency.FullyQualifiedName,
-                        compilation.Assembly.Identity.ToString());
-                AddRelevantProvider(
-                    dependencyIdentity,
-                    allProviders,
-                    serviceTypeMapResult.IdentityMap,
-                    relevantProviderIdentities);
+                        compilation.Assembly.Identity.ToString()))
+                .ToImmutableArray();
+            propertyNameDependencySets.Add(dependencyIdentities);
+            foreach (var dependencyIdentity in dependencyIdentities)
+            {
                 if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependencyIdentity))
                 {
                     AddMissingDependency(
@@ -292,6 +286,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         dependencyIdentity,
                         consumerDeclaration.Identifier.GetLocation());
                 }
+            }
+        }
+
+        foreach (var provider in allProviders)
+        {
+            if (!provider.DependencyIdentities.IsDefault &&
+                !provider.DependencyIdentities.IsEmpty)
+            {
+                propertyNameDependencySets.Add(provider.DependencyIdentities);
             }
         }
 
@@ -306,12 +309,34 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 FormatServiceTypeIdentity(missingDependency.Key)));
         }
 
-        var relevantProviders = allProviders
-            .Where(provider => relevantProviderIdentities.Contains(provider.TypeIdentity))
-            .ToList();
-        if (!ValidateProviderPropertyNames(relevantProviders, sourceProductionContext.ReportDiagnostic))
+        var validatedProviderSets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var dependencySet in propertyNameDependencySets)
         {
-            hasInvalidGraph = true;
+            var dependencyProviders = ResolveDependencyProviders(
+                dependencySet,
+                allProviders,
+                serviceTypeMapResult.IdentityMap);
+            if (dependencyProviders.Count == 0)
+            {
+                continue;
+            }
+
+            var providerSetKey = string.Join(
+                "\u001f",
+                dependencyProviders
+                    .Select(provider => provider.TypeIdentity.ToString())
+                    .OrderBy(identity => identity, StringComparer.Ordinal));
+            if (!validatedProviderSets.Add(providerSetKey))
+            {
+                continue;
+            }
+
+            if (!ValidateProviderPropertyNames(
+                    dependencyProviders,
+                    sourceProductionContext.ReportDiagnostic))
+            {
+                hasInvalidGraph = true;
+            }
         }
 
         if (allProviders.Count > 0)
@@ -461,21 +486,25 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         }
     }
 
-    private static void AddRelevantProvider(
-        ServiceTypeIdentity dependency,
+    private static List<ProviderModel> ResolveDependencyProviders(
+        IEnumerable<ServiceTypeIdentity> dependencies,
         IReadOnlyCollection<ProviderModel> providers,
-        ImmutableDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeMap,
-        ISet<ServiceTypeIdentity> relevantProviderIdentities)
+        ImmutableDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeMap)
     {
-        if (!serviceTypeMap.TryGetValue(dependency, out var providerIdentity))
+        var providerIdentities = new HashSet<ServiceTypeIdentity>();
+        foreach (var dependency in dependencies)
         {
-            return;
+            if (serviceTypeMap.TryGetValue(dependency, out var providerIdentity))
+            {
+                providerIdentities.Add(providerIdentity);
+            }
         }
 
-        if (providers.Any(provider => provider.TypeIdentity == providerIdentity))
-        {
-            relevantProviderIdentities.Add(providerIdentity);
-        }
+        return providers
+            .Where(provider => providerIdentities.Contains(provider.TypeIdentity))
+            .GroupBy(provider => provider.TypeIdentity)
+            .Select(group => group.First())
+            .ToList();
     }
 
     private static void AddMissingDependency(

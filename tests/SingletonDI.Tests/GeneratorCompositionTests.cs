@@ -300,6 +300,63 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void Root_AllowsSameCustomNameAcrossDifferentConsumerDependencySets()
+    {
+        const string firstProviderSource = """
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                [SingletonDIProvide("SharedName")]
+                public sealed class FirstService
+                {
+                }
+            }
+            """;
+
+        const string secondProviderSource = """
+            using SingletonDI.Attributes;
+
+            namespace OtherProvider
+            {
+                [SingletonDIProvide("SharedName")]
+                public sealed class SecondService
+                {
+                }
+            }
+            """;
+
+        const string appSource = """
+            using OtherProvider;
+            using Provider;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(FirstService))]
+                public partial class FirstConsumer
+                {
+                    public FirstService GetService() => SharedName;
+                }
+
+                [SingletonDIConsume(typeof(SecondService))]
+                public partial class SecondConsumer
+                {
+                    public SecondService GetService() => SharedName;
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            firstProviderSource,
+            appSource,
+            compositionRoot: true,
+            secondProviderSource: secondProviderSource);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void Root_ReportsOneMissingDependencyForProviderAndConsumerRequests()
     {
         const string contractsSource = """
