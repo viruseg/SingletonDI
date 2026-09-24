@@ -7,62 +7,120 @@ using SingletonDI.Generator.Models;
 namespace SingletonDI.Generator.Validators;
 
 /// <summary>
-/// Validates provider types with [SingletonDIProvide] attribute and creates ProviderModel.
+/// Validates provider types with <c>SingletonDIProvideAttribute</c> and creates provider models.
 /// </summary>
 internal static class ProviderValidator
 {
-    /// <summary>
-    /// Validates a type with [SingletonDIProvide] attribute and creates a ProviderModel.
-    /// Returns null if validation fails.
-    /// </summary>
-    public static ProviderModel? Validate(
+    private const string ProvideAttributeName = "SingletonDI.Attributes.SingletonDIProvideAttribute";
+    private const string ConsumeAttributeName = "SingletonDI.Attributes.SingletonDIConsumeAttribute";
+
+    internal static ProviderModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
-        HashSet<string> allProviderFullyQualifiedNames,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
-        // DM0015: Generic types are not supported
-        if (typeSymbol.IsGenericType || typeSymbol.TypeParameters.Length > 0)
-        {
-            // Get the attribute syntax for precise location
-            var provideAttr = typeSymbol.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute");
-            var attributeSyntax = provideAttr?.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
-            var diagnosticLocation = attributeSyntax?.GetLocation() ?? typeDecl.Identifier.GetLocation();
+        return Validate(
+            typeSymbol,
+            typeDecl.GetLocation(),
+            compilation: null,
+            knownProviderFullyQualifiedNames,
+            reportDiagnostic);
+    }
 
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.GenericTypeNotSupported,
-                diagnosticLocation,
-                typeSymbol.Name));
+    internal static ProviderModel? Validate(
+        TypeDeclarationSyntax typeDecl,
+        INamedTypeSymbol typeSymbol,
+        Compilation compilation,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        return Validate(
+            typeSymbol,
+            typeDecl.GetLocation(),
+            compilation,
+            knownProviderFullyQualifiedNames,
+            reportDiagnostic);
+    }
+
+    internal static ProviderModel? Validate(
+        INamedTypeSymbol typeSymbol,
+        Location location,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        return Validate(
+            typeSymbol,
+            location,
+            compilation: null,
+            knownProviderFullyQualifiedNames,
+            reportDiagnostic);
+    }
+
+    internal static ProviderModel? Validate(
+        INamedTypeSymbol typeSymbol,
+        Compilation compilation,
+        Location location,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        return Validate(
+            typeSymbol,
+            location,
+            compilation,
+            knownProviderFullyQualifiedNames,
+            reportDiagnostic);
+    }
+
+    private static ProviderModel? Validate(
+        INamedTypeSymbol typeSymbol,
+        Location location,
+        Compilation? compilation,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        var provideAttribute = FindAttribute(typeSymbol, ProvideAttributeName);
+        if (provideAttribute == null)
+        {
             return null;
         }
 
-        // DM0002: Cannot be abstract class
+        var attributeLocation = GetAttributeLocation(provideAttribute) ?? location;
+        var declarationLocation = location;
+        var providerDisplayName = GetProviderDisplayName(typeSymbol, location);
+
+        if (typeSymbol.IsGenericType || typeSymbol.TypeParameters.Length > 0)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.GenericTypeNotSupported,
+                declarationLocation,
+                providerDisplayName));
+            return null;
+        }
+
         if (typeSymbol.IsAbstract)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProvideOnAbstractClass,
-                typeDecl.Identifier.GetLocation()));
+                declarationLocation));
             return null;
         }
 
-        // DM0004: Must have public parameterless constructor
         var constructor = typeSymbol.InstanceConstructors
-            .FirstOrDefault(c => c.Parameters.IsEmpty && c.DeclaredAccessibility == Accessibility.Public);
+            .FirstOrDefault(candidate => candidate.Parameters.IsEmpty &&
+                                          candidate.DeclaredAccessibility == Accessibility.Public);
 
         if (constructor == null)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProvideMissingParameterlessConstructor,
-                typeDecl.Identifier.GetLocation(),
-                typeSymbol.Name));
+                declarationLocation,
+                providerDisplayName));
             return null;
         }
 
-        // Check for InitializeAsync method with signature "Task InitializeAsync()"
         var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol);
 
-        // DM0005: Validate InitializeAsync access modifier
         if (initializeAsyncMethod != null)
         {
             var accessibility = initializeAsyncMethod.DeclaredAccessibility;
@@ -73,221 +131,425 @@ internal static class ProviderValidator
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.InitializeAsyncNotAccessible,
-                    initializeAsyncMethod.Locations.FirstOrDefault(),
-                    accessibility.ToString().ToLower()));
+                    initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
+                    accessibility.ToString().ToLowerInvariant()));
                 return null;
             }
         }
 
-        // DM0012: InitializeAsync cannot be static
         if (initializeAsyncMethod is { IsStatic: true })
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.InitializeAsyncIsStatic,
-                initializeAsyncMethod.Locations.FirstOrDefault(),
-                typeSymbol.Name));
+                initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
+                providerDisplayName));
             return null;
         }
 
-        // Check for IDisposable
-        var isDisposable = typeSymbol.Interfaces.Any(i =>
-            i.OriginalDefinition.ToDisplayString() == "System.IDisposable");
+        var serviceType = GetServiceType(provideAttribute);
+        if (serviceType == null && HasInvalidServiceTypeValue(provideAttribute))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.InvalidServiceType,
+                GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
+                serviceType == null
+                    ? "<invalid>"
+                    : GetTypeDisplayName(serviceType, location),
+                providerDisplayName));
+            return null;
+        }
 
-        // Check for IAsyncDisposable
-        var isAsyncDisposable = typeSymbol.Interfaces.Any(i =>
-            i.OriginalDefinition.ToDisplayString() == "System.IAsyncDisposable");
+        if (serviceType != null &&
+            (!serviceType.IsReferenceType || !IsAssignableTo(typeSymbol, serviceType, compilation)))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.InvalidServiceType,
+                GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
+                GetTypeDisplayName(serviceType, location),
+                providerDisplayName));
+            return null;
+        }
 
-        // Get dependencies (if this provider also has [SingletonDIConsume])
-        var dependencies = GetDependencies(typeSymbol, allProviderFullyQualifiedNames);
+        var dependencyIdentities = GetDependencyIdentities(
+            typeSymbol,
+            knownProviderFullyQualifiedNames);
+        var dependencies = dependencyIdentities
+            .Select(identity => identity.FullyQualifiedName)
+            .ToImmutableArray();
 
-        // Get custom property name from [SingletonDIProvide] attribute with validation
-        var (propertyName, propertyNameLocation) = GetPropertyName(typeSymbol, typeDecl, reportDiagnostic);
-        // Note: GetPropertyName returns null if not specified OR if validation failed
-        // In case of validation failure, it already reported the diagnostic
+        var (propertyName, propertyNameLocation) = GetPropertyName(
+            provideAttribute,
+            location,
+            reportDiagnostic);
+        ServiceTypeIdentity? serviceTypeIdentity = serviceType == null
+            ? null
+            : ServiceTypeIdentity.FromSymbol(serviceType);
 
-        var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        var location = typeDecl.GetLocation();
+        var isDisposable = typeSymbol.AllInterfaces.Any(interfaceSymbol =>
+            interfaceSymbol.OriginalDefinition.ToDisplayString() == "System.IDisposable");
+        var isAsyncDisposable = typeSymbol.AllInterfaces.Any(interfaceSymbol =>
+            interfaceSymbol.OriginalDefinition.ToDisplayString() == "System.IAsyncDisposable");
 
-        return new ProviderModel(fullyQualifiedName : fqn,
-                                 shortName : typeSymbol.Name,
-                                 @namespace : typeSymbol.ContainingNamespace.ToDisplayString(),
-                                 hasInitializeAsyncMethod : initializeAsyncMethod != null,
-                                 isDisposable : isDisposable,
-                                 isAsyncDisposable : isAsyncDisposable,
-                                 dependencies : dependencies,
-                                 propertyName : propertyName,
-                                 location : location,
-                                 propertyNameLocation : propertyNameLocation);
+        return new ProviderModel(
+            fullyQualifiedName: GetFullyQualifiedName(typeSymbol),
+            shortName: typeSymbol.Name,
+            @namespace: typeSymbol.ContainingNamespace.ToDisplayString(),
+            assemblyIdentity: typeSymbol.ContainingAssembly.Identity.ToString(),
+            hasInitializeAsyncMethod: initializeAsyncMethod != null,
+            isDisposable: isDisposable,
+            isAsyncDisposable: isAsyncDisposable,
+            dependencies: dependencies,
+            serviceTypeFullyQualifiedName: serviceType == null ? null : GetFullyQualifiedName(serviceType),
+            serviceTypeShortName: serviceType?.Name,
+            serviceTypeNamespace: serviceType?.ContainingNamespace.ToDisplayString(),
+            propertyName: propertyName,
+            location: location,
+            propertyNameLocation: propertyNameLocation,
+            dependencyIdentities: dependencyIdentities,
+            serviceTypeIdentity: serviceTypeIdentity);
     }
 
-    /// <summary>
-    /// Finds the InitializeAsync method with signature "Task InitializeAsync()".
-    /// Returns null if not found.
-    /// Note: This method finds both static and instance methods.
-    /// Static methods are validated separately by DM0012 diagnostic.
-    /// </summary>
     private static IMethodSymbol? FindInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
     {
         foreach (var member in typeSymbol.GetMembers())
         {
-            if (member is IMethodSymbol { Name: "InitializeAsync", Parameters.IsEmpty: true } method)
+            if (member is not IMethodSymbol { Name: "InitializeAsync", Parameters.IsEmpty: true } method)
             {
-                // Check if return type is Task
-                var returnTypeName = method.ReturnType.ToDisplayString();
+                continue;
+            }
 
-                if (returnTypeName is
-                    "System.Threading.Tasks.Task" or
-                    "Task" or
-                    "System.Threading.Tasks.ValueTask" or
-                    "ValueTask")
-                {
-                    return method;
-                }
+            var returnTypeName = method.ReturnType.ToDisplayString();
+            if (returnTypeName is
+                "System.Threading.Tasks.Task" or
+                "Task" or
+                "System.Threading.Tasks.ValueTask" or
+                "ValueTask")
+            {
+                return method;
             }
         }
 
         return null;
     }
 
-    private static ImmutableArray<string> GetDependencies(
+    private static ImmutableArray<ServiceTypeIdentity> GetDependencyIdentities(
         INamedTypeSymbol typeSymbol,
-        HashSet<string> allProviderFullyQualifiedNames)
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames)
     {
-        // Find [SingletonDIConsume] attribute on this type
-        var consumeAttr = typeSymbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIConsumeAttribute");
-
-        if (consumeAttr == null)
+        var consumeAttribute = FindAttribute(typeSymbol, ConsumeAttributeName);
+        if (consumeAttribute == null)
         {
-            return ImmutableArray<string>.Empty;
+            return ImmutableArray<ServiceTypeIdentity>.Empty;
         }
 
-        var dependencies = new List<string>();
-        foreach (var arg in consumeAttr.ConstructorArguments)
+        var consumeAttributeSyntax = GetAttributeSyntax(consumeAttribute);
+        var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
+        var dependencies = ImmutableArray.CreateBuilder<ServiceTypeIdentity>();
+
+        foreach (var (dependencyType, _) in GetTypeArguments(consumeAttribute, argumentLocations))
         {
-            if (arg.Kind == TypedConstantKind.Array && arg.Values != null)
+            dependencies.Add(ServiceTypeIdentity.FromSymbol(dependencyType));
+        }
+
+        return dependencies.ToImmutable();
+    }
+
+    private static IEnumerable<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
+        AttributeData attribute,
+        IReadOnlyList<Location> argumentLocations)
+    {
+        for (var argumentIndex = 0; argumentIndex < attribute.ConstructorArguments.Length; argumentIndex++)
+        {
+            var argument = attribute.ConstructorArguments[argumentIndex];
+            if (argument.Kind == TypedConstantKind.Array)
             {
-                // params Type[] - массив типов
-                foreach (var element in arg.Values)
+                for (var elementIndex = 0; elementIndex < argument.Values.Length; elementIndex++)
                 {
-                    if (element.Kind == TypedConstantKind.Type && element.Value is ITypeSymbol dependencyType)
+                    if (argument.Values[elementIndex] is
+                        { Kind: TypedConstantKind.Type, Value: ITypeSymbol dependencyType })
                     {
-                        var fqn = dependencyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                        if (allProviderFullyQualifiedNames.Contains(fqn))
-                        {
-                            dependencies.Add(fqn);
-                        }
+                        var location = elementIndex < argumentLocations.Count
+                            ? argumentLocations[elementIndex]
+                            : null;
+                        yield return (dependencyType, location);
                     }
                 }
             }
-            else if (arg.Kind == TypedConstantKind.Type && arg.Value is ITypeSymbol singleType)
+            else if (argument is { Kind: TypedConstantKind.Type, Value: ITypeSymbol singleType })
             {
-                // Одиночный тип (если когда-либо будет использоваться без params)
-                var fqn = singleType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (allProviderFullyQualifiedNames.Contains(fqn))
-                {
-                    dependencies.Add(fqn);
-                }
+                var location = argumentIndex < argumentLocations.Count
+                    ? argumentLocations[argumentIndex]
+                    : null;
+                yield return (singleType, location);
             }
         }
-        return [..dependencies];
     }
 
-    /// <summary>
-    /// Gets the custom property name from [SingletonDIProvide] attribute with validation.
-    /// Returns a tuple (propertyName, propertyNameLocation).
-    /// propertyName is null if not specified or if validation fails (diagnostic is reported in latter case).
-    /// propertyNameLocation is the location of the string literal argument for precise diagnostics.
-    /// </summary>
     private static (string? propertyName, Location? propertyNameLocation) GetPropertyName(
-        INamedTypeSymbol typeSymbol,
-        TypeDeclarationSyntax typeDecl,
+        AttributeData provideAttribute,
+        Location location,
         Action<Diagnostic> reportDiagnostic)
     {
-        var provideAttr = typeSymbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIProvideAttribute");
-
-        if (provideAttr == null)
-        {
-            return (null, null);
-        }
-
         string? propertyName = null;
         Location? propertyNameLocation = null;
         var propertyNameWasSpecified = false;
 
-        // Get the attribute syntax for precise location
-        var attributeSyntax = provideAttr.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
-
-        // Check constructor arguments
-        if (provideAttr.ConstructorArguments.Length > 0)
+        if (provideAttribute.ConstructorArguments.Length > 0)
         {
-            var arg = provideAttr.ConstructorArguments[0];
-            if (arg.Kind == TypedConstantKind.Primitive && arg.Value is string constructorValue)
+            var argument = provideAttribute.ConstructorArguments[0];
+            if (argument is { Kind: TypedConstantKind.Primitive, Value: string constructorValue })
             {
                 propertyName = constructorValue;
                 propertyNameWasSpecified = true;
-
-                // Get location of the first argument (constructor argument)
-                if (attributeSyntax?.ArgumentList?.Arguments.FirstOrDefault() is { } firstArg)
-                {
-                    propertyNameLocation = firstArg.GetLocation();
-                }
+                propertyNameLocation = GetConstructorArgumentLocation(provideAttribute);
             }
         }
 
-        // Check named arguments (PropertyName = "value")
         if (!propertyNameWasSpecified)
         {
-            var namedArg = provideAttr.NamedArguments
-                .FirstOrDefault(na => na.Key == "PropertyName");
+            var namedArgument = provideAttribute.NamedArguments
+                .FirstOrDefault(argument => argument.Key == "PropertyName");
 
-            if (namedArg.Value.Kind == TypedConstantKind.Primitive && namedArg.Value.Value is string namedValue)
+            if (!string.IsNullOrEmpty(namedArgument.Key) &&
+                namedArgument.Value is { Kind: TypedConstantKind.Primitive, Value: string namedValue })
             {
                 propertyName = namedValue;
                 propertyNameWasSpecified = true;
-
-                // Get location of the named argument
-                if (attributeSyntax?.ArgumentList != null)
-                {
-                    var namedArgSyntax = attributeSyntax.ArgumentList.Arguments
-                        .FirstOrDefault(a => a.NameColon?.Name.Identifier.ValueText == "PropertyName");
-                    if (namedArgSyntax != null)
-                    {
-                        propertyNameLocation = namedArgSyntax.GetLocation();
-                    }
-                }
+                propertyNameLocation = GetNamedArgumentLocation(provideAttribute, "PropertyName");
             }
         }
 
-        // Validate property name if specified
-        if (propertyNameWasSpecified)
+        if (!propertyNameWasSpecified)
         {
-            var diagnosticLocation = propertyNameLocation ?? attributeSyntax?.GetLocation() ?? typeDecl.Identifier.GetLocation();
-
-            // Empty string is not a valid identifier
-            if (string.IsNullOrEmpty(propertyName) || !SyntaxFacts.IsValidIdentifier(propertyName!))
-            {
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.InvalidPropertyName,
-                    diagnosticLocation,
-                    propertyName));
-                return (null, null);
-            }
-
-            // Check if it's a reserved keyword
-            if (SyntaxFacts.GetKeywordKind(propertyName!) != SyntaxKind.None)
-            {
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.PropertyNameIsReservedKeyword,
-                    diagnosticLocation,
-                    propertyName));
-                return (null, null);
-            }
-
-            return (propertyName, propertyNameLocation);
+            return (null, null);
         }
 
-        return (null, null);
+        var diagnosticLocation = propertyNameLocation ?? GetAttributeLocation(provideAttribute) ?? location;
+        if (string.IsNullOrEmpty(propertyName) || !SyntaxFacts.IsValidIdentifier(propertyName!))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.InvalidPropertyName,
+                diagnosticLocation,
+                propertyName));
+            return (null, null);
+        }
+
+        if (SyntaxFacts.GetKeywordKind(propertyName!) != SyntaxKind.None)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.PropertyNameIsReservedKeyword,
+                diagnosticLocation,
+                propertyName));
+            return (null, null);
+        }
+
+        return (propertyName, propertyNameLocation);
+    }
+
+    private static ITypeSymbol? GetServiceType(AttributeData provideAttribute)
+    {
+        var namedArgument = provideAttribute.NamedArguments
+            .FirstOrDefault(argument => argument.Key == "ServiceType");
+
+        if (string.IsNullOrEmpty(namedArgument.Key) || namedArgument.Value.IsNull)
+        {
+            return null;
+        }
+
+        return namedArgument.Value is { Kind: TypedConstantKind.Type, Value: ITypeSymbol serviceType }
+            ? serviceType
+            : null;
+    }
+
+    private static bool HasInvalidServiceTypeValue(AttributeData provideAttribute)
+    {
+        var namedArgument = provideAttribute.NamedArguments
+            .FirstOrDefault(argument => argument.Key == "ServiceType");
+
+        return !string.IsNullOrEmpty(namedArgument.Key) &&
+               !namedArgument.Value.IsNull &&
+               namedArgument.Value is not { Kind: TypedConstantKind.Type, Value: ITypeSymbol };
+    }
+
+    private static bool HasProvideAttribute(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.GetAttributes().Any(attribute => IsAttribute(attribute, ProvideAttributeName));
+    }
+
+    private static bool IsAttribute(AttributeData attribute, string metadataName)
+    {
+        var attributeName = attribute.AttributeClass?.ToDisplayString();
+        return attributeName == metadataName || attributeName == "global::" + metadataName;
+    }
+
+    private static bool IsAssignableTo(
+        INamedTypeSymbol provider,
+        ITypeSymbol serviceType,
+        Compilation? compilation)
+    {
+        if (compilation is not null)
+        {
+            var conversion = compilation.ClassifyCommonConversion(provider, serviceType);
+            return conversion.Exists &&
+                   !conversion.IsUserDefined &&
+                   (conversion.IsIdentity || conversion.IsReference || conversion.IsImplicit);
+        }
+
+        return HasCommonConversion(provider, serviceType);
+    }
+
+    private static bool HasCommonConversion(ITypeSymbol source, ITypeSymbol target)
+    {
+        if (SymbolEqualityComparer.Default.Equals(source, target))
+        {
+            return true;
+        }
+
+        if (source is not INamedTypeSymbol sourceType || target is not INamedTypeSymbol targetType)
+        {
+            return false;
+        }
+
+        if (targetType.SpecialType == SpecialType.System_Object &&
+            (sourceType.IsReferenceType || sourceType.IsValueType))
+        {
+            return true;
+        }
+
+        if (sourceType.TypeKind == TypeKind.Interface &&
+            targetType.TypeKind == TypeKind.Interface &&
+            sourceType.IsGenericType &&
+            targetType.IsGenericType &&
+            SymbolEqualityComparer.Default.Equals(
+                sourceType.OriginalDefinition,
+                targetType.OriginalDefinition))
+        {
+            return HasVarianceConversion(sourceType, targetType);
+        }
+
+        for (var baseType = sourceType.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            if (HasCommonConversion(baseType, target))
+            {
+                return true;
+            }
+        }
+
+        return sourceType.AllInterfaces.Any(interfaceType => HasCommonConversion(interfaceType, target));
+    }
+
+    private static bool HasVarianceConversion(
+        INamedTypeSymbol sourceType,
+        INamedTypeSymbol targetType)
+    {
+        if (sourceType.TypeArguments.Length != targetType.TypeArguments.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < sourceType.TypeArguments.Length; index++)
+        {
+            var sourceArgument = sourceType.TypeArguments[index];
+            var targetArgument = targetType.TypeArguments[index];
+            var variance = targetType.OriginalDefinition.TypeParameters[index].Variance;
+            var converted = variance switch
+            {
+                VarianceKind.Out => HasCommonConversion(sourceArgument, targetArgument),
+                VarianceKind.In => HasCommonConversion(targetArgument, sourceArgument),
+                _ => SymbolEqualityComparer.Default.Equals(sourceArgument, targetArgument),
+            };
+            if (!converted)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static AttributeData? FindAttribute(ISymbol symbol, string metadataName)
+    {
+        return symbol.GetAttributes()
+            .FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
+    }
+
+    private static Location? GetAttributeLocation(AttributeData attribute)
+    {
+        return attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation();
+    }
+
+    private static Location? GetServiceTypeArgumentLocation(AttributeData attribute)
+    {
+        var syntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+        if (syntax?.ArgumentList == null)
+        {
+            return null;
+        }
+
+        var argument = syntax.ArgumentList.Arguments.FirstOrDefault(candidate =>
+            candidate.NameColon?.Name.Identifier.ValueText == "ServiceType");
+        return argument?.GetLocation();
+    }
+
+    private static Location? GetConstructorArgumentLocation(AttributeData attribute)
+    {
+        var syntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+        return syntax?.ArgumentList?.Arguments.FirstOrDefault()?.GetLocation();
+    }
+
+    private static Location? GetNamedArgumentLocation(AttributeData attribute, string argumentName)
+    {
+        var syntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+        if (syntax?.ArgumentList == null)
+        {
+            return null;
+        }
+
+        var argument = syntax.ArgumentList.Arguments.FirstOrDefault(candidate =>
+            candidate.NameColon?.Name.Identifier.ValueText == argumentName);
+        return argument?.GetLocation();
+    }
+
+    private static AttributeSyntax? GetAttributeSyntax(AttributeData attribute)
+    {
+        return attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+    }
+
+    private static IReadOnlyList<Location> GetArgumentLocations(AttributeSyntax? attributeSyntax)
+    {
+        if (attributeSyntax?.ArgumentList == null)
+        {
+            return Array.Empty<Location>();
+        }
+
+        return attributeSyntax.ArgumentList.Arguments
+            .Select(argument => argument.Expression is TypeOfExpressionSyntax typeOfExpression
+                ? typeOfExpression.Type.GetLocation()
+                : argument.GetLocation())
+            .ToImmutableArray();
+    }
+
+    private static string GetTypeDisplayName(ITypeSymbol typeSymbol, Location location)
+    {
+        var displayName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return location.IsInSource
+            ? displayName
+            : $"{displayName}, {typeSymbol.ContainingAssembly.Identity}";
+    }
+
+    private static string GetProviderDisplayName(INamedTypeSymbol typeSymbol, Location location)
+    {
+        if (location.IsInSource)
+        {
+            return typeSymbol.Name;
+        }
+
+        return $"{typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}, " +
+               typeSymbol.ContainingAssembly.Identity;
+    }
+
+    private static string GetFullyQualifiedName(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 }

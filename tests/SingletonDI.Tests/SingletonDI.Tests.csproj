@@ -23,9 +23,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="System.Runtime.CompilerServices" />
+    <Using Include="System.Runtime.InteropServices" />
+    <Using Include="System.Threading.Tasks" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\SingletonDI.Attributes\SingletonDI.Attributes.csproj" />
     <ProjectReference Include="..\..\src\SingletonDI.Generator\SingletonDI.Generator.csproj" />
     <ProjectReference Include="..\..\src\SingletonDI.Refactoring\SingletonDI.Refactoring.csproj" />
+    <ProjectReference Include="..\InterProjectFixtures\RootApp\RootApp.csproj" />
+    <ProjectReference Include="..\InterProjectFixtures\ProviderLibrary\ProviderLibrary.csproj" />
   </ItemGroup>
 
 </Project>

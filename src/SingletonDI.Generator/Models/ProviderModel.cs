@@ -4,70 +4,120 @@ using Microsoft.CodeAnalysis;
 namespace SingletonDI.Generator.Models;
 
 /// <summary>
-/// Immutable model representing a singleton provider.
+/// Immutable model representing a singleton provider and its service-key dependencies.
 /// </summary>
-public readonly record struct ProviderModel(string fullyQualifiedName,
-                                            string shortName,
-                                            string @namespace,
-                                            bool hasInitializeAsyncMethod,
-                                            bool isDisposable,
-                                            bool isAsyncDisposable,
-                                            ImmutableArray<string> dependencies,
-                                            string? propertyName,
-                                            Location location,
-                                            Location? propertyNameLocation)
+public readonly record struct ProviderModel(
+    string fullyQualifiedName,
+    string shortName,
+    string @namespace,
+    string assemblyIdentity,
+    bool hasInitializeAsyncMethod,
+    bool isDisposable,
+    bool isAsyncDisposable,
+    ImmutableArray<string> dependencies,
+    string? serviceTypeFullyQualifiedName,
+    string? serviceTypeShortName,
+    string? serviceTypeNamespace,
+    string? propertyName,
+    Location location,
+    Location? propertyNameLocation,
+    ImmutableArray<ServiceTypeIdentity> dependencyIdentities = default,
+    ServiceTypeIdentity? serviceTypeIdentity = null)
 {
     /// <summary>
-    /// The fully qualified name of the provider type.
+    /// Gets the fully qualified name of the provider type.
     /// </summary>
     public string FullyQualifiedName { get; } = fullyQualifiedName;
 
     /// <summary>
-    /// The short name of the provider type (without namespace).
+    /// Gets the short name of the provider type.
     /// </summary>
     public string ShortName { get; } = shortName;
 
     /// <summary>
-    /// The namespace of the provider type.
+    /// Gets the namespace of the provider type.
     /// </summary>
     public string Namespace { get; } = @namespace;
 
     /// <summary>
-    /// Whether the provider has a method with signature "Task InitializeAsync()".
+    /// Gets the identity of the assembly containing the provider type.
+    /// </summary>
+    public string AssemblyIdentity { get; } = assemblyIdentity;
+
+    /// <summary>
+    /// Gets the canonical identity of the provider type.
+    /// </summary>
+    public ServiceTypeIdentity TypeIdentity { get; } =
+        new(fullyQualifiedName, assemblyIdentity);
+
+    /// <summary>
+    /// Gets whether the provider has an asynchronous initialization method.
     /// </summary>
     public bool HasInitializeAsyncMethod { get; } = hasInitializeAsyncMethod;
 
     /// <summary>
-    /// Whether the provider implements IDisposable.
+    /// Gets whether the provider implements <see cref="IDisposable"/>.
     /// </summary>
     public bool IsDisposable { get; } = isDisposable;
 
     /// <summary>
-    /// Whether the provider implements IAsyncDisposable.
+    /// Gets whether the provider implements <see cref="IAsyncDisposable"/>.
     /// </summary>
     public bool IsAsyncDisposable { get; } = isAsyncDisposable;
 
     /// <summary>
-    /// Dependencies of this provider (types it consumes via [SingletonDIConsume]).
+    /// Gets the service keys consumed by the provider through <c>SingletonDIConsume</c>.
     /// </summary>
     public ImmutableArray<string> Dependencies { get; } = dependencies;
 
     /// <summary>
-    /// Custom property name for the singleton instance, if specified in the attribute.
-    /// If null, the default name "{TypeName}Instance" will be used.
+    /// Gets the assembly-qualified identities of services consumed by the provider.
+    /// </summary>
+    public ImmutableArray<ServiceTypeIdentity> DependencyIdentities { get; } =
+        dependencyIdentities.IsDefault
+            ? dependencies.IsDefault
+                ? ImmutableArray<ServiceTypeIdentity>.Empty
+                : dependencies
+                    .Select(dependency => new ServiceTypeIdentity(dependency, assemblyIdentity))
+                    .ToImmutableArray()
+            : dependencyIdentities;
+
+    /// <summary>
+    /// Gets the fully qualified name of the exposed service contract, if any.
+    /// </summary>
+    public string? ServiceTypeFullyQualifiedName { get; } = serviceTypeFullyQualifiedName;
+
+    /// <summary>
+    /// Gets the short name of the exposed service contract, if any.
+    /// </summary>
+    public string? ServiceTypeShortName { get; } = serviceTypeShortName;
+
+    /// <summary>
+    /// Gets the namespace of the exposed service contract, if any.
+    /// </summary>
+    public string? ServiceTypeNamespace { get; } = serviceTypeNamespace;
+
+    /// <summary>
+    /// Gets the assembly-qualified identity of the exposed service contract, if any.
+    /// </summary>
+    public ServiceTypeIdentity? ServiceTypeIdentity { get; } =
+        serviceTypeIdentity ??
+        (string.IsNullOrEmpty(serviceTypeFullyQualifiedName)
+            ? null
+            : new ServiceTypeIdentity(serviceTypeFullyQualifiedName!, assemblyIdentity));
+
+    /// <summary>
+    /// Gets the custom property name of the provider, if one was specified.
     /// </summary>
     public string? PropertyName { get; } = propertyName;
 
     /// <summary>
-    /// The location of the provider type declaration in the source code.
-    /// Used for reporting diagnostics with precise location information.
+    /// Gets the source location of the provider declaration, or <see cref="Location.None"/> for metadata providers.
     /// </summary>
     public Location Location { get; } = location;
 
     /// <summary>
-    /// The location of the PropertyName argument in the [SingletonDIProvide] attribute.
-    /// Used for precise diagnostic highlighting of the property name string literal.
-    /// Null if no custom property name was specified.
+    /// Gets the source location of the custom property name argument, if available.
     /// </summary>
     public Location? PropertyNameLocation { get; } = propertyNameLocation;
 }

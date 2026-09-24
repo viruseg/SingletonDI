@@ -1,6 +1,10 @@
 ﻿using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
+using SingletonDI.Attributes;
 using SingletonDI.Generator;
 using Xunit;
 
@@ -126,9 +130,10 @@ public class DiagnosticErrorTests
         // Assert
         var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
         Assert.NotNull(dm0003);
-        Assert.Equal("Property name conflicts with generated name", dm0003.Descriptor.Title);
+        Assert.Equal("Consumer property name conflict", dm0003.Descriptor.Title);
         Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
         Assert.Contains("DatabaseService", dm0003.GetMessage());
+        Assert.Contains("same consumer dependency set", dm0003.GetMessage());
 
         // Verify Location is not None and points to the argument
         Assert.NotEqual(Location.None, dm0003.Location);
@@ -1076,27 +1081,165 @@ public class DiagnosticErrorTests
         Assert.Contains("Service", dm0015.GetMessage());
     }
 
+    [Fact]
+    public void DM0016_InvalidServiceType()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide(ServiceType = typeof(string))]
+                public sealed class InvalidService
+                {
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(source);
+
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "DM0016");
+    }
+
+    [Fact]
+    public void DM0017_LibraryConsumerDoesNotRequireCompositionRoot()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public interface IExternalService
+            {
+            }
+
+            [SingletonDIConsume(typeof(IExternalService))]
+            public partial class Consumer
+            {
+            }
+            """;
+
+        var diagnostics = RunGenerator(
+            source,
+            compositionRoot: false,
+            OutputKind.DynamicallyLinkedLibrary);
+
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == "DM0017");
+    }
+
+    [Fact]
+    public void DM0017_ExecutableConsumerRequiresCompositionRoot()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public interface IExternalService
+            {
+            }
+
+            [SingletonDIConsume(typeof(IExternalService))]
+            public partial class Consumer
+            {
+                public static void Main()
+                {
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(
+            source,
+            compositionRoot: false,
+            OutputKind.ConsoleApplication);
+
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "DM0017");
+    }
+
+    [Fact]
+    public void DM0017_DoesNotReportWhenLocalProviderSatisfiesContract()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public interface ILocalService
+            {
+            }
+
+            [SingletonDIProvide(ServiceType = typeof(ILocalService))]
+            public sealed class LocalService : ILocalService
+            {
+            }
+
+            [SingletonDIConsume(typeof(ILocalService))]
+            public partial class Consumer
+            {
+                public static void Main()
+                {
+                }
+            }
+            """;
+
+        var diagnostics = RunGenerator(
+            source,
+            compositionRoot: false,
+            OutputKind.ConsoleApplication);
+
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == "DM0017");
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
-        var compilation = CreateCompilation(source);
-        var generator = new SingletonDIGenerator();
-        var driver = CSharpGeneratorDriver.Create(generator);
+        return RunGenerator(
+            source,
+            compositionRoot: false,
+            OutputKind.DynamicallyLinkedLibrary);
+    }
+
+    private static ImmutableArray<Diagnostic> RunGenerator(
+        string source,
+        bool compositionRoot,
+        OutputKind outputKind)
+    {
+        var compilation = CreateCompilation(source, outputKind);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: new CSharpParseOptions(
+                LanguageVersion.Latest,
+                preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]),
+            optionsProvider: new GeneratorTestAnalyzerConfigOptionsProvider(
+                new GeneratorTestOptions(compositionRoot, outputKind)),
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: false,
+                baseDirectory: null));
         driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
         return diagnostics;
     }
 
-    private static CSharpCompilation CreateCompilation(string source)
+    private static CSharpCompilation CreateCompilation(
+        string source,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         var references = new List<MetadataReference>
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attributes.SingletonDIProvideAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(ValueTask).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(RuntimeHelpers).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(RuntimeInformation).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(SingletonDIProvideAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(SingletonDIProviderModuleAttribute).Assembly.Location),
         };
 
-        // Add all referenced assemblies
         var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var assemblyName in new[] { "System.Runtime", "System.Collections", "System.Linq", "netstandard" })
+        foreach (var assemblyName in new[]
+                 {
+                     "System.Runtime",
+                     "System.Runtime.CompilerServices",
+                     "System.Threading.Tasks",
+                     "System.Runtime.InteropServices",
+                     "System.Collections",
+                     "System.Linq",
+                     "netstandard",
+                 })
         {
             var path = Path.Combine(assemblyPath, assemblyName + ".dll");
             if (File.Exists(path))
@@ -1107,8 +1250,12 @@ public class DiagnosticErrorTests
 
         return CSharpCompilation.Create(
             "TestAssembly",
-            [CSharpSyntaxTree.ParseText(source)],
+            [CSharpSyntaxTree.ParseText(
+                source,
+                new CSharpParseOptions(
+                    LanguageVersion.Latest,
+                    preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
             references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(outputKind));
     }
 }

@@ -3,5 +3,9 @@
   <Project Path="src/SingletonDI.Generator/SingletonDI.Generator.csproj" />
   <Project Path="src/SingletonDI.Refactoring/SingletonDI.Refactoring.csproj" />
   <Project Path="src/SingletonDI.SampleApp/SingletonDI.SampleApp.csproj" />
+  <Project Path="tests/InterProjectFixtures/Shared.Contracts/Shared.Contracts.csproj" />
+  <Project Path="tests/InterProjectFixtures/ConsumerLibrary/ConsumerLibrary.csproj" />
+  <Project Path="tests/InterProjectFixtures/ProviderLibrary/ProviderLibrary.csproj" />
+  <Project Path="tests/InterProjectFixtures/RootApp/RootApp.csproj" />
   <Project Path="tests/SingletonDI.Tests/SingletonDI.Tests.csproj" />
 </Solution>

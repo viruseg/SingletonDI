@@ -960,7 +960,7 @@ public class PropertyNameResolverTests
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attributes.SingletonDIProvideAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(global::SingletonDI.Generated.__SingletonDIHost__).Assembly.Location),
         };
 
         // Add all referenced assemblies
@@ -976,7 +976,11 @@ public class PropertyNameResolverTests
 
         return CSharpCompilation.Create(
             "TestAssembly",
-            [CSharpSyntaxTree.ParseText(source)],
+            [CSharpSyntaxTree.ParseText(
+                source,
+                new CSharpParseOptions(
+                    LanguageVersion.Latest,
+                    preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
     }

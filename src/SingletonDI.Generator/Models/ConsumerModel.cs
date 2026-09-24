@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace SingletonDI.Generator.Models;
 
 /// <summary>
-/// Immutable model representing a consumer of singleton providers.
+/// Immutable model representing a consumer of singleton services.
 /// </summary>
 public readonly record struct ConsumerModel
 (
@@ -11,30 +11,30 @@ public readonly record struct ConsumerModel
     string ShortName,
     string Namespace,
     bool IsPartial,
-    ImmutableArray<string> Dependencies)
+    ImmutableArray<ServiceReferenceModel> Dependencies)
 {
     /// <summary>
-    /// The fully qualified name of the consumer type.
+    /// Gets the fully qualified name of the consumer type.
     /// </summary>
     public string FullyQualifiedName { get; } = FullyQualifiedName;
 
     /// <summary>
-    /// The short name of the consumer type (without namespace).
+    /// Gets the short name of the consumer type.
     /// </summary>
     public string ShortName { get; } = ShortName;
 
     /// <summary>
-    /// The namespace of the consumer type.
+    /// Gets the namespace of the consumer type.
     /// </summary>
     public string Namespace { get; } = Namespace;
 
     /// <summary>
-    /// Whether the consumer is declared as partial.
+    /// Gets whether the consumer is declared as partial.
     /// </summary>
     public bool IsPartial { get; } = IsPartial;
 
     /// <summary>
-    /// The fully qualified names of the provider types this consumer depends on.
+    /// Gets the typed service references consumed by the consumer.
     /// </summary>
-    public ImmutableArray<string> Dependencies { get; } = Dependencies;
+    public ImmutableArray<ServiceReferenceModel> Dependencies { get; } = Dependencies;
 }

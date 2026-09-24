@@ -5,7 +5,10 @@ namespace SingletonDI.Attributes;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The marked class will receive dependencies through generated properties.
+/// The marked class receives one generated property for each declared dependency. A dependency
+/// can be a visible concrete provider or an interface or abstract service contract. Contract
+/// dependencies are named from the contract identity and do not require a reference to the
+/// provider implementation.
 /// </para>
 /// <para>
 /// The class must be declared as <c>partial</c> to allow code generation.
@@ -18,14 +21,18 @@ namespace SingletonDI.Attributes;
 public sealed class SingletonDIConsumeAttribute : Attribute
 {
     /// <summary>
-    /// The types of singleton providers this consumer depends on.
+    /// Gets the concrete provider types and service contracts this consumer depends on.
     /// </summary>
+    /// <remarks>
+    /// A contract entry is validated by the executable composition root because the provider
+    /// implementation can live in another assembly.
+    /// </remarks>
     public Type[] Dependencies { get; }
 
     /// <summary>
     /// Creates a new SingletonDIConsumeAttribute with the specified dependencies.
     /// </summary>
-    /// <param name="dependencies">The types of singleton providers.</param>
+    /// <param name="dependencies">The concrete provider types and supported service contracts consumed by the class.</param>
     public SingletonDIConsumeAttribute(params Type[] dependencies)
     {
         Dependencies = dependencies;

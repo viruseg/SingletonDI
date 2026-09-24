@@ -4,14 +4,10 @@ using SingletonDI.Generator.Models;
 namespace SingletonDI.Generator.Helpers;
 
 /// <summary>
-/// Performs topological sorting using Kahn's algorithm (BFS).
-/// Detects circular dependencies between singleton providers.
+/// Performs topological sorting using Kahn's algorithm and detects provider cycles.
 /// </summary>
 internal static class TopologicalSorter
 {
-    /// <summary>
-    /// Result of topological sorting.
-    /// </summary>
     public readonly struct SortResult(ImmutableArray<string> sortedOrder, ImmutableArray<string> cycle)
     {
         public ImmutableArray<string> SortedOrder { get; } = sortedOrder;
@@ -19,275 +15,174 @@ internal static class TopologicalSorter
         public bool HasCycle => !Cycle.IsEmpty;
     }
 
-    /// <summary>
-    /// Performs topological sort on providers based on their dependencies.
-    /// Only providers that are also consumers are included in the graph.
-    /// </summary>
-    /// <param name="providers">All providers to sort.</param>
-    /// <returns>Sort result with ordered FQNs or detected cycle.</returns>
     public static SortResult Sort(ImmutableArray<ProviderModel> providers)
     {
-        if (providers.IsEmpty)
+        if (providers.IsDefault || providers.IsEmpty)
         {
             return new SortResult(ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
         }
 
-        // Convert to list
-        var validProviders = providers.ToList();
-
-        if (validProviders.Count == 0)
-        {
-            return new SortResult(ImmutableArray<string>.Empty, ImmutableArray<string>.Empty);
-        }
-
-        // Build dependency graph: only include providers that have dependencies
-        var providerDict = new Dictionary<string, ProviderModel>();
-        foreach (var p in validProviders)
-        {
-            providerDict[p.FullyQualifiedName] = p;
-        }
-
-        // Build adjacency list and in-degree count
-        // Edge from A to B means A depends on B (B must be initialized before A)
-        var inDegree = new Dictionary<string, int>();
-        var adjacency = new Dictionary<string, List<string>>();
-
-        foreach (var provider in validProviders)
-        {
-            inDegree[provider.FullyQualifiedName] = 0;
-            adjacency[provider.FullyQualifiedName] = [];
-        }
-
-        // Build edges: for each provider that depends on other providers
-        foreach (var provider in validProviders)
-        {
-            if (provider.Dependencies.IsEmpty)
-                continue;
-
-            foreach (var dep in provider.Dependencies)
-            {
-                if (!providerDict.ContainsKey(dep))
-                    continue; // Dependency not in current providers
-
-                // Edge: dep -> provider (dep must come before provider)
-                adjacency[dep].Add(provider.FullyQualifiedName);
-                inDegree[provider.FullyQualifiedName]++;
-            }
-        }
-
-        // Kahn's algorithm
-        var queue = new Queue<string>();
-
-        // Start with nodes that have no incoming edges
-        foreach (var kvp in inDegree)
-        {
-            if (kvp.Value == 0)
-            {
-                queue.Enqueue(kvp.Key);
-            }
-        }
-
-        var result = ImmutableArray.CreateBuilder<string>();
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-            result.Add(current);
-
-            foreach (var neighbor in adjacency[current])
-            {
-                inDegree[neighbor]--;
-                if (inDegree[neighbor] == 0)
-                {
-                    queue.Enqueue(neighbor);
-                }
-            }
-        }
-
-        // Check for cycle
-        var remainingWithDegree = inDegree.Where(kvp => kvp.Value > 0).Select(kvp => kvp.Key).ToList();
-
-        if (remainingWithDegree.Count > 0)
-        {
-            // Cycle detected - find the cycle path
-            var cycle = FindCycle(adjacency, remainingWithDegree[0]);
-
-            return new SortResult(ImmutableArray<string>.Empty, cycle);
-        }
-
-        return new SortResult(result.ToImmutable(), ImmutableArray<string>.Empty);
+        return SortGraph(BuildGraph(providers, static dependencyKey => dependencyKey));
     }
 
-    /// <summary>
-    /// Finds a cycle path starting from the given node using DFS.
-    /// </summary>
-    private static ImmutableArray<string> FindCycle(Dictionary<string, List<string>> adjacency, string startNode)
-    {
-        var visited = new HashSet<string>();
-        var path = new List<string>();
-
-        if (TryFindCycleDFS(adjacency, startNode, visited, path, startNode))
-        {
-            return [..path];
-        }
-
-        return ImmutableArray<string>.Empty;
-    }
-
-    private static bool TryFindCycleDFS(
-        Dictionary<string, List<string>> adjacency,
-        string node,
-        HashSet<string> visited,
-        List<string> path,
-        string startNode)
-    {
-        if (path.Contains(node))
-        {
-            // Found cycle - trim path to start from the cycle start
-            var cycleStartIndex = path.IndexOf(node);
-            var cycle = path.Skip(cycleStartIndex).ToList();
-            cycle.Add(node); // Close the cycle
-            path.Clear();
-            path.AddRange(cycle);
-            return true;
-        }
-
-        if (!visited.Add(node)) return false;
-
-        path.Add(node);
-
-        if (adjacency.TryGetValue(node, out var neighbors))
-        {
-            foreach (var neighbor in neighbors)
-            {
-                if (TryFindCycleDFS(adjacency, neighbor, visited, path, startNode))
-                    return true;
-            }
-        }
-
-        path.RemoveAt(path.Count - 1);
-        return false;
-    }
-    /// <summary>
-    /// Result of topological sorting by levels.
-    /// </summary>
     public readonly struct LevelSortResult(List<List<ProviderModel>> levels, ImmutableArray<string> cycle)
     {
-        /// <summary>
-        /// List of levels, where each level contains providers that can be initialized in parallel.
-        /// Providers on level N depend only on providers from levels 0..N-1.
-        /// </summary>
         public List<List<ProviderModel>> Levels { get; } = levels;
 
-        /// <summary>
-        /// The detected cycle, if any. Empty if no cycle was detected.
-        /// </summary>
         public ImmutableArray<string> Cycle { get; } = cycle;
 
-        /// <summary>
-        /// Whether a cycle was detected during sorting.
-        /// </summary>
+        public ImmutableArray<ServiceTypeIdentity> CycleIdentities { get; init; } =
+            ImmutableArray<ServiceTypeIdentity>.Empty;
+
         public bool HasCycle => !Cycle.IsEmpty;
     }
 
-    /// <summary>
-    /// Performs topological sort on providers and groups them by dependency levels.
-    /// Providers on the same level can be initialized in parallel.
-    /// Providers on level N depend only on providers from levels 0..N-1.
-    /// </summary>
-    /// <param name="providers">All providers to sort.</param>
-    /// <returns>Level sort result with grouped providers or detected cycle.</returns>
     public static LevelSortResult SortByLevels(ImmutableArray<ProviderModel> providers)
     {
-        if (providers.IsEmpty)
+        if (providers.IsDefault || providers.IsEmpty)
         {
             return new LevelSortResult([], ImmutableArray<string>.Empty);
         }
 
-        var validProviders = providers.ToList();
+        return SortByLevelsCore(providers, static dependencyKey => dependencyKey);
+    }
 
-        if (validProviders.Count == 0)
+    /// <summary>
+    /// Sorts providers by dependency levels using concrete and contract service keys.
+    /// </summary>
+    /// <param name="providers">Providers to sort.</param>
+    /// <param name="serviceKeyToProvider">Service-key to provider-FQN mapping.</param>
+    /// <returns>Provider levels and any detected cycle.</returns>
+    public static LevelSortResult SortByLevels(
+        ImmutableArray<ProviderModel> providers,
+        ImmutableDictionary<string, string> serviceKeyToProvider)
+    {
+        if (serviceKeyToProvider == null)
+        {
+            throw new ArgumentNullException(nameof(serviceKeyToProvider));
+        }
+
+        if (providers.IsDefault || providers.IsEmpty)
         {
             return new LevelSortResult([], ImmutableArray<string>.Empty);
         }
 
-        // Build provider dictionary for quick lookup
-        var providerDict = new Dictionary<string, ProviderModel>();
-        foreach (var p in validProviders)
+        return SortByLevelsCore(
+            providers,
+            dependencyKey => serviceKeyToProvider.TryGetValue(dependencyKey, out var provider)
+                ? provider
+                : null);
+    }
+
+    /// <summary>
+    /// Sorts providers by dependency levels using a read-only service-key map.
+    /// </summary>
+    /// <param name="providers">Providers to sort.</param>
+    /// <param name="serviceKeyToProvider">Service-key to provider-FQN mapping.</param>
+    /// <returns>Provider levels and any detected cycle.</returns>
+    public static LevelSortResult SortByLevels(
+        ImmutableArray<ProviderModel> providers,
+        IReadOnlyDictionary<string, string> serviceKeyToProvider)
+    {
+        if (serviceKeyToProvider == null)
         {
-            providerDict[p.FullyQualifiedName] = p;
+            throw new ArgumentNullException(nameof(serviceKeyToProvider));
         }
 
-        // Build adjacency list and in-degree count
-        // Edge from A to B means A depends on B (B must be initialized before A)
-        var inDegree = new Dictionary<string, int>();
-        var adjacency = new Dictionary<string, List<string>>();
-
-        foreach (var provider in validProviders)
+        if (providers.IsDefault || providers.IsEmpty)
         {
-            inDegree[provider.FullyQualifiedName] = 0;
-            adjacency[provider.FullyQualifiedName] = [];
+            return new LevelSortResult([], ImmutableArray<string>.Empty);
         }
 
-        // Build edges: for each provider that depends on other providers
-        foreach (var provider in validProviders)
+        return SortByLevelsCore(
+            providers,
+            dependencyKey => serviceKeyToProvider.TryGetValue(dependencyKey, out var provider)
+                ? provider
+                : null);
+    }
+
+    public static LevelSortResult SortByLevels(
+        ImmutableArray<ProviderModel> providers,
+        ImmutableDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeToProvider)
+    {
+        if (serviceTypeToProvider == null)
         {
-            if (provider.Dependencies.IsEmpty)
-                continue;
-
-            foreach (var dep in provider.Dependencies)
-            {
-                if (!providerDict.ContainsKey(dep))
-                    continue; // Dependency not in current providers
-
-                // Edge: dep -> provider (dep must come before provider)
-                adjacency[dep].Add(provider.FullyQualifiedName);
-                inDegree[provider.FullyQualifiedName]++;
-            }
+            throw new ArgumentNullException(nameof(serviceTypeToProvider));
         }
 
-        // Group by levels using modified Kahn's algorithm
+        if (providers.IsDefault || providers.IsEmpty)
+        {
+            return new LevelSortResult([], ImmutableArray<string>.Empty);
+        }
+
+        return SortByLevelsIdentityCore(
+            providers,
+            dependency => serviceTypeToProvider.TryGetValue(dependency, out var provider)
+                ? provider
+                : null);
+    }
+
+    public static LevelSortResult SortByLevels(
+        ImmutableArray<ProviderModel> providers,
+        IReadOnlyDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeToProvider)
+    {
+        if (serviceTypeToProvider == null)
+        {
+            throw new ArgumentNullException(nameof(serviceTypeToProvider));
+        }
+
+        if (providers.IsDefault || providers.IsEmpty)
+        {
+            return new LevelSortResult([], ImmutableArray<string>.Empty);
+        }
+
+        return SortByLevelsIdentityCore(
+            providers,
+            dependency => serviceTypeToProvider.TryGetValue(dependency, out var provider)
+                ? provider
+                : null);
+    }
+
+    private static LevelSortResult SortByLevelsIdentityCore(
+        ImmutableArray<ProviderModel> providers,
+        Func<ServiceTypeIdentity, ServiceTypeIdentity?> resolveDependency)
+    {
+        var graph = BuildIdentityGraph(providers, resolveDependency);
         var levels = new List<List<ProviderModel>>();
-        var processed = new HashSet<string>();
-        var currentInDegree = new Dictionary<string, int>(inDegree);
+        var currentInDegree = new Dictionary<string, int>(graph.InDegree, StringComparer.Ordinal);
+        var processed = new HashSet<string>(StringComparer.Ordinal);
 
-        while (processed.Count < validProviders.Count)
+        while (processed.Count < graph.Providers.Count)
         {
-            // Find all nodes with in-degree 0 (no unprocessed dependencies)
-            var currentLevel = new List<ProviderModel>();
-
-            foreach (var kvp in currentInDegree)
-            {
-                if (kvp.Value == 0 && !processed.Contains(kvp.Key))
+            var currentLevel = graph.Providers
+                .Where(provider =>
                 {
-                    currentLevel.Add(providerDict[kvp.Key]);
-                }
-            }
+                    var nodeKey = GetNodeKey(provider);
+                    return !processed.Contains(nodeKey) && currentInDegree[nodeKey] == 0;
+                })
+                .ToList();
 
-            // If no nodes can be added to current level, there's a cycle
             if (currentLevel.Count == 0)
             {
-                // Find remaining nodes (they form a cycle)
-                var remainingWithDegree = currentInDegree
-                    .Where(kvp => !processed.Contains(kvp.Key))
-                    .Select(kvp => kvp.Key)
+                var remaining = graph.Providers
+                    .Where(provider => !processed.Contains(GetNodeKey(provider)))
+                    .Select(GetNodeKey)
                     .ToList();
-
-                var cycle = FindCycle(adjacency, remainingWithDegree.FirstOrDefault() ?? string.Empty);
-
-                return new LevelSortResult([], cycle);
+                var cycleKeys = FindCycle(
+                    graph.Adjacency,
+                    remaining.FirstOrDefault() ?? string.Empty);
+                return new LevelSortResult([], ToProviderNames(cycleKeys, graph))
+                {
+                    CycleIdentities = ToProviderIdentities(cycleKeys, graph),
+                };
             }
 
-            // Add current level to result
             levels.Add(currentLevel);
-
-            // Mark all nodes in current level as processed
-            // and decrease in-degree of their dependents
             foreach (var provider in currentLevel)
             {
-                processed.Add(provider.FullyQualifiedName);
-
-                foreach (var dependent in adjacency[provider.FullyQualifiedName])
+                var nodeKey = GetNodeKey(provider);
+                processed.Add(nodeKey);
+                foreach (var dependent in graph.Adjacency[nodeKey])
                 {
                     currentInDegree[dependent]--;
                 }
@@ -296,4 +191,319 @@ internal static class TopologicalSorter
 
         return new LevelSortResult(levels, ImmutableArray<string>.Empty);
     }
+
+    private static LevelSortResult SortByLevelsCore(
+        ImmutableArray<ProviderModel> providers,
+        Func<string, string?> resolveDependency)
+    {
+        var graph = BuildGraph(providers, resolveDependency);
+        var levels = new List<List<ProviderModel>>();
+        var currentInDegree = new Dictionary<string, int>(graph.InDegree, StringComparer.Ordinal);
+        var processed = new HashSet<string>(StringComparer.Ordinal);
+
+        while (processed.Count < graph.Providers.Count)
+        {
+            var currentLevel = graph.Providers
+                .Where(provider =>
+                {
+                    var nodeKey = GetNodeKey(provider);
+                    return !processed.Contains(nodeKey) && currentInDegree[nodeKey] == 0;
+                })
+                .ToList();
+
+            if (currentLevel.Count == 0)
+            {
+                var remaining = graph.Providers
+                    .Where(provider => !processed.Contains(GetNodeKey(provider)))
+                    .Select(GetNodeKey)
+                    .ToList();
+                var cycle = FindCycle(
+                    graph.Adjacency,
+                    remaining.FirstOrDefault() ?? string.Empty);
+                return new LevelSortResult([], ToProviderNames(cycle, graph));
+            }
+
+            levels.Add(currentLevel);
+            foreach (var provider in currentLevel)
+            {
+                var nodeKey = GetNodeKey(provider);
+                processed.Add(nodeKey);
+                foreach (var dependent in graph.Adjacency[nodeKey])
+                {
+                    currentInDegree[dependent]--;
+                }
+            }
+        }
+
+        return new LevelSortResult(levels, ImmutableArray<string>.Empty);
+    }
+
+    private static SortResult SortGraph(GraphData graph)
+    {
+        var inDegree = new Dictionary<string, int>(graph.InDegree, StringComparer.Ordinal);
+        var queue = new Queue<string>(graph.Providers
+            .Where(provider => inDegree[GetNodeKey(provider)] == 0)
+            .Select(GetNodeKey));
+        var result = ImmutableArray.CreateBuilder<string>();
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            result.Add(graph.ProviderNameByNodeKey[current]);
+            foreach (var dependent in graph.Adjacency[current])
+            {
+                inDegree[dependent]--;
+                if (inDegree[dependent] == 0)
+                {
+                    queue.Enqueue(dependent);
+                }
+            }
+        }
+
+        var remaining = graph.Providers
+            .Where(provider => inDegree[GetNodeKey(provider)] > 0)
+            .Select(GetNodeKey)
+            .ToList();
+
+        if (remaining.Count == 0)
+        {
+            return new SortResult(result.ToImmutable(), ImmutableArray<string>.Empty);
+        }
+
+        return new SortResult(
+            ImmutableArray<string>.Empty,
+            ToProviderNames(FindCycle(graph.Adjacency, remaining[0]), graph));
+    }
+
+    private static GraphData BuildGraph(
+        ImmutableArray<ProviderModel> providers,
+        Func<string, string?> resolveDependency)
+    {
+        var providerList = providers
+            .GroupBy(GetNodeKey, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .OrderBy(provider => provider.FullyQualifiedName, StringComparer.Ordinal)
+            .ThenBy(provider => provider.AssemblyIdentity, StringComparer.Ordinal)
+            .ToList();
+        var nodeKeyByProviderName = new Dictionary<string, string>(StringComparer.Ordinal);
+        var providerNameByNodeKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        var providerIdentityByNodeKey = new Dictionary<string, ServiceTypeIdentity>(StringComparer.Ordinal);
+        foreach (var provider in providerList)
+        {
+            var nodeKey = GetNodeKey(provider);
+            if (!nodeKeyByProviderName.ContainsKey(provider.FullyQualifiedName))
+            {
+                nodeKeyByProviderName.Add(provider.FullyQualifiedName, nodeKey);
+            }
+
+            providerNameByNodeKey[nodeKey] = provider.FullyQualifiedName;
+            providerIdentityByNodeKey[nodeKey] = new ServiceTypeIdentity(
+                provider.FullyQualifiedName,
+                provider.AssemblyIdentity);
+        }
+
+        var adjacency = providerList
+            .Select(GetNodeKey)
+            .ToDictionary(
+                nodeKey => nodeKey,
+                _ => new List<string>(),
+                StringComparer.Ordinal);
+        var inDegree = providerList
+            .Select(GetNodeKey)
+            .ToDictionary(
+                nodeKey => nodeKey,
+                _ => 0,
+                StringComparer.Ordinal);
+
+        foreach (var provider in providerList)
+        {
+            if (provider.Dependencies.IsDefault)
+            {
+                continue;
+            }
+
+            var providerNodeKey = GetNodeKey(provider);
+            var resolvedDependencies = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var dependencyKey in provider.Dependencies)
+            {
+                var targetProviderName = resolveDependency(dependencyKey);
+                if (targetProviderName == null ||
+                    !nodeKeyByProviderName.TryGetValue(targetProviderName, out var targetNodeKey))
+                {
+                    continue;
+                }
+
+                if (resolvedDependencies.Add(targetNodeKey))
+                {
+                    adjacency[targetNodeKey].Add(providerNodeKey);
+                    inDegree[providerNodeKey]++;
+                }
+            }
+        }
+
+        return new GraphData(
+            providerList,
+            providerNameByNodeKey,
+            providerIdentityByNodeKey,
+            adjacency,
+            inDegree);
+    }
+
+    private static GraphData BuildIdentityGraph(
+        ImmutableArray<ProviderModel> providers,
+        Func<ServiceTypeIdentity, ServiceTypeIdentity?> resolveDependency)
+    {
+        var providerList = providers
+            .GroupBy(GetNodeKey, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .OrderBy(provider => provider.FullyQualifiedName, StringComparer.Ordinal)
+            .ThenBy(provider => provider.AssemblyIdentity, StringComparer.Ordinal)
+            .ToList();
+        var nodeKeyByIdentity = new Dictionary<ServiceTypeIdentity, string>();
+        var providerNameByNodeKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        var providerIdentityByNodeKey = new Dictionary<string, ServiceTypeIdentity>(StringComparer.Ordinal);
+        foreach (var provider in providerList)
+        {
+            var identity = provider.TypeIdentity;
+            var nodeKey = GetNodeKey(identity);
+            nodeKeyByIdentity[identity] = nodeKey;
+            providerNameByNodeKey[nodeKey] = provider.FullyQualifiedName;
+            providerIdentityByNodeKey[nodeKey] = identity;
+        }
+
+        var adjacency = providerList
+            .Select(GetNodeKey)
+            .ToDictionary(
+                nodeKey => nodeKey,
+                _ => new List<string>(),
+                StringComparer.Ordinal);
+        var inDegree = providerList
+            .Select(GetNodeKey)
+            .ToDictionary(
+                nodeKey => nodeKey,
+                _ => 0,
+                StringComparer.Ordinal);
+
+        foreach (var provider in providerList)
+        {
+            var providerNodeKey = GetNodeKey(provider);
+            var resolvedDependencies = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var dependency in provider.DependencyIdentities)
+            {
+                var targetIdentity = resolveDependency(dependency);
+                if (targetIdentity is null ||
+                    !nodeKeyByIdentity.TryGetValue(targetIdentity.Value, out var targetNodeKey))
+                {
+                    continue;
+                }
+
+                if (resolvedDependencies.Add(targetNodeKey))
+                {
+                    adjacency[targetNodeKey].Add(providerNodeKey);
+                    inDegree[providerNodeKey]++;
+                }
+            }
+        }
+
+        return new GraphData(
+            providerList,
+            providerNameByNodeKey,
+            providerIdentityByNodeKey,
+            adjacency,
+            inDegree);
+    }
+
+    private static ImmutableArray<string> ToProviderNames(
+        ImmutableArray<string> nodeKeys,
+        GraphData graph)
+    {
+        return nodeKeys
+            .Select(nodeKey => graph.ProviderNameByNodeKey.TryGetValue(nodeKey, out var providerName)
+                ? providerName
+                : nodeKey)
+            .ToImmutableArray();
+    }
+
+    private static ImmutableArray<ServiceTypeIdentity> ToProviderIdentities(
+        ImmutableArray<string> nodeKeys,
+        GraphData graph)
+    {
+        return nodeKeys
+            .Select(nodeKey => graph.ProviderIdentityByNodeKey.TryGetValue(nodeKey, out var identity)
+                ? identity
+                : new ServiceTypeIdentity(nodeKey, string.Empty))
+            .ToImmutableArray();
+    }
+
+    private static string GetNodeKey(ProviderModel provider)
+    {
+        return GetNodeKey(new ServiceTypeIdentity(
+            provider.FullyQualifiedName,
+            provider.AssemblyIdentity));
+    }
+
+    private static string GetNodeKey(ServiceTypeIdentity identity)
+    {
+        return identity.AssemblyIdentity + "\u001f" + identity.FullyQualifiedName;
+    }
+
+    private static ImmutableArray<string> FindCycle(
+        Dictionary<string, List<string>> adjacency,
+        string startNode)
+    {
+        if (!adjacency.ContainsKey(startNode))
+        {
+            return ImmutableArray<string>.Empty;
+        }
+
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var path = new List<string>();
+        return TryFindCycleDFS(adjacency, startNode, visited, path)
+            ? [..path]
+            : ImmutableArray<string>.Empty;
+    }
+
+    private static bool TryFindCycleDFS(
+        Dictionary<string, List<string>> adjacency,
+        string node,
+        HashSet<string> visited,
+        List<string> path)
+    {
+        var pathIndex = path.IndexOf(node);
+        if (pathIndex >= 0)
+        {
+            var cycle = path.Skip(pathIndex).ToList();
+            cycle.Add(node);
+            path.Clear();
+            path.AddRange(cycle);
+            return true;
+        }
+
+        if (!visited.Add(node))
+        {
+            return false;
+        }
+
+        path.Add(node);
+        if (adjacency.TryGetValue(node, out var neighbors))
+        {
+            foreach (var neighbor in neighbors)
+            {
+                if (TryFindCycleDFS(adjacency, neighbor, visited, path))
+                {
+                    return true;
+                }
+            }
+        }
+
+        path.RemoveAt(path.Count - 1);
+        return false;
+    }
+
+    private readonly record struct GraphData(
+        List<ProviderModel> Providers,
+        Dictionary<string, string> ProviderNameByNodeKey,
+        Dictionary<string, ServiceTypeIdentity> ProviderIdentityByNodeKey,
+        Dictionary<string, List<string>> Adjacency,
+        Dictionary<string, int> InDegree);
 }

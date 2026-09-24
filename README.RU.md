@@ -5,11 +5,12 @@
 
 - **Декларативное описание зависимостей** — внедрение и предоставление сервисов настраивается через атрибуты `[SingletonDIProvide]` и `[SingletonDIConsume]` непосредственно в коде классов, без централизованных модулей регистрации.
 - **Отсутствие Reflection в runtime** — весь код для инстанцирования и внедрения генерируется на этапе сборки, что обеспечивает скорость выполнения на уровне прямого вызова конструкторов.
-- **Асинхронная инициализация** — поддержка метода `InitializeAsync()` для сервисов, требующих I/O операций при старте (подключение к БД, чтение конфигураций, сетевые запросы).
+- **Асинхронная инициализация** — поддержка методов `Task` или `ValueTask` `InitializeAsync()` для сервисов, требующих I/O операций при старте (подключение к БД, чтение конфигураций, сетевые запросы).
 - **Параллельный запуск** — сервисы, находящиеся на одном уровне графа зависимостей (не зависящие друг от друга), инициализируются параллельно для минимизации времени старта приложения.
-- **Автоматическое разрешение зависимостей** — встроенная топологическая сортировка гарантирует, что каждый сервис будет создан строго после инициализации всех его зависимостей.
+- **Автоматическое разрешение зависимостей** — встроенная топологическая сортировка сначала создаёт экземпляры зависимостей, а `InitializeAsync` каждого уровня запускается только после завершения всех нижних уровней.
 - **Compile-time валидация графа** — выявление циклических зависимостей, отсутствующих провайдеров и конфликтов имен происходит на этапе компиляции, предотвращая падения (runtime errors) при запуске приложения.
-- **Управление жизненным циклом** — автоматическое отслеживание объектов, реализующих `IDisposable` и `IAsyncDisposable`, с последующим их освобождением в обратном порядке (LIFO) при завершении работы.
+- **Управление жизненным циклом** — автоматическое отслеживание объектов, реализующих `IDisposable` и `IAsyncDisposable`, с освобождением уровней графа в обратном порядке при завершении работы.
+- **Композиция между проектами** — composition root объединяет публичных провайдеров из транзитивных сборок, подключённых через `ProjectReference` или `PackageReference`; общие контракты позволяют библиотекам использовать реализации, зарегистрированные приложением.
 - **Потокобезопасность** — сгенерированный код обеспечивает безопасный доступ к экземплярам синглтонов при работе в многопоточной среде.
 
 ## Установка
@@ -93,11 +94,79 @@ public static class Program
 }
 ```
 
+## Композиция между проектами
+
+Библиотека может использовать провайдер, реализованный исполняемым приложением, без прямой ссылки на его реализацию. Поместите контракт в нижнеуровневый проект Contracts, на который ссылаются и библиотека, и приложение.
+
+### Shared.Contracts/IDatabaseService.cs
+
+```csharp
+namespace Shared.Contracts;
+
+public interface IDatabaseService
+{
+}
+```
+
+### ConsumerLibrary/Repository.cs
+
+```csharp
+using Shared.Contracts;
+using SingletonDI.Attributes;
+
+namespace ConsumerLibrary;
+
+[SingletonDIConsume(typeof(IDatabaseService))]
+public partial class Repository
+{
+    public IDatabaseService GetService()
+    {
+        return IDatabaseServiceInstance;
+    }
+}
+```
+
+Среди проектов решения библиотека-потребитель ссылается только на `Shared.Contracts`; она также ссылается на SingletonDI, но не на приложение или `DatabaseService`. Сгенерированное свойство `IDatabaseServiceInstance` разрешает общий контракт после инициализации общего реестра приложением.
+
+### RootApp.csproj
+
+Исполняемый проект, владеющий полным графом зависимостей, явно opt-in-ом становится composition root:
+
+```xml
+<PropertyGroup>
+  <OutputType>Exe</OutputType>
+  <SingletonDICompositionRoot>true</SingletonDICompositionRoot>
+</PropertyGroup>
+<ItemGroup>
+  <CompilerVisibleProperty Include="SingletonDICompositionRoot" />
+</ItemGroup>
+```
+
+### RootApp/DatabaseService.cs
+
+```csharp
+using Shared.Contracts;
+using SingletonDI.Attributes;
+
+namespace SingletonDI.InterProjectFixtures.RootApp;
+
+[SingletonDIProvide(ServiceType = typeof(IDatabaseService))]
+public sealed class DatabaseService : IDatabaseService
+{
+}
+```
+
+При установленном свойстве root рекурсивно анализирует свои metadata references, импортирует публичных провайдеров, проверяет полный граф сервисов и запускает registration module каждой подключённой provider-сборки до вызова `InitializeAsync()`. `ProjectReference` и `PackageReference` поддерживаются одинаково. Непубличные провайдеры из подключённых сборок не импортируются, а provider-пакет без сгенерированного assembly marker `SingletonDIProviderModuleAttribute` отклоняется с `DM0020`.
+
+Приложение регистрирует `DatabaseService` по двум ключам: concrete type и `IDatabaseService`. Оба ключа разрешают один и тот же объект. Имя свойства contract-потребителя вычисляется из типа контракта (`IDatabaseServiceInstance`), а не из `PropertyName` провайдера: библиотека, видящая только контракт, не может анализировать объявление провайдера в приложении. В самом приложении могут одновременно использоваться concrete- и contract-доступ.
+
+Одно-проектному приложению `SingletonDICompositionRoot` не требуется.
+
 ## Атрибуты
 
 ### [SingletonDIProvide]
 
-Маркирует класс как singleton-провайдер. Генератор создаст экземпляр этого класса и будет управлять его жизненным циклом.
+Маркирует класс как singleton-провайдер. Сгенерированные registration-делегаты создают его экземпляр, а runtime управляет его жизненным циклом.
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
@@ -108,22 +177,32 @@ public sealed class SingletonDIProvideAttribute : Attribute
     /// </summary>
     public string? PropertyName { get; }
 
-    public SingletonDIProvideAttribute(string? propertyName = null) { }
+    /// <summary>
+    /// Контракт сервиса, предоставляемый провайдером.
+    /// </summary>
+    public Type? ServiceType { get; set; }
+
+    public SingletonDIProvideAttribute(string? propertyName = null)
+    {
+        PropertyName = propertyName;
+    }
 }
 ```
 
-**Параметры:**
-- `propertyName` (опционально) — пользовательское имя свойства для доступа к синглтону в потребителях. Если не указано, используется имя по умолчанию: `{TypeName}Instance`
+**Свойства и параметры:**
+- `propertyName` (опционально) — пользовательское имя свойства для concrete-доступа в потребителях. Если не указано, используется имя `{TypeName}Instance`
+- `ServiceType` (опционально) — reference type, которому назначается провайдер и который доступен его сборке; провайдер регистрируется по этому контракту и по своему concrete type, причём оба ключа разрешают один и тот же экземпляр
 
 **Требования:**
 - Применим только к `class`
 - Класс должен иметь публичный конструктор без параметров
 - Класс не должен быть `abstract`
 - Не наследуется (каждый класс должен быть явно помечен)
+- Один провайдер может объявить не более одного `ServiceType`
 
 **Инициализация:**
 - Для синхронной инициализации используйте конструктор без параметров
-- Для асинхронной инициализации реализуйте метод `Task InitializeAsync()`
+- Для асинхронной инициализации реализуйте метод без параметров `Task InitializeAsync()` или `ValueTask InitializeAsync()`
 
 **Примеры:**
 
@@ -138,16 +217,32 @@ public class MyService
     }
 }
 
-// Асинхронная инициализация через метод
+// Асинхронная инициализация через ValueTask
 [SingletonDIProvide]
 public class DataService
 {
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         // Асинхронная инициализация
     }
 }
 ```
+
+Провайдер может предоставить общий контракт, не связывая библиотеку-потребитель со своей реализацией:
+
+```csharp
+[SingletonDIProvide(ServiceType = typeof(IDatabaseService))]
+public sealed class DatabaseService : IDatabaseService
+{
+}
+
+[SingletonDIConsume(typeof(IDatabaseService))]
+public partial class Repository
+{
+}
+```
+
+`ServiceType` должен быть reference type, которому назначается провайдер. Consumer может зависеть от этого контракта без ссылки на сборку реализации; исполняемый composition root проверяет, что контракт сопоставлен ровно одному провайдеру. Имена contract-свойств вычисляются из типа контракта и dependency set конкретного consumer, а не из `PropertyName` провайдера. Если свойство не задано, провайдер регистрируется только по concrete type.
 
 **Имена свойств:**
 
@@ -185,6 +280,21 @@ public partial class OrderService
 }
 ```
 
+Для любой contract-зависимости имя генерируется из типа контракта, а пользовательский `PropertyName` провайдера не используется. Это особенно важно для библиотеки-потребителя, которая не может анализировать объявление провайдера:
+
+```csharp
+[SingletonDIProvide("db", ServiceType = typeof(IDatabaseService))]
+public sealed class DatabaseService : IDatabaseService { }
+
+[SingletonDIConsume(typeof(IDatabaseService))]
+public partial class Repository
+{
+    public IDatabaseService GetService() => IDatabaseServiceInstance;
+}
+```
+
+Здесь `IDatabaseServiceInstance` — свойство контракта, а потребитель, видящий concrete provider, может использовать `db`. Если короткие имена зависимостей одного потребителя конфликтуют, применяется существующее разрешение имён через namespace.
+
 ### [SingletonDIConsume]
 
 Маркирует класс как потребителя singleton-зависимостей. Генератор создаст свойства для доступа к указанным синглтонам.
@@ -196,13 +306,16 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 {
     public Type[] Dependencies { get; }
     
-    public SingletonDIConsumeAttribute(params Type[] dependencies) { }
+    public SingletonDIConsumeAttribute(params Type[] dependencies)
+    {
+        Dependencies = dependencies;
+    }
 }
 ```
 
 **Требования:**
 - Класс должен быть объявлен как `partial`
-- Все указанные зависимости должны быть помечены `[SingletonDIProvide]`
+- Каждая зависимость должна быть видимым `[SingletonDIProvide]`-типом или поддерживаемым interface/abstract contract; composition root проверяет, что для запрошенного контракта существует ровно один провайдер
 - Нельзя указывать сам класс в списке зависимостей (self-reference)
 - Нельзя дублировать типы в списке зависимостей
 - Наследуется (`Inherited = true`) — наследники автоматически получают те же зависимости
@@ -218,7 +331,7 @@ public partial class OrderController { }
 
 ## API SingletonDIInitializer
 
-Генератор создаёт класс `SingletonDIInitializer` с методами для управления жизненным циклом синглтонов.
+Runtime-часть SingletonDI предоставляет общепроцессный класс `SingletonDIInitializer`. Сгенерированные provider-модули регистрируются в этом runtime-реестре, а сгенерированные свойства потребителей разрешают сервисы из него.
 
 ### InitializeAsync
 
@@ -234,6 +347,10 @@ public static Task InitializeAsync(bool registerShutdownHandlers = true)
   - `false` — не регистрирует обработчики (для сценариев с ручным управлением lifetime)
 
 **Возвращает:** `Task`
+
+Все экземпляры провайдеров создаются по уровням: сначала зависимости, затем зависящие от них компоненты; этот этап завершается до запуска любых методов `InitializeAsync`. Затем initializers провайдеров одного уровня выполняются параллельно. Поддерживаются `Task` и `ValueTask`. Параллельные lifecycle-вызовы сериализуются с disposal: повторная инициализация, запрошенная во время disposal, ждёт его завершения и получает новую задачу, а не предыдущую успешную. При ошибке инициализации все созданные экземпляры освобождаются в обратном порядке зависимостей,cleanup продолжается после отдельных ошибок disposer-ов, состояние очищается, а исходная ошибка инициализации сохраняется для следующей попытки. Регистрация нового провайдера после начала инициализации запрещается.
+
+Обычный доступ к сгенерированному свойству или разрешение через скрытый host до успешной инициализации и вне активного контекста инициализации выбрасывает `InvalidOperationException`. В активном контексте инициализации provider factory или конструктор может разрешать уже созданные зависимости; SampleApp использует этот паттерн в конструкторах провайдеров.
 
 **Примеры:**
 
@@ -256,13 +373,14 @@ await SingletonDIInitializer.DisposeAsync();
 public static ValueTask DisposeAsync()
 ```
 
-Асинхронно освобождает все синглтоны, реализующие `IAsyncDisposable` или `IDisposable`.
+Асинхронно освобождает все инициализированные синглтоны, реализующие `IAsyncDisposable` или `IDisposable`. Метод возвращает `ValueTask`; параллельные и повторные вызовы идемпотентны. Очистка продолжается после ошибки отдельного disposer-а, а ошибка освобождения сообщается после обработки остальных экземпляров.
 
 **Возвращает:** `ValueTask`
 
 **Порядок освобождения:**
-- Синглтоны освобождаются в обратном порядке инициализации (LIFO)
-- Сначала вызывается `DisposeAsync()` для `IAsyncDisposable`, затем `Dispose()` для `IDisposable`
+- Уровни графа зависимостей освобождаются в обратном порядке инициализации (LIFO)
+- Провайдеры одного уровня освобождаются параллельно
+- `DisposeAsync()` используется предпочтительно, если провайдер реализует и `IAsyncDisposable`, и `IDisposable`
 
 **Пример:**
 
@@ -292,7 +410,7 @@ public static async Task Main(string[] args)
 |---|---|---|
 | **DM0001** | Error | Duplicate property name |
 | **DM0002** | Error | Cannot use [SingletonDIProvide] on abstract class |
-| **DM0003** | Error | Property name conflicts with generated name |
+| **DM0003** | Error | Consumer property name conflicts with a generated name in the same dependency set |
 | **DM0004** | Error | Missing parameterless constructor |
 | **DM0005** | Error | InitializeAsync method has inaccessible access modifier |
 | **DM0006** | Error | Referenced type is not a provider |
@@ -304,10 +422,17 @@ public static async Task Main(string[] args)
 | **DM0013** | Error | Invalid property name |
 | **DM0014** | Error | Property name is a reserved keyword |
 | **DM0015** | Error | Generic types are not supported for singletons |
+| **DM0016** | Error | Invalid `ServiceType` |
+| **DM0017** | Error | Executable has an unmapped consumer dependency and requires a composition root |
+| **DM0018** | Error | No provider for requested service |
+| **DM0019** | Error | Multiple providers for service key |
+| **DM0020** | Error | Provider module marker is missing |
+
+Идентификаторы сервисов и провайдеров в межпроектной диагностике включают содержащую их сборку. Повторные ссылки на одну сборку дедуплицируются, а одинаковые имена типов из разных сборок остаются разными CLR-типами. `DM0019` также выдаётся для конфликтов локальных `ServiceType`-сопоставлений, не только в composition root, и сообщает все конфликтующие identity провайдеров. Диагностика также сообщает о неоднозначности, когда одно полное имя связано с несколькими identity, например локальный `App.Service` и подключённый `App.Service`; assembly identity сохраняются.
 
 ### DM0001: Duplicate property name
 
-Возникает, когда несколько атрибутов `[SingletonDIProvide]` указывают одинаковое значение параметра `propertyName`. Каждое имя свойства должно быть уникальным.
+Возникает, когда несколько атрибутов `[SingletonDIProvide]`, которые могут попасть в один dependency set consumer, указывают одинаковое значение `propertyName`. Composition root ограничивает проверку провайдерами, реально используемыми consumer-ами; несвязанные провайдеры не блокируют корректный root.
 
 ```csharp
 [SingletonDIProvide(propertyName: "DbService")]
@@ -326,35 +451,16 @@ public class AnotherDatabaseService { }
 public abstract class BaseService { }
 ```
 
-### DM0003: Property name conflicts with generated name
+### DM0003: Конфликт имени свойства consumer
 
-Возникает, когда пользовательское имя свойства в `[SingletonDIProvide]` совпадает с автоматически сгенерированным именем другого синглтона.
-
-```csharp
-// Автоматически генерирует свойство "DatabaseServiceInstance"
-[SingletonDIProvide]
-public class DatabaseService { }
-
-// Ошибка DM0003: "DatabaseServiceInstance" совпадает с сгенерированным именем
-[SingletonDIProvide("DatabaseServiceInstance")]  // DM0003
-public class UserService { }
-```
-
-Это также работает для полных имён с префиксом namespace при конфликтах:
+Возникает, когда две зависимости одного consumer получают одинаковое имя свойства, включая custom `PropertyName` провайдера и имя contract-зависимости. Диагностика содержит конфликтующее свойство и identity сервиса; генератор применяет namespace-qualified fallback ко второму свойству и сообщает о конфликте, не создавая неоднозначный API.
 
 ```csharp
-namespace MyApp.Services
-{
-    [SingletonDIProvide]  // Генерирует "MyApp_Services_DatabaseServiceInstance"
-    public class DatabaseService { }
-}
+[SingletonDIProvide("IServiceInstance")]
+public class Service : IService { }
 
-namespace MyApp.Other
-{
-    // Ошибка DM0003
-    [SingletonDIProvide("MyApp_Services_DatabaseServiceInstance")]
-    public class UserService { }
-}
+[SingletonDIConsume(typeof(Service), typeof(IService))]
+public partial class Consumer { } // DM0003; contract-зависимость получает fallback-имя
 ```
 
 ### DM0004: Missing parameterless constructor
@@ -384,7 +490,7 @@ public class DataService
 
 ### DM0006: Referenced type is not a provider
 
-Возникает, когда `[SingletonDIConsume]` ссылается на тип, который не помечен атрибутом `[SingletonDIProvide]`.
+Возникает, когда `[SingletonDIConsume]` ссылается на неподдерживаемый тип. Concrete class без `[SingletonDIProvide]` недопустим; interface или abstract class может быть внешним контрактом, реализацию которого проверит composition root.
 
 ```csharp
 // Класс без атрибута [SingletonDIProvide]
@@ -479,11 +585,40 @@ public class Repository<T>
 }
 ```
 
+### DM0016: Invalid ServiceType
+
+Возникает, когда `ServiceType` не является reference type, которому назначается провайдер. Один провайдер может объявить только один `ServiceType`.
+
+```csharp
+public interface ICacheService { }
+
+[SingletonDIProvide(ServiceType = typeof(ICacheService))]  // DM0016
+public sealed class DatabaseService { }
+```
+
+### DM0017: Исполняемый проект имеет несопоставленную зависимость consumer
+
+Возникает, когда исполняемый проект без `SingletonDICompositionRoot=true` содержит зависимость consumer, которая не сопоставлена локальной картой провайдеров. Это включает interface/abstract-контракт, объявленный в текущей сборке, контракт из другой сборки и concrete provider из другой сборки. Библиотеки-потребители не получают `DM0017`; их зависимости проверяет исполняемый composition root.
+
+### DM0018: No provider for requested service
+
+Возникает, когда для любой зависимости в полном графе composition root отсутствует провайдер в service map. Это включает зависимости локальных и внешних провайдеров, зависимости подключённых потребителей и зависимости потребителей самого root-проекта. В сообщении каждый отсутствующий сервис указывается с assembly-qualified identity.
+
+### DM0019: Multiple providers for service key
+
+Возникает, когда несколько провайдеров отображаются на один concrete или contract service key. Диагностика также сообщает о неоднозначности, когда одно полное имя источника связано с несколькими service/provider identity, включая одинаковое имя `App.Service` в root и подключённой provider-сборке. Такие identity не объединяются по полному имени; их assembly identity сохраняются в диагностике.
+
+### DM0020: Provider module marker is missing
+
+Возникает, когда подключённая публичная provider-сборка не содержит сгенерированный assembly marker `SingletonDIProviderModuleAttribute`. Provider-пакет или проект должен быть собран совместимыми generator/runtime-протоколом SingletonDI до того, как composition root сможет его загрузить.
+
 ## Ограничения
 
-- **Только синглтоны** — библиотека не поддерживает Scoped или Transient lifestyle
-- **Одна сборка** — генератор работает только в рамках одной сборки (per-assembly ограничение Roslyn)
-- **Нет межсборочных ссылок** — `[SingletonDIProvide]`-типы из других сборок не поддерживаются
+- **Только синглтоны** — библиотека не поддерживает Scoped или Transient lifestyles
+- **Один контракт на провайдера** — провайдер может объявить не более одного `ServiceType`; несколько contract types для одной реализации не поддерживаются
+- **Один процессный root** — runtime-реестр общий для всего процесса; независимые composition roots в одном процессе не поддерживаются
+- **Только публичные внешние провайдеры** — composition root импортирует публичные `[SingletonDIProvide]`-типы из подключённых сборок
+- **Общий контракт для обратных зависимостей** — библиотека, использующая реализацию из приложения, должна зависеть от нижнеуровневой Contracts-сборки, а не от приложения
 - **`struct` запрещён** — только `class` может быть провайдером
 
 ## Лицензия

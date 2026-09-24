@@ -4,6 +4,7 @@ namespace SingletonDI.Generator.Models;
 
 /// <summary>
 /// Immutable model combining providers and consumers with topological order.
+/// Provider dependencies are service keys, while consumer dependencies are typed service references.
 /// </summary>
 public readonly record struct CombinedModel
 (

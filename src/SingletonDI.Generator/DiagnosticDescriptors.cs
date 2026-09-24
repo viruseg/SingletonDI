@@ -32,13 +32,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
-    /// DM0003: Property name conflicts with auto-generated property name.
+    /// DM0003: A consumer property name conflicts with another generated property name.
     /// </summary>
     public static readonly DiagnosticDescriptor PropertyNameConflictsWithGenerated = Create(
         "DM0003",
-        "Property name conflicts with generated name",
-        "Property name '{0}' in [SingletonDIProvide] conflicts with auto-generated property name of provider '{1}'. " +
-        "Use a different property name to avoid ambiguity.",
+        "Consumer property name conflict",
+        "Consumer property '{0}' conflicts with the property resolved for service '{1}' " +
+        "in the same consumer dependency set. Use distinct names or the namespace-qualified fallback.",
         Category,
         DiagnosticSeverity.Error);
 
@@ -68,7 +68,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor ConsumeReferencesNonProvider = Create(
         "DM0006",
         "Referenced type is not a provider",
-        "[SingletonDIConsume] references '{0}' which does not have the [SingletonDIProvide] attribute. All dependencies must be marked with [SingletonDIProvide].",
+        "[SingletonDIConsume] references '{0}' which does not have the [SingletonDIProvide] attribute and is not a valid interface or abstract contract. Dependencies must be marked with [SingletonDIProvide] or use a valid contract.",
         Category,
         DiagnosticSeverity.Error);
 
@@ -149,6 +149,45 @@ internal static class DiagnosticDescriptors
         "DM0015",
         "Generic types are not supported for singletons",
         "Generic type '{0}' cannot be a singleton. Generic types are not supported.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0016: The declared service contract is invalid for a provider.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InvalidServiceType = Create(
+        "DM0016",
+        "Invalid ServiceType",
+        "ServiceType '{0}' is invalid for provider '{1}'. It must be a reference type assignable to the provider.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    public static readonly DiagnosticDescriptor MissingCompositionRoot = Create(
+        "DM0017",
+        "Composition root is required for an unmapped consumer dependency",
+        "The executable project has a consumer dependency '{0}' that is not mapped by a local singleton provider. " +
+        "Set SingletonDICompositionRoot=true when the dependency is supplied by another assembly or contract.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    public static readonly DiagnosticDescriptor MissingExternalProvider = Create(
+        "DM0018",
+        "No provider for requested service",
+        "No singleton provider is registered for requested service key '{0}'.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    public static readonly DiagnosticDescriptor ServiceTypeConflict = Create(
+        "DM0019",
+        "Multiple providers for service key",
+        "Multiple singleton providers map to service key '{0}': {1}.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    public static readonly DiagnosticDescriptor MissingProviderModuleMarker = Create(
+        "DM0020",
+        "Provider module marker is missing",
+        "Referenced provider assembly '{0}' does not contain SingletonDIProviderModuleAttribute.",
         Category,
         DiagnosticSeverity.Error);
 

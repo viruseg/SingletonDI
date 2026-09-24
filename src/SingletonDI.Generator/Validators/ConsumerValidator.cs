@@ -7,24 +7,49 @@ using SingletonDI.Generator.Models;
 namespace SingletonDI.Generator.Validators;
 
 /// <summary>
-/// Validates consumer types with [SingletonDIConsume] attribute and creates ConsumerModel.
+/// Validates consumer types with <c>SingletonDIConsumeAttribute</c> and creates consumer models.
 /// </summary>
 internal static class ConsumerValidator
 {
-    /// <summary>
-    /// Validates a type with [SingletonDIConsume] attribute and creates a ConsumerModel.
-    /// Returns null if validation fails.
-    /// </summary>
-    public static ConsumerModel? Validate(
+    private const string ProvideAttributeName = "SingletonDI.Attributes.SingletonDIProvideAttribute";
+    private const string ConsumeAttributeName = "SingletonDI.Attributes.SingletonDIConsumeAttribute";
+
+    internal static ConsumerModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
-        HashSet<string> allProviderFullyQualifiedNames,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
-        var fqn = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return Validate(
+            typeDecl,
+            typeSymbol,
+            (identity, fullyQualifiedName) => knownProviderFullyQualifiedNames.Contains(fullyQualifiedName),
+            reportDiagnostic);
+    }
 
-        // DM0007: Must be partial
-        if (!typeDecl.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))
+    internal static ConsumerModel? Validate(
+        TypeDeclarationSyntax typeDecl,
+        INamedTypeSymbol typeSymbol,
+        ImmutableHashSet<ServiceTypeIdentity> knownProviderIdentities,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        return Validate(
+            typeDecl,
+            typeSymbol,
+            (identity, fullyQualifiedName) => knownProviderIdentities.Contains(identity),
+            reportDiagnostic);
+    }
+
+    private static ConsumerModel? Validate(
+        TypeDeclarationSyntax typeDecl,
+        INamedTypeSymbol typeSymbol,
+        Func<ServiceTypeIdentity, string, bool> isKnownProvider,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        var fullyQualifiedName = GetFullyQualifiedName(typeSymbol);
+        var consumerIdentity = CreateIdentity(typeSymbol);
+
+        if (!typeDecl.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ConsumeNotPartial,
@@ -33,104 +58,75 @@ internal static class ConsumerValidator
             return null;
         }
 
-        // Get dependencies from [SingletonDIConsume] attribute
-        var consumeAttr = typeSymbol.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "SingletonDI.Attributes.SingletonDIConsumeAttribute");
-
-        if (consumeAttr == null)
+        var consumeAttribute = FindAttribute(typeSymbol, ConsumeAttributeName);
+        if (consumeAttribute == null)
         {
-            return null; // Not a consumer
+            return null;
         }
 
-        // Get the attribute syntax for location information
-        var consumeAttrSyntax = GetAttributeSyntax(typeDecl, "SingletonDIConsume");
+        var consumeAttributeSyntax = consumeAttribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+        var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
+        var dependencyTypes = GetTypeArguments(consumeAttribute, argumentLocations);
 
-        // Handle params Type[] - it comes as a single array argument
-        var dependencyTypes = new List<(ITypeSymbol Type, Location? Location)>();
-
-        if (consumeAttr.ConstructorArguments.Length > 0)
+        var seenTypes = new HashSet<ServiceTypeIdentity>();
+        var duplicateTypes = new HashSet<ServiceTypeIdentity>();
+        foreach (var (dependencyType, _) in dependencyTypes)
         {
-            var firstArg = consumeAttr.ConstructorArguments[0];
-
-            // Check if it's an array of types (params Type[])
-            if (firstArg.Kind == TypedConstantKind.Array)
+            var dependencyIdentity = CreateIdentity(dependencyType);
+            if (!seenTypes.Add(dependencyIdentity))
             {
-                var argumentLocations = GetArgumentLocations(consumeAttrSyntax);
-
-                for (var i = 0; i < firstArg.Values.Length; i++)
-                {
-                    var element = firstArg.Values[i];
-                    if (element is { Kind: TypedConstantKind.Type, Value: ITypeSymbol depTypeSymbol })
-                    {
-                        var location = i < argumentLocations.Count ? argumentLocations[i] : null;
-                        dependencyTypes.Add((depTypeSymbol, location));
-                    }
-                }
-            }
-            else if (firstArg.Kind == TypedConstantKind.Type && firstArg.Value is ITypeSymbol singleType)
-            {
-                // Single type argument (not using params)
-                var argumentLocations = GetArgumentLocations(consumeAttrSyntax);
-                var location = argumentLocations.Count > 0 ? argumentLocations[0] : null;
-                dependencyTypes.Add((singleType, location));
+                duplicateTypes.Add(dependencyIdentity);
             }
         }
 
-        // DM0010: Check for duplicate types in attribute arguments
-        var seenTypes = new HashSet<string>(StringComparer.Ordinal);
-        var duplicateTypes = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var (depType, _) in dependencyTypes)
+        foreach (var (dependencyType, location) in dependencyTypes)
         {
-            var depFqn = depType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seenTypes.Add(depFqn))
+            var dependencyIdentity = CreateIdentity(dependencyType);
+            if (duplicateTypes.Contains(dependencyIdentity) &&
+                seenTypes.Remove(dependencyIdentity))
             {
-                duplicateTypes.Add(depFqn);
-            }
-        }
-
-        // Report DM0010 for each duplicate
-        foreach (var (depType, location) in dependencyTypes)
-        {
-            var depFqn = depType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (duplicateTypes.Contains(depFqn) && seenTypes.Remove(depFqn))
-            {
-                // Only report for the second (and subsequent) occurrences
                 continue;
             }
-            if (duplicateTypes.Contains(depFqn))
+
+            if (duplicateTypes.Contains(dependencyIdentity))
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.ConsumeDuplicateTypes,
                     location ?? typeDecl.Identifier.GetLocation(),
-                    depType.Name));
+                    dependencyType.Name));
             }
         }
 
-        var dependencies = ImmutableArray.CreateBuilder<string>();
-
-        foreach (var (depType, location) in dependencyTypes)
+        var dependencies = ImmutableArray.CreateBuilder<ServiceReferenceModel>();
+        foreach (var (dependencyType, location) in dependencyTypes)
         {
-            var depFqn = depType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var dependencyFullyQualifiedName = GetFullyQualifiedName(dependencyType);
+            var dependencyIdentity = CreateIdentity(dependencyType);
 
-            // Skip duplicates in attribute arguments (already reported as DM0010)
-            if (duplicateTypes.Contains(depFqn))
+            if (duplicateTypes.Contains(dependencyIdentity))
             {
                 continue;
             }
 
-            // DM0006: Reference must have [SingletonDIProvide]
-            if (!allProviderFullyQualifiedNames.Contains(depFqn))
+            var hasProvideAttribute = HasProvideAttribute(dependencyType);
+            var isProvider = isKnownProvider(dependencyIdentity, dependencyFullyQualifiedName) ||
+                             hasProvideAttribute;
+            var isContract = !isProvider &&
+                             (dependencyType.TypeKind == TypeKind.Interface ||
+                              (dependencyType.TypeKind == TypeKind.Class &&
+                               dependencyType.IsAbstract &&
+                               !dependencyType.IsStatic));
+
+            if (!isProvider && !isContract)
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.ConsumeReferencesNonProvider,
                     location ?? typeDecl.Identifier.GetLocation(),
-                    depType.Name));
+                    dependencyType.Name));
                 continue;
             }
 
-            // DM0008: Cannot consume itself
-            if (depFqn == fqn)
+            if (dependencyIdentity == consumerIdentity)
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.ConsumeSelfReference,
@@ -139,61 +135,115 @@ internal static class ConsumerValidator
                 continue;
             }
 
-            dependencies.Add(depFqn);
+            dependencies.Add(new ServiceReferenceModel(
+                dependencyFullyQualifiedName,
+                dependencyType.Name,
+                dependencyType.ContainingNamespace.ToDisplayString(),
+                hasProvideAttribute ? GetProviderPropertyName(dependencyType) : null,
+                isContract,
+                dependencyIdentity));
         }
 
-        return new ConsumerModel(FullyQualifiedName : fqn,
-                                 ShortName : typeSymbol.Name,
-                                 Namespace : typeSymbol.ContainingNamespace.ToDisplayString(),
-                                 IsPartial : true,
-                                 Dependencies : dependencies.ToImmutable());
+        return new ConsumerModel(
+            FullyQualifiedName: fullyQualifiedName,
+            ShortName: typeSymbol.Name,
+            Namespace: typeSymbol.ContainingNamespace.ToDisplayString(),
+            IsPartial: true,
+            Dependencies: dependencies.ToImmutable());
     }
 
-    /// <summary>
-    /// Gets the attribute syntax for the specified attribute name.
-    /// </summary>
-    private static AttributeSyntax? GetAttributeSyntax(TypeDeclarationSyntax typeDecl, string attributeName)
+    private static AttributeData? FindAttribute(ISymbol symbol, string metadataName)
     {
-        foreach (var attributeList in typeDecl.AttributeLists)
+        return symbol.GetAttributes()
+            .FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
+    }
+
+    private static bool HasProvideAttribute(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.GetAttributes().Any(attribute => IsAttribute(attribute, ProvideAttributeName));
+    }
+
+    private static bool IsAttribute(AttributeData attribute, string metadataName)
+    {
+        var attributeName = attribute.AttributeClass?.ToDisplayString();
+        return attributeName == metadataName || attributeName == "global::" + metadataName;
+    }
+
+    private static string? GetProviderPropertyName(ITypeSymbol typeSymbol)
+    {
+        var attribute = FindAttribute(typeSymbol, ProvideAttributeName);
+        if (attribute == null)
         {
-            foreach (var attribute in attributeList.Attributes)
+            return null;
+        }
+
+        if (attribute.ConstructorArguments.Length > 0 &&
+            attribute.ConstructorArguments[0] is
+                { Kind: TypedConstantKind.Primitive, Value: string constructorValue })
+        {
+            return constructorValue;
+        }
+
+        var namedArgument = attribute.NamedArguments
+            .FirstOrDefault(argument => argument.Key == "PropertyName");
+
+        return namedArgument.Value is { Kind: TypedConstantKind.Primitive, Value: string namedValue }
+            ? namedValue
+            : null;
+    }
+
+    private static IEnumerable<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
+        AttributeData attribute,
+        IReadOnlyList<Location> argumentLocations)
+    {
+        for (var argumentIndex = 0; argumentIndex < attribute.ConstructorArguments.Length; argumentIndex++)
+        {
+            var argument = attribute.ConstructorArguments[argumentIndex];
+            if (argument.Kind == TypedConstantKind.Array)
             {
-                var name = attribute.Name.ToString();
-                // Handle both "SingletonDIConsume" and "SingletonDIConsumeAttribute" forms
-                if (name == attributeName || name == attributeName + "Attribute")
+                for (var elementIndex = 0; elementIndex < argument.Values.Length; elementIndex++)
                 {
-                    return attribute;
+                    if (argument.Values[elementIndex] is
+                        { Kind: TypedConstantKind.Type, Value: ITypeSymbol dependencyType })
+                    {
+                        var location = elementIndex < argumentLocations.Count
+                            ? argumentLocations[elementIndex]
+                            : null;
+                        yield return (dependencyType, location);
+                    }
                 }
             }
+            else if (argument is { Kind: TypedConstantKind.Type, Value: ITypeSymbol singleType })
+            {
+                var location = argumentIndex < argumentLocations.Count
+                    ? argumentLocations[argumentIndex]
+                    : null;
+                yield return (singleType, location);
+            }
         }
-        return null;
     }
 
-    /// <summary>
-    /// Gets the locations of type arguments in the attribute.
-    /// </summary>
-    private static List<Location> GetArgumentLocations(AttributeSyntax? attributeSyntax)
+    private static IReadOnlyList<Location> GetArgumentLocations(AttributeSyntax? attributeSyntax)
     {
-        var locations = new List<Location>();
-
         if (attributeSyntax?.ArgumentList == null)
         {
-            return locations;
+            return Array.Empty<Location>();
         }
 
-        foreach (var argument in attributeSyntax.ArgumentList.Arguments)
-        {
-            // For typeof(T) expressions, get the location of the type
-            if (argument.Expression is TypeOfExpressionSyntax typeOfExpr)
-            {
-                locations.Add(typeOfExpr.Type.GetLocation());
-            }
-            else
-            {
-                locations.Add(argument.GetLocation());
-            }
-        }
+        return attributeSyntax.ArgumentList.Arguments
+            .Select(argument => argument.Expression is TypeOfExpressionSyntax typeOfExpression
+                ? typeOfExpression.Type.GetLocation()
+                : argument.GetLocation())
+            .ToImmutableArray();
+    }
 
-        return locations;
+    private static ServiceTypeIdentity CreateIdentity(ITypeSymbol typeSymbol)
+    {
+        return ServiceTypeIdentity.FromSymbol(typeSymbol);
+    }
+
+    private static string GetFullyQualifiedName(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 }

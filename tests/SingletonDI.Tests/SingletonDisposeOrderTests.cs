@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using SingletonDI.Generator;
@@ -8,18 +7,11 @@ using Xunit;
 namespace SingletonDI.Tests;
 
 /// <summary>
-/// Tests for verifying the order of singleton creation and disposal.
-/// Tests that singletons are created in dependency order (Level 0 → Level 1 → Level 2)
-/// and disposed in reverse order (Level 2 → Level 1 → Level 0).
+/// Verifies generation and compilation of the legacy dependency-order fixtures.
+/// Runtime lifecycle execution belongs to the Task 5 RootApp fixture.
 /// </summary>
 public class SingletonDisposeOrderTests
 {
-    /// <summary>
-    /// Source code with 3 independent threads of dependencies:
-    /// - Thread A: DatabaseConfigA (level 0) → DatabaseConnectionA (level 1) → RepositoryA (level 2)
-    /// - Thread B: CacheConfigB (level 0) → CacheConnectionB (level 1) → CacheRepositoryB (level 2)
-    /// - Thread C: QueueConfigC (level 0) → QueueConnectionC (level 1) → QueueProcessorC (level 2)
-    /// </summary>
     private const string ThreeThreadsSource =
         """
         using System;
@@ -28,8 +20,6 @@ public class SingletonDisposeOrderTests
 
         namespace TestApp
         {
-            // ===== Thread A - Database =====
-
             [SingletonDIProvide]
             public class DatabaseConfigA : IDisposable
             {
@@ -52,8 +42,6 @@ public class SingletonDisposeOrderTests
                 public RepositoryA() => ActionLog.Add("Register Level 2 RepositoryA");
                 public void Dispose() => ActionLog.Add("Dispose Level 2 RepositoryA");
             }
-
-            // ===== Thread B - Cache =====
 
             [SingletonDIProvide]
             public class CacheConfigB : IDisposable
@@ -78,8 +66,6 @@ public class SingletonDisposeOrderTests
                 public void Dispose() => ActionLog.Add("Dispose Level 2 CacheRepositoryB");
             }
 
-            // ===== Thread C - Queue =====
-
             [SingletonDIProvide]
             public class QueueConfigC : IDisposable
             {
@@ -103,12 +89,10 @@ public class SingletonDisposeOrderTests
                 public void Dispose() => ActionLog.Add("Dispose Level 2 QueueProcessorC");
             }
 
-            // ===== Static Logger =====
-
             public static class ActionLog
             {
                 private static readonly List<string> _actions = new();
-                
+
                 public static void Add(string action)
                 {
                     lock (_actions)
@@ -116,93 +100,46 @@ public class SingletonDisposeOrderTests
                         _actions.Add(action);
                     }
                 }
-                
-                public static void Clear()
-                {
-                    lock (_actions)
-                    {
-                        _actions.Clear();
-                    }
-                }
-                
-                public static IReadOnlyList<string> GetActions()
-                {
-                    lock (_actions)
-                    {
-                        return new List<string>(_actions).AsReadOnly();
-                    }
-                }
             }
         }
         """;
 
     [Fact]
-    public async Task DisposeOrder_ThreeIndependentThreads_CorrectOrder()
+    public void DisposeOrder_ThreeIndependentThreads_GeneratesRuntimeRegistrationOutput()
     {
-        // Arrange - compile source with generator
-        var (compilation, generatorDiagnostics) = CompileWithGenerator(ThreeThreadsSource);
+        var (outputCompilation, generatedSource, diagnostics) = CompileWithGenerator(ThreeThreadsSource);
 
-        // Verify no compilation errors from generator
-        var errors = generatorDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-        Assert.Empty(errors);
+        AssertNoErrors(diagnostics);
+        Assert.Contains("__SingletonDIProviderModule__", generatedSource);
+        Assert.DoesNotContain("__SingletonDIContainer__", generatedSource);
 
-        // Act - load assembly and execute
-        var assembly = LoadAssembly(compilation);
-
-        // Get types via reflection
-        var actionLogType = assembly.GetType("TestApp.ActionLog")
-                            ?? throw new InvalidOperationException("Could not find TestApp.ActionLog type");
-        var containerType = assembly.GetType("__SDI.Generated.Internal__.__SingletonDIContainer__")
-                            ?? throw new InvalidOperationException("Could not find __SingletonDIContainer__ type");
-
-        // Clear log before test
-        var clearMethod = actionLogType.GetMethod("Clear")
-                          ?? throw new InvalidOperationException("Could not find Clear method");
-        clearMethod.Invoke(null, null);
-
-        // Initialize container
-        var initializeMethod = containerType.GetMethod("InitializeAsync")
-                               ?? throw new InvalidOperationException("Could not find InitializeAsync method");
-        var initTask = (Task) initializeMethod.Invoke(null, null)!
-                       ?? throw new InvalidOperationException("InitializeAsync returned null");
-        await initTask;
-
-        // Dispose container
-        var disposeMethod = containerType.GetMethod("DisposeAsync")
-                            ?? throw new InvalidOperationException("Could not find DisposeAsync method");
-        var disposeResult = disposeMethod.Invoke(null, null);
-        if (disposeResult is ValueTask disposeTask)
+        foreach (var providerName in new[]
+                 {
+                     "DatabaseConfigA",
+                     "DatabaseConnectionA",
+                     "RepositoryA",
+                     "CacheConfigB",
+                     "CacheConnectionB",
+                     "CacheRepositoryB",
+                     "QueueConfigC",
+                     "QueueConnectionC",
+                     "QueueProcessorC"
+                 })
         {
-            await disposeTask;
+            Assert.Contains(
+                $"RegisterProvider<global::TestApp.{providerName}, global::TestApp.{providerName}>",
+                generatedSource);
         }
 
-        // Get log
-        var getActionsMethod = actionLogType.GetMethod("GetActions")
-                               ?? throw new InvalidOperationException("Could not find GetActions method");
-        var actions = (IReadOnlyList<string>) getActionsMethod.Invoke(null, null)!
-                      ?? throw new InvalidOperationException("GetActions returned null");
-
-        // Assert - validate log
-        var result = LogValidator.Validate(actions);
-
-        Assert.True(result.RegisterBeforeDisposeValid,
-                    $"Register must be called before Dispose for each class.\nLog:\n{FormatLog(actions)}");
-        Assert.True(result.RegisterOrderValid,
-                    $"Register order must be: Level 0, then Level 1, then Level 2.\nLog:\n{FormatLog(actions)}");
-        Assert.True(result.DisposeOrderValid,
-                    $"Dispose order must be: Level 2, then Level 1, then Level 0.\nLog:\n{FormatLog(actions)}");
-        Assert.True(result.AllClassesCreated,
-                    $"All 9 classes must be created and disposed.\nLog:\n{FormatLog(actions)}");
+        AssertNoErrors(outputCompilation.GetDiagnostics());
     }
 
     [Fact]
-    public async Task DisposeOrder_SingleThread_CorrectOrder()
+    public void DisposeOrder_SingleThread_GeneratesRuntimeRegistrationOutput()
     {
-        // Arrange - single thread with 3 levels
         const string source =
             """
             using System;
-            using System.Collections.Generic;
             using SingletonDI.Attributes;
 
             namespace TestApp
@@ -210,317 +147,95 @@ public class SingletonDisposeOrderTests
                 [SingletonDIProvide]
                 public class Config : IDisposable
                 {
-                    public Config() => ActionLog.Add("Register Level 0 Config");
-                    public void Dispose() => ActionLog.Add("Dispose Level 0 Config");
+                    public Config() { }
+                    public void Dispose() { }
                 }
 
                 [SingletonDIProvide]
                 [SingletonDIConsume(typeof(Config))]
                 public partial class Connection : IDisposable
                 {
-                    public Connection() => ActionLog.Add("Register Level 1 Connection");
-                    public void Dispose() => ActionLog.Add("Dispose Level 1 Connection");
+                    public Connection() { }
+                    public void Dispose() { }
                 }
 
                 [SingletonDIProvide]
                 [SingletonDIConsume(typeof(Connection))]
                 public partial class Repository : IDisposable
                 {
-                    public Repository() => ActionLog.Add("Register Level 2 Repository");
-                    public void Dispose() => ActionLog.Add("Dispose Level 2 Repository");
-                }
-
-                public static class ActionLog
-                {
-                    private static readonly List<string> _actions = new();
-                    
-                    public static void Add(string action)
-                    {
-                        lock (_actions)
-                        {
-                            _actions.Add(action);
-                        }
-                    }
-                    
-                    public static void Clear()
-                    {
-                        lock (_actions)
-                        {
-                            _actions.Clear();
-                        }
-                    }
-                    
-                    public static IReadOnlyList<string> GetActions()
-                    {
-                        lock (_actions)
-                        {
-                            return new List<string>(_actions).AsReadOnly();
-                        }
-                    }
+                    public Repository() { }
+                    public void Dispose() { }
                 }
             }
             """;
 
-        var (compilation, generatorDiagnostics) = CompileWithGenerator(source);
-        Assert.Empty(generatorDiagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+        var (outputCompilation, generatedSource, diagnostics) = CompileWithGenerator(source);
 
-        var assembly = LoadAssembly(compilation);
-        var actionLogType = assembly.GetType("TestApp.ActionLog")!;
-        var containerType = assembly.GetType("__SDI.Generated.Internal__.__SingletonDIContainer__")!;
-
-        actionLogType.GetMethod("Clear")!.Invoke(null, null);
-
-        var initTask = (Task) containerType.GetMethod("InitializeAsync")!.Invoke(null, null)!;
-        await initTask;
-
-        var disposeResult = containerType.GetMethod("DisposeAsync")!.Invoke(null, null);
-        if (disposeResult is ValueTask disposeTask)
-        {
-            await disposeTask;
-        }
-
-        var actions = (IReadOnlyList<string>) actionLogType.GetMethod("GetActions")!.Invoke(null, null)!;
-
-        // Assert exact order for single thread
-        Assert.Equal(6, actions.Count);
-
-        // Register order: Config, Connection, Repository
-        Assert.Equal("Register Level 0 Config", actions[0]);
-        Assert.Equal("Register Level 1 Connection", actions[1]);
-        Assert.Equal("Register Level 2 Repository", actions[2]);
-
-        // Dispose order: Repository, Connection, Config
-        Assert.Equal("Dispose Level 2 Repository", actions[3]);
-        Assert.Equal("Dispose Level 1 Connection", actions[4]);
-        Assert.Equal("Dispose Level 0 Config", actions[5]);
+        AssertNoErrors(diagnostics);
+        Assert.Contains("__SingletonDIProviderModule__", generatedSource);
+        Assert.DoesNotContain("__SingletonDIContainer__", generatedSource);
+        Assert.Contains(
+            "RegisterProvider<global::TestApp.Config, global::TestApp.Config>",
+            generatedSource);
+        Assert.Contains(
+            "typeof(global::TestApp.Config)",
+            generatedSource);
+        Assert.Contains(
+            "RegisterProvider<global::TestApp.Connection, global::TestApp.Connection>",
+            generatedSource);
+        Assert.Contains(
+            "typeof(global::TestApp.Connection)",
+            generatedSource);
+        AssertNoErrors(outputCompilation.GetDiagnostics());
     }
 
-#region Helper Methods
-
-    private static (CSharpCompilation compilation, ImmutableArray<Diagnostic> diagnostics) CompileWithGenerator(string source)
+    private static (CSharpCompilation OutputCompilation, string GeneratedSource, ImmutableArray<Diagnostic> Diagnostics) CompileWithGenerator(
+        string source)
     {
         var compilation = CreateCompilation(source);
-        var generator = new SingletonDIGenerator();
-        var driver = CSharpGeneratorDriver.Create(generator);
-        driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
-        return ((CSharpCompilation) outputCompilation, diagnostics);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+        var generatedSources = runResult.Results
+            .SelectMany(result => result.GeneratedSources)
+            .ToList();
+        var outputCompilation = compilation.AddSyntaxTrees(
+            generatedSources.Select(generated => generated.SyntaxTree));
+        var generatedSource = string.Join(
+            Environment.NewLine,
+            generatedSources.Select(generated => generated.SourceText.ToString()));
+
+        return (outputCompilation, generatedSource, runResult.Diagnostics);
     }
 
     private static CSharpCompilation CreateCompilation(string source)
     {
+        var runtimeAssemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
         var references = new List<MetadataReference>
         {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ValueTask).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(IDisposable).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(List<>).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Attributes.SingletonDIProvideAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Console).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(global::SingletonDI.Generated.__SingletonDIHost__).Assembly.Location),
+            MetadataReference.CreateFromFile(Path.Combine(runtimeAssemblyPath, "System.Runtime.dll")),
         };
 
-        // Add all referenced assemblies
-        var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var assemblyName in new[] { "System.Runtime", "System.Collections", "System.Linq", "netstandard", "System.Threading.Tasks", "System.Console" })
-        {
-            var path = Path.Combine(assemblyPath, assemblyName + ".dll");
-            if (File.Exists(path))
-            {
-                references.Add(MetadataReference.CreateFromFile(path));
-            }
-        }
-
         return CSharpCompilation.Create(
-            "TestAssembly_" + Guid.NewGuid().ToString("N"),
-            [CSharpSyntaxTree.ParseText(source)],
+            "SingletonDisposeOrderTests_" + Guid.NewGuid().ToString("N"),
+            [CSharpSyntaxTree.ParseText(
+                source,
+                new CSharpParseOptions(
+                    LanguageVersion.Latest,
+                    preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
     }
 
-    private static Assembly LoadAssembly(CSharpCompilation compilation)
+    private static void AssertNoErrors(IEnumerable<Diagnostic> diagnostics)
     {
-        using var ms = new MemoryStream();
-        var emitResult = compilation.Emit(ms);
-
-        if (!emitResult.Success)
-        {
-            var errors = string.Join("\n", emitResult.Diagnostics
-                                                     .Where(d => d.Severity == DiagnosticSeverity.Error)
-                                                     .Select(d => d.GetMessage()));
-            throw new InvalidOperationException($"Compilation failed:\n{errors}");
-        }
-
-        return Assembly.Load(ms.ToArray());
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
-
-    private static string FormatLog(IReadOnlyList<string> actions)
-    {
-        return string.Join("\n", actions.Select((a, i) => $"  [{i}] {a}"));
-    }
-
-#endregion
-
-#region Log Validator
-
-    /// <summary>
-    /// Validates the order of Register and Dispose operations in the log.
-    /// </summary>
-    private static class LogValidator
-    {
-        public static ValidationResult Validate(IReadOnlyList<string> logActions)
-        {
-            var entries = ParseLogEntries(logActions);
-
-            return new ValidationResult
-            {
-                RegisterBeforeDisposeValid = ValidateRegisterBeforeDispose(entries),
-                RegisterOrderValid = ValidateRegisterOrder(entries),
-                DisposeOrderValid = ValidateDisposeOrder(entries),
-                AllClassesCreated = ValidateAllClassesCreated(entries)
-            };
-        }
-
-        private static List<LogEntry> ParseLogEntries(IReadOnlyList<string> logActions)
-        {
-            var entries = new List<LogEntry>();
-
-            for (var i = 0; i < logActions.Count; i++)
-            {
-                var parts = logActions[i].Split(' ');
-                // Format: "Register Level 0 DatabaseConfigA" or "Dispose Level 0 DatabaseConfigA"
-                if (parts.Length >= 4)
-                {
-                    entries.Add(new LogEntry
-                    {
-                        Action = parts[0], // "Register" or "Dispose"
-                        Level = int.Parse(parts[2]), // 0, 1, 2
-                        ClassName = parts[3], // Class name
-                        Order = i
-                    });
-                }
-            }
-
-            return entries;
-        }
-
-        /// <summary>
-        /// Rule 1: Register must be called before Dispose for each class.
-        /// </summary>
-        private static bool ValidateRegisterBeforeDispose(IEnumerable<LogEntry> entries)
-        {
-            var registerMap = new Dictionary<string, int>(); // className -> order
-            var disposeMap = new Dictionary<string, int>();
-
-            foreach (var entry in entries)
-            {
-                if (entry.Action == "Register")
-                    registerMap[entry.ClassName] = entry.Order;
-                else if (entry.Action == "Dispose")
-                    disposeMap[entry.ClassName] = entry.Order;
-            }
-
-            // Check that for each Dispose there was a Register before it
-            foreach (var (className, disposeOrder) in disposeMap)
-            {
-                if (!registerMap.TryGetValue(className, out var registerOrder))
-                    return false; // Dispose without Register
-
-                if (registerOrder >= disposeOrder)
-                    return false; // Dispose before Register
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Rule 2: All Register operations at level N must complete before any Register at level N+1.
-        /// </summary>
-        private static bool ValidateRegisterOrder(IEnumerable<LogEntry> entries)
-        {
-            var registers = entries
-                            .Where(e => e.Action == "Register")
-                            .OrderBy(e => e.Order)
-                            .ToList();
-
-            for (var i = 1; i < registers.Count; i++)
-            {
-                // Level should never decrease during Register phase
-                if (registers[i].Level < registers[i - 1].Level)
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Rule 3: All Dispose operations at level N must complete before any Dispose at level N-1.
-        /// </summary>
-        private static bool ValidateDisposeOrder(IEnumerable<LogEntry> entries)
-        {
-            var disposes = entries
-                           .Where(e => e.Action == "Dispose")
-                           .OrderBy(e => e.Order)
-                           .ToList();
-
-            for (var i = 1; i < disposes.Count; i++)
-            {
-                // Level should never increase during Dispose phase
-                if (disposes[i].Level > disposes[i - 1].Level)
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Rule 4: All expected classes must be created and disposed.
-        /// </summary>
-        private static bool ValidateAllClassesCreated(IEnumerable<LogEntry> entries)
-        {
-            var expectedClasses = new HashSet<string>
-            {
-                "DatabaseConfigA", "DatabaseConnectionA", "RepositoryA",
-                "CacheConfigB", "CacheConnectionB", "CacheRepositoryB",
-                "QueueConfigC", "QueueConnectionC", "QueueProcessorC"
-            };
-
-            var registeredClasses = entries
-                                    .Where(e => e.Action == "Register")
-                                    .Select(e => e.ClassName)
-                                    .ToHashSet();
-
-            var disposedClasses = entries
-                                  .Where(e => e.Action == "Dispose")
-                                  .Select(e => e.ClassName)
-                                  .ToHashSet();
-
-            return expectedClasses.SetEquals(registeredClasses) &&
-                   expectedClasses.SetEquals(disposedClasses);
-        }
-    }
-
-    private record LogEntry
-    {
-        public string Action { get; init; } = "";
-        public int Level { get; init; }
-        public string ClassName { get; init; } = "";
-        public int Order { get; init; }
-    }
-
-    private record ValidationResult
-    {
-        public bool RegisterBeforeDisposeValid { get; init; }
-        public bool RegisterOrderValid { get; init; }
-        public bool DisposeOrderValid { get; init; }
-        public bool AllClassesCreated { get; init; }
-
-        public bool IsValid =>
-            RegisterBeforeDisposeValid &&
-            RegisterOrderValid &&
-            DisposeOrderValid &&
-            AllClassesCreated;
-    }
-
-#endregion
 }
