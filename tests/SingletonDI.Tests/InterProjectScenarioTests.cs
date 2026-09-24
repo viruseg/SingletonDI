@@ -1,5 +1,3 @@
-using Shared.Contracts;
-using SingletonDI.InterProjectFixtures.RootApp;
 using Xunit;
 
 namespace SingletonDI.Tests;
@@ -15,6 +13,18 @@ public sealed class SingletonDIRuntimeCollection
 [Collection("SingletonDI runtime")]
 public sealed class InterProjectScenarioTests
 {
+    [Fact]
+    public async Task ScenarioCanRunTwiceWithFreshState()
+    {
+        var first = await ProcessScenarioRunner.RunAsync();
+        var second = await ProcessScenarioRunner.RunAsync();
+
+        Assert.NotSame(first, second);
+        Assert.Equal(first.LifecycleEvents, second.LifecycleEvents);
+        Assert.True(first.ContractAndConcreteSame);
+        Assert.True(second.ContractAndConcreteSame);
+    }
+
     [Fact]
     public async Task RootResolvesContractAndConcreteProviderAndDisposesInOrder()
     {
@@ -40,12 +50,9 @@ public sealed class InterProjectScenarioTests
             "Dispose Level 0 QueueConfigC"
         ];
 
-        var scenario = await Program.RunScenarioAsync();
+        var scenario = await ProcessScenarioRunner.RunAsync();
 
-        Assert.NotNull(scenario.ContractService);
-        Assert.NotNull(scenario.ConcreteService);
-        Assert.NotNull(scenario.ExternalService);
-        Assert.Same(scenario.ContractService, scenario.ConcreteService);
+        Assert.True(scenario.ContractAndConcreteSame);
         Assert.False(scenario.ServiceDisposedBeforeDispose);
         Assert.True(scenario.ServiceDisposedAfterDispose);
         Assert.True(scenario.ExternalServiceDisposedAfterDispose);

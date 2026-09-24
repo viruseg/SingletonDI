@@ -36,68 +36,51 @@ public sealed partial class RootApp
 /// </summary>
 public static class Program
 {
-    private static readonly SemaphoreSlim ScenarioGate = new(1, 1);
-    private static ScenarioResult? _scenarioResult;
-
     /// <summary>
     /// Initializes the process-wide container, resolves both service keys, and disposes it.
     /// </summary>
     /// <returns>The observed identity, disposal, and lifecycle values.</returns>
     public static async Task<ScenarioResult> RunScenarioAsync()
     {
-        await ScenarioGate.WaitAsync().ConfigureAwait(false);
+        LifecycleLog.Clear();
+        await SingletonDIInitializer.InitializeAsync(false).ConfigureAwait(false);
+
         try
         {
-            if (_scenarioResult is not null)
+            var contractService = new Repository().GetService();
+            var concreteService = new RootApp().GetConcreteService();
+            var externalService = new RootApp().GetExternalService();
+            var serviceDisposedBeforeDispose = DatabaseService.IsDisposed;
+            var lifecycleEventsBeforeDispose = LifecycleLog.Snapshot();
+
+            await SingletonDIInitializer.DisposeAsync().ConfigureAwait(false);
+
+            var lifecycleEvents = LifecycleLog.Snapshot();
+            var scenarioResult = new ScenarioResult(
+                contractService,
+                concreteService,
+                externalService,
+                serviceDisposedBeforeDispose,
+                DatabaseService.IsDisposed,
+                ExternalService.IsDisposed,
+                lifecycleEvents);
+
+            if (lifecycleEventsBeforeDispose.Count == 0)
             {
-                return _scenarioResult;
+                throw new InvalidOperationException("The lifecycle log was not populated during initialization.");
             }
 
-            LifecycleLog.Clear();
-            await SingletonDIInitializer.InitializeAsync(false).ConfigureAwait(false);
-
-            try
+            if (!ExternalService.IsInitialized)
             {
-                var contractService = new Repository().GetService();
-                var concreteService = new RootApp().GetConcreteService();
-                var externalService = new RootApp().GetExternalService();
-                var serviceDisposedBeforeDispose = DatabaseService.IsDisposed;
-                var lifecycleEventsBeforeDispose = LifecycleLog.Snapshot();
-
-                await SingletonDIInitializer.DisposeAsync().ConfigureAwait(false);
-
-                var lifecycleEvents = LifecycleLog.Snapshot();
-                var scenarioResult = new ScenarioResult(
-                    contractService,
-                    concreteService,
-                    externalService,
-                    serviceDisposedBeforeDispose,
-                    DatabaseService.IsDisposed,
-                    ExternalService.IsDisposed,
-                    lifecycleEvents);
-
-                if (lifecycleEventsBeforeDispose.Count == 0)
-                {
-                    throw new InvalidOperationException("The lifecycle log was not populated during initialization.");
-                }
-
-                if (!ExternalService.IsInitialized)
-                {
-                    throw new InvalidOperationException("The external provider was not bootstrapped and initialized.");
-                }
-
-                _scenarioResult = scenarioResult;
-                return scenarioResult;
+                throw new InvalidOperationException("The external provider was not bootstrapped and initialized.");
             }
-            catch
-            {
-                await SingletonDIInitializer.DisposeAsync().ConfigureAwait(false);
-                throw;
-            }
+
+            return scenarioResult;
         }
-        finally
+        catch
         {
-            ScenarioGate.Release();
+            await SingletonDIInitializer.DisposeAsync().ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -107,7 +90,18 @@ public static class Program
     /// <returns>A task that completes after the process-wide container is disposed.</returns>
     public static async Task Main()
     {
-        await RunScenarioAsync().ConfigureAwait(false);
+        var result = await RunScenarioAsync().ConfigureAwait(false);
+        foreach (var lifecycleEvent in result.LifecycleEvents)
+        {
+            Console.WriteLine("EVENT|" + lifecycleEvent);
+        }
+
+        Console.WriteLine("IDENTITY|" + ReferenceEquals(result.ContractService, result.ConcreteService));
+        Console.WriteLine(
+            "RESULT|" +
+            result.ServiceDisposedBeforeDispose + "," +
+            result.ServiceDisposedAfterDispose + "," +
+            result.ExternalServiceDisposedAfterDispose);
     }
 }
 
