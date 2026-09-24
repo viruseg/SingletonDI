@@ -931,6 +931,107 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void ExecutableWithoutRootValidatesReferencedConsumers()
+    {
+        const string contractsSource = """
+            namespace Shared.Contracts
+            {
+                public interface ISatisfiedService
+                {
+                }
+
+                public interface IMissingService
+                {
+                }
+            }
+            """;
+        const string providerSource = """
+            using Shared.Contracts;
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                [SingletonDIProvide(ServiceType = typeof(ISatisfiedService))]
+                public sealed class SatisfiedService : ISatisfiedService
+                {
+                }
+            }
+            """;
+        const string consumerSource = """
+            using Shared.Contracts;
+            using SingletonDI.Attributes;
+
+            namespace ConsumerLibrary
+            {
+                [SingletonDIConsume(typeof(ISatisfiedService))]
+                public partial class SatisfiedConsumer
+                {
+                }
+
+                [SingletonDIConsume(typeof(IMissingService))]
+                public partial class MissingConsumer
+                {
+                }
+            }
+            """;
+
+        var contractsCompilation = CreateCompilation(
+            "Shared.Contracts",
+            contractsSource,
+            [],
+            OutputKind.DynamicallyLinkedLibrary);
+        var contractsImage = EmitImage(contractsCompilation);
+        var contractsReference = MetadataReference.CreateFromImage(contractsImage);
+
+        var providerCompilation = CreateCompilation(
+            "ProviderLibrary",
+            providerSource,
+            [contractsReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var providerResult = RunGenerator(providerCompilation, compositionRoot: false);
+        Assert.DoesNotContain(providerResult.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var providerReference = MetadataReference.CreateFromImage(EmitImage(providerResult.OutputCompilation));
+
+        var consumerCompilation = CreateCompilation(
+            "ConsumerLibrary",
+            consumerSource,
+            [contractsReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var consumerResult = RunGenerator(consumerCompilation, compositionRoot: false);
+        Assert.DoesNotContain(consumerResult.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var consumerReference = MetadataReference.CreateFromImage(EmitImage(consumerResult.OutputCompilation));
+
+        var executableCompilation = CreateCompilation(
+            "ExecutableWithoutRoot",
+            "namespace App { public static class Program { public static void Main() { } } }",
+            [contractsReference, providerReference, consumerReference],
+            OutputKind.ConsoleApplication);
+        var result = RunGenerator(
+            executableCompilation,
+            compositionRoot: false,
+            OutputKind.ConsoleApplication);
+
+        var missing = Assert.Single(result.Diagnostics, diagnostic => diagnostic.Id == "DM0018");
+        Assert.Contains("IMissingService", missing.GetMessage());
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0017");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+        var libraryCompilation = CreateCompilation(
+            "LibraryWithoutRoot",
+            "namespace App { public sealed class LibraryMarker { } }",
+            [contractsReference, providerReference, consumerReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var libraryResult = RunGenerator(
+            libraryCompilation,
+            compositionRoot: false,
+            OutputKind.DynamicallyLinkedLibrary);
+
+        Assert.DoesNotContain(libraryResult.Diagnostics, diagnostic => diagnostic.Id == "DM0018");
+    }
+
+    [Fact]
     public void DM0021_ReportsMarkedProviderAssemblyWithoutBootstrap()
     {
         const string providerSource = """

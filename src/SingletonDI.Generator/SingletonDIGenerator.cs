@@ -112,7 +112,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(consumerInputs, (sourceProductionContext, input) =>
         {
             var (((consumerDeclarationsForOutput, compilation), providerCandidatesForOutput), options) = input;
-            if (consumerDeclarationsForOutput.IsDefault || consumerDeclarationsForOutput.IsEmpty)
+            if ((consumerDeclarationsForOutput.IsDefault || consumerDeclarationsForOutput.IsEmpty) &&
+                (options.IsCompositionRoot || !IsExecutable(options, compilation)))
             {
                 return;
             }
@@ -382,14 +383,45 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         GeneratorOptions options,
         SourceProductionContext sourceProductionContext)
     {
-        var providerModels = GetProviderModels(providerCandidates);
+        var localProviderModels = GetProviderModels(providerCandidates);
+        var isExecutable = IsExecutable(options, compilation);
+        var referencedProviderModels = !options.IsCompositionRoot && isExecutable
+            ? ProviderSymbolCollector.CollectReferencedProviders(
+                compilation,
+                sourceProductionContext.CancellationToken,
+                sourceProductionContext.ReportDiagnostic,
+                out _)
+            : ImmutableArray<ProviderModel>.Empty;
+        var providerModels = localProviderModels
+            .Concat(referencedProviderModels)
+            .ToImmutableArray();
         var localProviderIdentities = GetLocalProviderIdentities(providerCandidates);
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(providerModels);
         var propertyNames = PropertyNameResolver.ResolvePropertyNamesByIdentity(providerModels);
         var customPropertyNames = providerModels
             .ToImmutableDictionary(provider => provider.TypeIdentity, provider => provider.PropertyName);
+        var referencedConsumerDependencies = !options.IsCompositionRoot && isExecutable
+            ? ReferencedConsumerCollector.CollectReferencedConsumerDependencyIdentities(
+                compilation,
+                sourceProductionContext.CancellationToken)
+            : ImmutableArray<ImmutableArray<ServiceTypeIdentity>>.Empty;
+        var missingReferencedDependencies = new HashSet<ServiceTypeIdentity>();
+        foreach (var dependencySet in referencedConsumerDependencies)
+        {
+            foreach (var dependency in dependencySet)
+            {
+                if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependency) &&
+                    missingReferencedDependencies.Add(dependency))
+                {
+                    sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.MissingExternalProvider,
+                        Location.None,
+                        FormatServiceTypeIdentity(dependency)));
+                }
+            }
+        }
+
         var consumerModels = new List<ConsumerModel>();
-        var isExecutable = IsExecutable(options, compilation);
         var currentAssemblyIdentity = compilation.Assembly.Identity.ToString();
 
         foreach (var typeDeclaration in consumerDeclarations)

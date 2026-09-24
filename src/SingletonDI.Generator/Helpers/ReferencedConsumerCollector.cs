@@ -52,6 +52,13 @@ internal static class ReferencedConsumerCollector
         }
 
         return dependencies
+            .Where(keys => !keys.IsEmpty)
+            .GroupBy(
+                keys => string.Join(
+                    "\u001f",
+                    keys.Select(key => $"{key.FullyQualifiedName}\u001e{key.AssemblyIdentity}")),
+                StringComparer.Ordinal)
+            .Select(group => group.First())
             .OrderBy(
                 keys => string.Join(
                     "\u001f",
