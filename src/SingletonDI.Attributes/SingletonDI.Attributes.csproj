@@ -7,9 +7,8 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>SingletonDI.Attributes</RootNamespace>
     <AssemblyName>SingletonDI.Attributes</AssemblyName>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>SingletonDI</PackageId>
     <Title>SingletonDI</Title>
     <Copyright>Copyright (c) 2026 Denis Tulupov</Copyright>

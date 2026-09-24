@@ -7,6 +7,7 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>SingletonDI.Refactoring</RootNamespace>
     <AssemblyName>SingletonDI.Refactoring</AssemblyName>
+    <IsPackable>false</IsPackable>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <NoWarn>RS2008;RS1032;RS1036;RS1041</NoWarn>
   </PropertyGroup>
