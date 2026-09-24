@@ -130,6 +130,15 @@ internal static class ProviderValidator
 
         var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol);
 
+        if (initializeAsyncMethod is { Arity: > 0 })
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.GenericInitializerNotSupported,
+                initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
+                initializeAsyncMethod.ToDisplayString()));
+            return null;
+        }
+
         if (initializeAsyncMethod != null)
         {
             var accessibility = initializeAsyncMethod.DeclaredAccessibility;
@@ -165,6 +174,15 @@ internal static class ProviderValidator
                     ? "<invalid>"
                     : GetTypeDisplayName(serviceType, location),
                 providerDisplayName));
+            return null;
+        }
+
+        if (serviceType is INamedTypeSymbol { IsUnboundGenericType: true })
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.OpenGenericDependencyNotSupported,
+                GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
+                GetTypeDisplayName(serviceType, location)));
             return null;
         }
 
@@ -230,6 +248,7 @@ internal static class ProviderValidator
 
     private static IMethodSymbol? FindInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
     {
+        IMethodSymbol? genericMethod = null;
         foreach (var member in typeSymbol.GetMembers())
         {
             if (member is not IMethodSymbol { Name: "InitializeAsync", Parameters.IsEmpty: true } method)
@@ -238,17 +257,24 @@ internal static class ProviderValidator
             }
 
             var returnTypeName = method.ReturnType.ToDisplayString();
-            if (returnTypeName is
+            if (returnTypeName is not (
                 "System.Threading.Tasks.Task" or
                 "Task" or
                 "System.Threading.Tasks.ValueTask" or
-                "ValueTask")
+                "ValueTask"))
+            {
+                continue;
+            }
+
+            if (method.Arity == 0)
             {
                 return method;
             }
+
+            genericMethod ??= method;
         }
 
-        return null;
+        return genericMethod;
     }
 
     private static ImmutableArray<ServiceTypeIdentity> GetDependencyIdentities(

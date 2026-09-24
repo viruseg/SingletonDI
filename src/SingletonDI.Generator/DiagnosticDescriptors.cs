@@ -212,6 +212,36 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0023: A provider initializer method has generic type parameters.
+    /// </summary>
+    public static readonly DiagnosticDescriptor GenericInitializerNotSupported = Create(
+        "DM0023",
+        "Generic InitializeAsync is not supported",
+        "InitializeAsync method '{0}' must not have type parameters.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0024: A consumer dependency uses an open generic type.
+    /// </summary>
+    public static readonly DiagnosticDescriptor OpenGenericDependencyNotSupported = Create(
+        "DM0024",
+        "Open generic dependency is not supported",
+        "Dependency '{0}' must be a constructed type.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
+    /// DM0025: A generated consumer property collides with an existing member.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConsumerPropertyNameAlreadyExists = Create(
+        "DM0025",
+        "Consumer property name already exists",
+        "Consumer '{0}' already declares a member named '{1}'. The generated property was omitted.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

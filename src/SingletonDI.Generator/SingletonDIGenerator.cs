@@ -445,7 +445,14 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 propertyNames,
                 customPropertyNames,
                 sourceProductionContext.ReportDiagnostic);
-            consumerModels.Add(model.Value);
+            consumerModels.Add(MarkExistingConsumerMemberConflicts(
+                model.Value,
+                typeSymbol,
+                typeDeclaration.Identifier.GetLocation(),
+                propertyNames,
+                customPropertyNames,
+                currentAssemblyIdentity,
+                sourceProductionContext.ReportDiagnostic));
         }
 
         var consumerSources = ConsumerEmitter.Generate(
@@ -677,6 +684,82 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         sourceProductionContext.AddSource(
             "__SingletonDIProviderModule__.g.cs",
             SourceText.From(moduleSource, Encoding.UTF8));
+    }
+
+    private static ConsumerModel MarkExistingConsumerMemberConflicts(
+        ConsumerModel consumer,
+        INamedTypeSymbol typeSymbol,
+        Location location,
+        ImmutableDictionary<ServiceTypeIdentity, string> propertyNames,
+        ImmutableDictionary<ServiceTypeIdentity, string?> customPropertyNames,
+        string currentAssemblyIdentity,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        var resolvedNames = PropertyNameResolver.ResolveConsumerPropertyNamesByIdentity(
+            consumer.Dependencies,
+            propertyNames,
+            customPropertyNames,
+            out _);
+        var existingMemberNames = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
+
+        foreach (var dependency in consumer.Dependencies)
+        {
+            var identity = dependency.Identity ??
+                new ServiceTypeIdentity(dependency.FullyQualifiedName, currentAssemblyIdentity);
+            if (!resolvedNames.TryGetValue(identity, out var propertyName))
+            {
+                continue;
+            }
+
+            var existingMember = FindExistingMember(typeSymbol, propertyName);
+            if (existingMember is null)
+            {
+                continue;
+            }
+
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ConsumerPropertyNameAlreadyExists,
+                existingMember.Locations.FirstOrDefault() ?? location,
+                consumer.FullyQualifiedName,
+                propertyName));
+            existingMemberNames.Add(propertyName);
+        }
+
+        return existingMemberNames.Count == 0
+            ? consumer
+            : new ConsumerModel(
+                consumer.FullyQualifiedName,
+                consumer.ShortName,
+                consumer.Namespace,
+                consumer.IsPartial,
+                consumer.Dependencies,
+                consumer.Shape,
+                existingMemberNames.ToImmutable());
+    }
+
+    private static ISymbol? FindExistingMember(INamedTypeSymbol typeSymbol, string memberName)
+    {
+        for (INamedTypeSymbol? current = typeSymbol;
+             current is not null;
+             current = current.BaseType)
+        {
+            var member = current.GetMembers(memberName).FirstOrDefault();
+            if (member is not null)
+            {
+                return member;
+            }
+        }
+
+        foreach (var interfaceType in typeSymbol.AllInterfaces)
+        {
+            var member = interfaceType.GetMembers(memberName).FirstOrDefault();
+            if (member is not null)
+            {
+                return member;
+            }
+        }
+
+        return null;
     }
 
     private static void ReportConsumerPropertyNameConflicts(

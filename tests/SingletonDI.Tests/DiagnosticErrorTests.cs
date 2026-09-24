@@ -1267,6 +1267,184 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0023_GenericInitializeAsyncIsRejected()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public Task InitializeAsync<T>() => Task.CompletedTask;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0023");
+        Assert.Equal("Generic InitializeAsync is not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("InitializeAsync", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0411");
+    }
+
+    [Fact]
+    public void DM0024_OpenGenericDependencyIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public interface IBox<T>
+            {
+            }
+
+            [SingletonDIConsume(typeof(IBox<>))]
+            public partial class Consumer
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0024");
+        Assert.Equal("Open generic dependency is not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("IBox", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS7003");
+    }
+
+    [Fact]
+    public void DM0024_OpenGenericProviderContractIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public interface IBox<T>
+            {
+            }
+
+            [SingletonDIProvide(ServiceType = typeof(IBox<>))]
+            public sealed class Service : IBox<int>
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0024");
+        Assert.Contains("IBox", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS7003");
+    }
+
+    [Fact]
+    public void DM0025_ExistingConsumerMemberCollisionIsReported()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public partial class Consumer
+            {
+                public int ServiceInstance => 0;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0025");
+        Assert.Equal("Consumer property name already exists", diagnostic.Descriptor.Title);
+        Assert.Contains("ServiceInstance", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0102");
+
+        var generated = string.Join(
+            Environment.NewLine,
+            result.OutputCompilation.SyntaxTrees.Select(tree => tree.ToString()));
+        Assert.DoesNotContain(generated, "Resolve<global::Service>()", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DM0025_CollisionSkipsOnlyTheConflictingProperty()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace A
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+            }
+
+            namespace B
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+            }
+
+            [SingletonDIConsume(typeof(A.Service), typeof(B.Service))]
+            public partial class Consumer
+            {
+                public int A_ServiceInstance => 0;
+
+                public B.Service Get() => B_ServiceInstance;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        Assert.Single(result.Diagnostics, item => item.Id == "DM0025");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0102");
+
+        var generated = string.Join(
+            Environment.NewLine,
+            result.OutputCompilation.SyntaxTrees.Select(tree => tree.ToString()));
+        Assert.DoesNotContain(generated, "Resolve<global::A.Service>()", StringComparison.Ordinal);
+        Assert.Contains("Resolve<global::B.Service>()", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DM0025_InheritedConsumerMemberCollisionIsReported()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+            }
+
+            public class ConsumerBase
+            {
+                protected int ServiceInstance => 0;
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public partial class Consumer : ConsumerBase
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0025");
+        Assert.Contains("ServiceInstance", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id is "CS0102" or "CS0108");
+    }
+
+    [Fact]
     public void DM0017_LibraryConsumerDoesNotRequireCompositionRoot()
     {
         const string source = """

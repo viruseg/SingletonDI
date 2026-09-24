@@ -138,7 +138,8 @@ internal static class ConsumerEmitter
         foreach (var dependency in consumer.Dependencies)
         {
             var propertyName = resolvePropertyName(dependency);
-            if (propertyName is null)
+            if (propertyName is null ||
+                consumer.ExistingMemberNames.Contains(propertyName))
             {
                 continue;
             }

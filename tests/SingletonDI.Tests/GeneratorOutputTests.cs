@@ -86,6 +86,41 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_OmitsConsumerPropertyWhenMemberAlreadyExists()
+    {
+        var compilation = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                    public int ServiceInstance => 0;
+                }
+            }
+            """);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+        var outputCompilation = compilation.AddSyntaxTrees(GetGeneratedSyntaxTrees(runResult));
+        var generated = GetGeneratedSource(runResult);
+
+        Assert.Contains(runResult.Diagnostics, diagnostic => diagnostic.Id == "DM0025");
+        Assert.DoesNotContain(
+            outputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Id == "CS0102");
+        Assert.DoesNotContain(generated, "Resolve<global::App.Service>()", StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Generator_GeneratedSourcesCompileAndExposeTypedRegistration()
     {
         const string source = """

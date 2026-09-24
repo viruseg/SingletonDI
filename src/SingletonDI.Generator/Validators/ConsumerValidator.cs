@@ -112,6 +112,15 @@ internal static class ConsumerValidator
         var dependencies = ImmutableArray.CreateBuilder<ServiceReferenceModel>();
         foreach (var (dependencyType, location) in dependencyTypes)
         {
+            if (dependencyType is INamedTypeSymbol { IsUnboundGenericType: true })
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.OpenGenericDependencyNotSupported,
+                    location ?? typeDecl.Identifier.GetLocation(),
+                    GetFullyQualifiedName(dependencyType)));
+                continue;
+            }
+
             var dependencyFullyQualifiedName = GetFullyQualifiedName(dependencyType);
             var dependencyIdentity = CreateIdentity(dependencyType);
 
