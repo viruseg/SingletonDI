@@ -17,6 +17,36 @@ namespace SingletonDI.Tests;
 public class DiagnosticErrorTests
 {
     [Fact]
+    public void DM0008_SelfReference_ExactDiagnosticAndOutputCompiles()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            [SingletonDIConsume(typeof(Consumer))]
+            public partial class Consumer
+            {
+                public Consumer()
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics.Where(item => item.Id == "DM0008"));
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("SingletonDI", diagnostic.Descriptor.Category);
+        Assert.Equal("Self-reference not allowed", diagnostic.Descriptor.Title.ToString());
+        Assert.Equal(
+            "[SingletonDIConsume] class 'Consumer' cannot consume itself. Remove 'Consumer' from the dependencies.",
+            diagnostic.GetMessage());
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void DM0001_DuplicatePropertyName()
     {
         // Arrange
@@ -1186,16 +1216,21 @@ public class DiagnosticErrorTests
 
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
-        return RunGenerator(
-            source,
-            compositionRoot: false,
-            OutputKind.DynamicallyLinkedLibrary);
+        return RunGeneratorWithOutput(source).Diagnostics;
     }
 
     private static ImmutableArray<Diagnostic> RunGenerator(
         string source,
         bool compositionRoot,
         OutputKind outputKind)
+    {
+        return RunGeneratorWithOutput(source, compositionRoot, outputKind).Diagnostics;
+    }
+
+    private static GeneratorTestResult RunGeneratorWithOutput(
+        string source,
+        bool compositionRoot = false,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         var compilation = CreateCompilation(source, outputKind);
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
@@ -1210,8 +1245,18 @@ public class DiagnosticErrorTests
                 IncrementalGeneratorOutputKind.None,
                 trackIncrementalGeneratorSteps: false,
                 baseDirectory: null));
-        driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var diagnostics);
-        return diagnostics;
+        driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
+        var generatedSources = driver.GetRunResult()
+            .Results
+            .SelectMany(result => result.GeneratedSources.IsDefault
+                ? Enumerable.Empty<GeneratedSourceResult>()
+                : result.GeneratedSources.AsEnumerable())
+            .ToImmutableArray();
+        return new GeneratorTestResult(
+            diagnostics,
+            outputCompilation,
+            generatedSources,
+            outputKind);
     }
 
     private static CSharpCompilation CreateCompilation(

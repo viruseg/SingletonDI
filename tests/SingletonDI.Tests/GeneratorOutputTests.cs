@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using SingletonDI.Generator;
 using SingletonDI.Generator.Emitters;
 using SingletonDI.Generator.Models;
@@ -50,6 +51,62 @@ public sealed class GeneratorOutputTests
         Assert.Contains("global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::App.FirstService>()", generated);
         Assert.DoesNotContain("__SingletonDIContainer__", generated);
         Assert.DoesNotContain("class SingletonDIInitializer", generated);
+    }
+
+    [Fact]
+    public void Generator_GeneratedSourcesCompileAndExposeTypedRegistration()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+        var compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+        var outputCompilation = compilation.AddSyntaxTrees(GetGeneratedSyntaxTrees(runResult));
+
+        Assert.DoesNotContain(
+            runResult.Diagnostics,
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(
+            outputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+        var registration = outputCompilation.SyntaxTrees
+            .SelectMany(tree => tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
+            .Single(invocation => invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
+                                   memberAccess.Name.Identifier.Text == "RegisterProvider");
+        var registrationMember = Assert.IsType<MemberAccessExpressionSyntax>(registration.Expression);
+        var registrationName = Assert.IsType<GenericNameSyntax>(registrationMember.Name);
+        Assert.Equal(
+            "global::App.Service",
+            registrationName.TypeArgumentList.Arguments[0].ToString());
+        Assert.Equal(
+            "global::App.Service",
+            registrationName.TypeArgumentList.Arguments[1].ToString());
+
+        var resolution = outputCompilation.SyntaxTrees
+            .SelectMany(tree => tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
+            .Single(invocation => invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
+                                   memberAccess.Name.Identifier.Text == "Resolve");
+        var resolutionMember = Assert.IsType<MemberAccessExpressionSyntax>(resolution.Expression);
+        var resolutionName = Assert.IsType<GenericNameSyntax>(resolutionMember.Name);
+        Assert.Equal(
+            "global::App.Service",
+            resolutionName.TypeArgumentList.Arguments[0].ToString());
     }
 
     [Fact]
@@ -484,6 +541,17 @@ public sealed class GeneratorOutputTests
 
         Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.Contains("RegisterProvider<global::App.LocalService, global::App.LocalService>", generated);
+    }
+
+    private static IReadOnlyList<SyntaxTree> GetGeneratedSyntaxTrees(
+        GeneratorDriverRunResult runResult)
+    {
+        return runResult.Results
+            .SelectMany(result => result.GeneratedSources)
+            .Select(generated => CSharpSyntaxTree.ParseText(
+                generated.SourceText.ToString(),
+                CreateParseOptions()))
+            .ToArray();
     }
 
     private static string GetGeneratedSource(GeneratorDriverRunResult runResult)
