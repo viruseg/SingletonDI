@@ -74,6 +74,41 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .Where(static typeDeclaration => typeDeclaration is not null)
             .Select(static (typeDeclaration, _) => typeDeclaration!);
 
+        var consumerCandidates = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "SingletonDI.Attributes.SingletonDIConsumeAttribute",
+                predicate: static (node, _) => node is TypeDeclarationSyntax,
+                transform: static (context, token) =>
+                {
+                    var typeDeclaration = (TypeDeclarationSyntax)context.TargetNode;
+                    var typeSymbol = context.SemanticModel.GetDeclaredSymbol(typeDeclaration, token) as INamedTypeSymbol;
+                    if (typeSymbol is null)
+                    {
+                        return CreateConsumerCandidate(
+                            null,
+                            ImmutableArray<Diagnostic>.Empty,
+                            Location.None,
+                            ImmutableDictionary<string, Location>.Empty);
+                    }
+
+                    var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+                    var model = ConsumerValidator.Validate(
+                        typeDeclaration,
+                        typeSymbol,
+                        diagnostics.Add);
+                    var existingMemberLocations = GetExistingMemberLocations(
+                        typeSymbol,
+                        model.HasValue
+                            ? model.Value.Dependencies
+                            : ImmutableArray<ServiceReferenceModel>.Empty);
+                    var declarationLocation = typeDeclaration.Identifier.GetLocation();
+                    return CreateConsumerCandidate(
+                        model,
+                        diagnostics.ToImmutable(),
+                        declarationLocation,
+                        existingMemberLocations);
+                });
+
         var providerInputs = providerCandidates
             .Collect()
             .Combine(languageSupport)
@@ -117,27 +152,47 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 sourceProductionContext);
         });
 
-        var consumerInputs = consumerDeclarations
+        var consumerInputs = consumerCandidates
             .Collect()
-            .Combine(context.CompilationProvider)
             .Combine(providerCandidates.Collect())
+            .Combine(languageSupport)
             .Combine(generatorOptions)
             .WithTrackingName("ConsumerOutput");
         context.RegisterSourceOutput(consumerInputs, (sourceProductionContext, input) =>
         {
-            var (((consumerDeclarationsForOutput, compilation), providerCandidatesForOutput), options) = input;
-            if (!CanEmitGeneratedSource(compilation) ||
-                ((consumerDeclarationsForOutput.IsDefault || consumerDeclarationsForOutput.IsEmpty) &&
-                 (options.IsCompositionRoot || !IsExecutable(options, compilation))))
+            var (((consumerCandidatesForOutput, providerCandidatesForOutput), language), options) = input;
+            if (!language.CanEmit ||
+                ((consumerCandidatesForOutput.IsDefault || consumerCandidatesForOutput.IsEmpty) &&
+                 (options.IsCompositionRoot || !IsExecutable(options))))
             {
                 return;
             }
 
             EmitConsumers(
-                consumerDeclarationsForOutput,
-                compilation,
+                consumerCandidatesForOutput,
                 providerCandidatesForOutput,
                 options,
+                sourceProductionContext);
+        });
+
+        var referencedValidationInputs = providerCandidates
+            .Collect()
+            .Combine(context.CompilationProvider)
+            .Combine(generatorOptions)
+            .WithTrackingName("ReferencedConsumerValidation");
+        context.RegisterSourceOutput(referencedValidationInputs, (sourceProductionContext, input) =>
+        {
+            var ((providerCandidatesForValidation, compilation), options) = input;
+            if (!CanEmitGeneratedSource(compilation) ||
+                options.IsCompositionRoot ||
+                !IsExecutable(options, compilation))
+            {
+                return;
+            }
+
+            EmitReferencedConsumerValidation(
+                providerCandidatesForValidation,
+                compilation,
                 sourceProductionContext);
         });
     }
@@ -392,113 +447,70 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     }
 
     private static void EmitConsumers(
-        ImmutableArray<TypeDeclarationSyntax> consumerDeclarations,
-        Compilation compilation,
+        ImmutableArray<ConsumerCandidate> consumerCandidates,
         ImmutableArray<ProviderCandidate> providerCandidates,
         GeneratorOptions options,
         SourceProductionContext sourceProductionContext)
     {
-        var localProviderModels = GetProviderModels(providerCandidates);
-        var isExecutable = IsExecutable(options, compilation);
-        var referencedProviderModels = !options.IsCompositionRoot && isExecutable
-            ? ProviderSymbolCollector.CollectReferencedProviders(
-                compilation,
-                sourceProductionContext.CancellationToken,
-                sourceProductionContext.ReportDiagnostic,
-                out _)
-            : ImmutableArray<ProviderModel>.Empty;
-        var providerModels = localProviderModels
-            .Concat(referencedProviderModels)
-            .ToImmutableArray();
+        var providerModels = GetProviderModels(providerCandidates);
         var localProviderIdentities = GetLocalProviderIdentities(providerCandidates);
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(providerModels);
         var propertyNames = PropertyNameResolver.ResolvePropertyNamesByIdentity(providerModels);
         var customPropertyNames = providerModels
             .ToImmutableDictionary(provider => provider.TypeIdentity, provider => provider.PropertyName);
-        var referencedConsumerDependencies = !options.IsCompositionRoot && isExecutable
-            ? ReferencedConsumerCollector.CollectReferencedConsumerDependencyIdentities(
-                compilation,
-                sourceProductionContext.CancellationToken)
-            : ImmutableArray<ImmutableArray<ServiceTypeIdentity>>.Empty;
-        var missingReferencedDependencies = new HashSet<ServiceTypeIdentity>();
-        foreach (var dependencySet in referencedConsumerDependencies)
-        {
-            foreach (var dependency in dependencySet)
-            {
-                if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependency) &&
-                    missingReferencedDependencies.Add(dependency))
-                {
-                    sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
-                        DiagnosticDescriptors.MissingExternalProvider,
-                        Location.None,
-                        FormatServiceTypeIdentity(dependency)));
-                }
-            }
-        }
-
         var consumerModels = new List<ConsumerModel>();
-        var currentAssemblyIdentity = compilation.Assembly.Identity.ToString();
+        var isExecutable = IsExecutable(options);
 
-        foreach (var typeDeclaration in consumerDeclarations)
+        foreach (var candidate in consumerCandidates)
         {
-            var semanticModel = compilation.GetSemanticModel(typeDeclaration.SyntaxTree);
-            var typeSymbol = semanticModel.GetDeclaredSymbol(typeDeclaration) as INamedTypeSymbol;
-            if (typeSymbol is null)
+            foreach (var diagnostic in candidate.Diagnostics)
+            {
+                sourceProductionContext.ReportDiagnostic(diagnostic);
+            }
+
+            if (!candidate.Model.HasValue)
             {
                 continue;
             }
 
-            var model = ConsumerValidator.Validate(
-                typeDeclaration,
-                typeSymbol,
-                localProviderIdentities,
-                sourceProductionContext.ReportDiagnostic);
-            if (!model.HasValue)
-            {
-                continue;
-            }
-
+            var model = candidate.Model.Value;
             if (!options.IsCompositionRoot &&
                 isExecutable &&
                 HasExternalDependency(
-                    model.Value,
+                    model,
                     localProviderIdentities,
-                    serviceTypeMapResult.IdentityMap,
-                    currentAssemblyIdentity))
+                    serviceTypeMapResult.IdentityMap))
             {
                 sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.MissingCompositionRoot,
-                    typeDeclaration.Identifier.GetLocation(),
-                    model.Value.Dependencies
+                    candidate.DeclarationLocation,
+                    model.Dependencies
                         .Where(dependency =>
                         {
-                            var identity = dependency.Identity ??
-                                new ServiceTypeIdentity(
-                                    dependency.FullyQualifiedName,
-                                    currentAssemblyIdentity);
-                            return !serviceTypeMapResult.IdentityMap.ContainsKey(identity) &&
+                            var identity = dependency.Identity;
+                            return identity is not null &&
+                                   !serviceTypeMapResult.IdentityMap.ContainsKey(identity.Value) &&
                                    (dependency.IsContract ||
-                                    !localProviderIdentities.Contains(identity));
+                                    !localProviderIdentities.Contains(identity.Value));
                         })
                         .Select(dependency => dependency.Identity is { } identity
                             ? FormatServiceTypeIdentity(identity)
                             : dependency.FullyQualifiedName)
-                        .FirstOrDefault() ?? model.Value.FullyQualifiedName));
+                        .FirstOrDefault() ?? model.FullyQualifiedName));
             }
 
             ReportConsumerPropertyNameConflicts(
-                model.Value,
-                typeDeclaration.Identifier.GetLocation(),
+                model,
+                candidate.DeclarationLocation,
                 propertyNames,
                 customPropertyNames,
                 sourceProductionContext.ReportDiagnostic);
             consumerModels.Add(MarkExistingConsumerMemberConflicts(
-                model.Value,
-                typeSymbol,
-                typeDeclaration.Identifier.GetLocation(),
+                model,
+                candidate.ExistingMemberLocations,
+                candidate.DeclarationLocation,
                 propertyNames,
                 customPropertyNames,
-                currentAssemblyIdentity,
                 sourceProductionContext.ReportDiagnostic));
         }
 
@@ -511,6 +523,43 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             sourceProductionContext.AddSource(
                 generatedSource.Key,
                 SourceText.From(generatedSource.Value, Encoding.UTF8));
+        }
+    }
+
+    private static void EmitReferencedConsumerValidation(
+        ImmutableArray<ProviderCandidate> providerCandidates,
+        Compilation compilation,
+        SourceProductionContext sourceProductionContext)
+    {
+        var localProviders = GetProviderModels(providerCandidates);
+        var externalProviders = ProviderSymbolCollector.CollectReferencedProviders(
+            compilation,
+            sourceProductionContext.CancellationToken,
+            sourceProductionContext.ReportDiagnostic,
+            out _);
+        var allProviders = localProviders
+            .Concat(externalProviders)
+            .ToImmutableArray();
+        var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(allProviders);
+        var referencedConsumerDependencies =
+            ReferencedConsumerCollector.CollectReferencedConsumerDependencyIdentities(
+                compilation,
+                sourceProductionContext.CancellationToken);
+        var missingDependencies = new HashSet<ServiceTypeIdentity>();
+
+        foreach (var dependencySet in referencedConsumerDependencies)
+        {
+            foreach (var dependency in dependencySet)
+            {
+                if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependency) &&
+                    missingDependencies.Add(dependency))
+                {
+                    sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.MissingExternalProvider,
+                        Location.None,
+                        FormatServiceTypeIdentity(dependency)));
+                }
+            }
         }
     }
 
@@ -663,46 +712,43 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     private static bool HasExternalDependency(
         ConsumerModel consumer,
         ImmutableHashSet<ServiceTypeIdentity> localProviderIdentities,
-        ImmutableDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeMap,
-        string currentAssemblyIdentity)
+        ImmutableDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeMap)
     {
         foreach (var dependency in consumer.Dependencies)
         {
-            var identity = dependency.Identity ??
-                new ServiceTypeIdentity(dependency.FullyQualifiedName, currentAssemblyIdentity);
+            if (dependency.Identity is not { } identity)
+            {
+                return dependency.IsContract;
+            }
+
             if (serviceTypeMap.ContainsKey(identity))
             {
                 continue;
             }
 
-            if (dependency.IsContract)
+            if (dependency.IsContract || !localProviderIdentities.Contains(identity))
             {
                 return true;
             }
-
-            if (localProviderIdentities.Contains(identity) ||
-                string.Equals(
-                    dependency.Identity?.AssemblyIdentity,
-                    currentAssemblyIdentity,
-                    StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            return true;
         }
 
         return false;
+    }
+
+    private static bool IsExecutable(GeneratorOptions options)
+    {
+        return !string.IsNullOrWhiteSpace(options.OutputType) &&
+               (string.Equals(options.OutputType, "Exe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(options.OutputType, "WinExe", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(options.OutputType, "ConsoleApplication", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(options.OutputType, "WindowsApplication", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsExecutable(GeneratorOptions options, Compilation compilation)
     {
         if (!string.IsNullOrWhiteSpace(options.OutputType))
         {
-            return string.Equals(options.OutputType, "Exe", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(options.OutputType, "WinExe", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(options.OutputType, "ConsoleApplication", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(options.OutputType, "WindowsApplication", StringComparison.OrdinalIgnoreCase);
+            return IsExecutable(options);
         }
 
         return compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication;
@@ -853,13 +899,195 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             SourceText.From(moduleSource, Encoding.UTF8));
     }
 
+    private static ConsumerCandidate CreateConsumerCandidate(
+        ConsumerModel? model,
+        ImmutableArray<Diagnostic> diagnostics,
+        Location declarationLocation,
+        ImmutableDictionary<string, Location> existingMemberLocations)
+    {
+        var key = new StringBuilder();
+        key.Append(model.HasValue ? "model" : "none");
+        if (model is { } consumer)
+        {
+            key.Append('\u001f').Append(consumer.FullyQualifiedName);
+            key.Append('\u001f').Append(consumer.ShortName);
+            key.Append('\u001f').Append(consumer.Namespace);
+            key.Append('\u001f').Append(consumer.IsPartial);
+            AppendShapeKey(key, consumer.Shape);
+            foreach (var dependency in consumer.Dependencies)
+            {
+                key.Append('\u001f').Append("dependency");
+                key.Append('\u001f').Append(dependency.FullyQualifiedName);
+                key.Append('\u001f').Append(dependency.ShortName);
+                key.Append('\u001f').Append(dependency.Namespace);
+                key.Append('\u001f').Append(dependency.PropertyName);
+                key.Append('\u001f').Append(dependency.IsContract);
+                key.Append('\u001f').Append(dependency.CanUseProtectedProperty);
+                key.Append('\u001f').Append(dependency.Identity?.CanonicalIdentity);
+            }
+        }
+
+        foreach (var diagnostic in diagnostics)
+        {
+            key.Append('\u001f').Append("diagnostic");
+            key.Append('\u001f').Append(diagnostic.Id);
+            key.Append('\u001f').Append(diagnostic.Severity);
+            key.Append('\u001f').Append(diagnostic.Descriptor.Title);
+            key.Append('\u001f').Append(diagnostic.GetMessage());
+            AppendLocationKey(key, diagnostic.Location);
+        }
+
+        key.Append('\u001f').Append("declaration");
+        if (diagnostics.Length > 0 ||
+            existingMemberLocations.Values.Any(location => location.IsInSource))
+        {
+            AppendLocationKey(key, declarationLocation);
+        }
+        else
+        {
+            key.Append("\u001f").Append("none");
+        }
+
+        foreach (var member in existingMemberLocations.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            key.Append('\u001f').Append("member").Append('\u001f').Append(member.Key);
+            AppendLocationKey(key, member.Value);
+        }
+
+        return new ConsumerCandidate(
+            model,
+            diagnostics,
+            declarationLocation,
+            existingMemberLocations,
+            key.ToString());
+    }
+
+    private static void AppendShapeKey(StringBuilder key, ConsumerDeclarationShape shape)
+    {
+        key.Append('\u001f').Append("shape");
+        key.Append('\u001f').Append(shape.DeclarationKind);
+        key.Append('\u001f').Append(shape.Name);
+        key.Append('\u001f').Append(shape.Namespace);
+        key.Append('\u001f').Append(shape.Arity);
+        foreach (var typeParameter in shape.TypeParameters)
+        {
+            key.Append('\u001f').Append(typeParameter);
+        }
+
+        key.Append('\u001f').Append(shape.TypeParameterList);
+        key.Append('\u001f').Append(shape.ConstraintClauses);
+        key.Append('\u001f').Append(shape.IsPartial);
+        key.Append('\u001f').Append(shape.IsSealed);
+        foreach (var containingType in shape.ContainingTypes)
+        {
+            key.Append('\u001f').Append("containing");
+            key.Append('\u001f').Append(containingType.Name);
+            key.Append('\u001f').Append(containingType.DeclarationKind);
+            key.Append('\u001f').Append(containingType.Arity);
+            foreach (var typeParameter in containingType.TypeParameters)
+            {
+                key.Append('\u001f').Append(typeParameter);
+            }
+
+            key.Append('\u001f').Append(containingType.TypeParameterList);
+            key.Append('\u001f').Append(containingType.ConstraintClauses);
+            key.Append('\u001f').Append(containingType.IsPartial);
+        }
+
+        key.Append('\u001f').Append(shape.IsFileScoped);
+    }
+
+    private static void AppendLocationKey(StringBuilder key, Location location)
+    {
+        key.Append('\u001f').Append(location.IsInSource ? "source" : "none");
+        if (location.IsInSource)
+        {
+            key.Append(location.SourceSpan.Start)
+                .Append(':')
+                .Append(location.SourceSpan.End);
+        }
+    }
+
+    private static ImmutableDictionary<string, Location> GetExistingMemberLocations(
+        INamedTypeSymbol typeSymbol,
+        ImmutableArray<ServiceReferenceModel> dependencies)
+    {
+        var possibleNames = GetPotentialPropertyNames(dependencies);
+        var locations = ImmutableDictionary.CreateBuilder<string, Location>(StringComparer.Ordinal);
+        for (INamedTypeSymbol? current = typeSymbol;
+             current is not null;
+             current = current.BaseType)
+        {
+            AddMemberLocations(current);
+        }
+
+        foreach (var interfaceType in typeSymbol.AllInterfaces)
+        {
+            AddMemberLocations(interfaceType);
+        }
+
+        return locations.ToImmutable();
+
+        void AddMemberLocations(INamedTypeSymbol type)
+        {
+            foreach (var member in type.GetMembers())
+            {
+                if (possibleNames.Contains(member.Name) && !locations.ContainsKey(member.Name))
+                {
+                    locations.Add(
+                        member.Name,
+                        member.Locations.FirstOrDefault() ?? Location.None);
+                }
+            }
+        }
+    }
+
+    private static ImmutableHashSet<string> GetPotentialPropertyNames(
+        ImmutableArray<ServiceReferenceModel> dependencies)
+    {
+        var names = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
+        foreach (var dependency in dependencies)
+        {
+            var baseNames = new List<string>
+            {
+                $"{dependency.ShortName}Instance",
+            };
+            var namespaceName = dependency.Namespace;
+            if (namespaceName.StartsWith("global::", StringComparison.Ordinal))
+            {
+                namespaceName = namespaceName.Substring("global::".Length);
+            }
+
+            var namespacePrefix = namespaceName.Replace('.', '_');
+            if (!string.IsNullOrEmpty(namespacePrefix))
+            {
+                baseNames.Add($"{namespacePrefix}_{dependency.ShortName}Instance");
+            }
+
+            if (!string.IsNullOrEmpty(dependency.PropertyName))
+            {
+                baseNames.Add(dependency.PropertyName!);
+            }
+
+            foreach (var baseName in baseNames)
+            {
+                names.Add(baseName);
+                for (var suffix = 2; suffix <= dependencies.Length + 1; suffix++)
+                {
+                    names.Add($"{baseName}_{suffix}");
+                }
+            }
+        }
+
+        return names.ToImmutable();
+    }
+
     private static ConsumerModel MarkExistingConsumerMemberConflicts(
         ConsumerModel consumer,
-        INamedTypeSymbol typeSymbol,
+        ImmutableDictionary<string, Location> existingMemberLocations,
         Location location,
         ImmutableDictionary<ServiceTypeIdentity, string> propertyNames,
         ImmutableDictionary<ServiceTypeIdentity, string?> customPropertyNames,
-        string currentAssemblyIdentity,
         Action<Diagnostic> reportDiagnostic)
     {
         var resolvedNames = PropertyNameResolver.ResolveConsumerPropertyNamesByIdentity(
@@ -872,21 +1100,16 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         foreach (var dependency in consumer.Dependencies)
         {
             var identity = dependency.Identity ??
-                new ServiceTypeIdentity(dependency.FullyQualifiedName, currentAssemblyIdentity);
-            if (!resolvedNames.TryGetValue(identity, out var propertyName))
-            {
-                continue;
-            }
-
-            var existingMember = FindExistingMember(typeSymbol, propertyName);
-            if (existingMember is null)
+                new ServiceTypeIdentity(dependency.FullyQualifiedName, string.Empty);
+            if (!resolvedNames.TryGetValue(identity, out var propertyName) ||
+                !existingMemberLocations.TryGetValue(propertyName, out var existingMemberLocation))
             {
                 continue;
             }
 
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ConsumerPropertyNameAlreadyExists,
-                existingMember.Locations.FirstOrDefault() ?? location,
+                existingMemberLocation == Location.None ? location : existingMemberLocation,
                 consumer.FullyQualifiedName,
                 propertyName));
             existingMemberNames.Add(propertyName);
@@ -902,31 +1125,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 consumer.Dependencies,
                 consumer.Shape,
                 existingMemberNames.ToImmutable());
-    }
-
-    private static ISymbol? FindExistingMember(INamedTypeSymbol typeSymbol, string memberName)
-    {
-        for (INamedTypeSymbol? current = typeSymbol;
-             current is not null;
-             current = current.BaseType)
-        {
-            var member = current.GetMembers(memberName).FirstOrDefault();
-            if (member is not null)
-            {
-                return member;
-            }
-        }
-
-        foreach (var interfaceType in typeSymbol.AllInterfaces)
-        {
-            var member = interfaceType.GetMembers(memberName).FirstOrDefault();
-            if (member is not null)
-            {
-                return member;
-            }
-        }
-
-        return null;
     }
 
     private static void ReportConsumerPropertyNameConflicts(

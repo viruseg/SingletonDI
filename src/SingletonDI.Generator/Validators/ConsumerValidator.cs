@@ -17,6 +17,18 @@ internal static class ConsumerValidator
     internal static ConsumerModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        return Validate(
+            typeDecl,
+            typeSymbol,
+            ImmutableHashSet<ServiceTypeIdentity>.Empty,
+            reportDiagnostic);
+    }
+
+    internal static ConsumerModel? Validate(
+        TypeDeclarationSyntax typeDecl,
+        INamedTypeSymbol typeSymbol,
         ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {

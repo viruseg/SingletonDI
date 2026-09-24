@@ -61,6 +61,80 @@ public sealed class GeneratorIncrementalTests
                 output => output.Reason == IncrementalStepRunReason.Cached));
     }
 
+    [Fact]
+    public void ConsumerBodyEditCachesConsumerOutput()
+    {
+        var parseOptions = new CSharpParseOptions(
+            LanguageVersion.Latest,
+            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        var providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+            }
+            """;
+        var firstConsumerSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                    public int Value => 1;
+                }
+            }
+            """;
+        var secondConsumerSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                    public int Value => 2;
+                }
+            }
+            """;
+        var providerTree = CSharpSyntaxTree.ParseText(providerSource, parseOptions);
+        var firstCompilation = CreateCompilation(
+            [providerTree, CSharpSyntaxTree.ParseText(firstConsumerSource, parseOptions)],
+            parseOptions);
+        var secondCompilation = CreateCompilation(
+            [providerTree, CSharpSyntaxTree.ParseText(secondConsumerSource, parseOptions)],
+            parseOptions);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(firstCompilation);
+        driver = driver.RunGenerators(secondCompilation);
+        var runResult = driver.GetRunResult();
+        var consumerSteps = runResult.Results
+            .SelectMany(result => result.TrackedSteps)
+            .Concat(runResult.Results.SelectMany(result => result.TrackedOutputSteps))
+            .Where(pair => pair.Key == "ConsumerOutput")
+            .SelectMany(pair => pair.Value)
+            .ToList();
+
+        var consumerStep = Assert.Single(consumerSteps);
+        Assert.Contains(
+            consumerStep.Outputs,
+            output => output.Reason == IncrementalStepRunReason.Cached);
+    }
+
     private static CSharpCompilation CreateCompilation(
         IEnumerable<SyntaxTree> syntaxTrees,
         CSharpParseOptions parseOptions)
