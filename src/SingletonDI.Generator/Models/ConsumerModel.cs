@@ -11,7 +11,8 @@ public readonly record struct ConsumerModel
     string ShortName,
     string Namespace,
     bool IsPartial,
-    ImmutableArray<ServiceReferenceModel> Dependencies)
+    ImmutableArray<ServiceReferenceModel> Dependencies,
+    ConsumerDeclarationShape? DeclarationShape = null)
 {
     /// <summary>
     /// Gets the fully qualified name of the consumer type.
@@ -37,4 +38,10 @@ public readonly record struct ConsumerModel
     /// Gets the typed service references consumed by the consumer.
     /// </summary>
     public ImmutableArray<ServiceReferenceModel> Dependencies { get; } = Dependencies;
+
+    /// <summary>
+    /// Gets the complete declaration shape used to reopen the consumer.
+    /// </summary>
+    public ConsumerDeclarationShape Shape { get; } =
+        DeclarationShape ?? ConsumerDeclarationShape.CreateLegacy(ShortName, Namespace, IsPartial);
 }

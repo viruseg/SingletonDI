@@ -201,6 +201,16 @@ internal static class DiagnosticDescriptors
         Category,
         DiagnosticSeverity.Error);
 
+    /// <summary>
+    /// DM0026: A nested consumer has a containing type that cannot be reopened.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(
+        "DM0026",
+        "Consumer containing type is not partial",
+        "Containing type '{0}' of a nested consumer must be partial.",
+        Category,
+        DiagnosticSeverity.Error);
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,

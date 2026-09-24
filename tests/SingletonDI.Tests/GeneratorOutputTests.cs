@@ -60,6 +60,32 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_EmitsFileScopedConsumerNamespace()
+    {
+        var compilation = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            namespace App;
+
+            [SingletonDIProvide]
+            public sealed class Service { }
+
+            [SingletonDIConsume(typeof(Service))]
+            public partial record struct Consumer
+            {
+            }
+            """);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var generated = GetGeneratedSource(driver.GetRunResult());
+
+        Assert.Contains("namespace App;", generated);
+        Assert.Contains("partial record struct Consumer", generated);
+    }
+
+    [Fact]
     public void Generator_GeneratedSourcesCompileAndExposeTypedRegistration()
     {
         const string source = """
@@ -387,6 +413,36 @@ public sealed class GeneratorOutputTests
         Assert.DoesNotContain(
             "((global::System.IDisposable)value).Dispose()",
             generated);
+    }
+
+    [Fact]
+    public void ConsumerEmitter_UsesSafeUniqueHintNames()
+    {
+        var first = new ConsumerModel(
+            "global::App.Consumer",
+            "Consumer",
+            "App",
+            true,
+            ImmutableArray<ServiceReferenceModel>.Empty);
+        var second = new ConsumerModel(
+            "global::App.Consumer",
+            "Consumer",
+            "App",
+            true,
+            ImmutableArray<ServiceReferenceModel>.Empty);
+
+        var generated = ConsumerEmitter.Generate([first, second]);
+
+        Assert.Equal(2, generated.Count);
+        Assert.Contains(generated.Keys, key => key.Contains('_'));
+        Assert.All(generated.Keys, key =>
+        {
+            var stem = key[..^5];
+            Assert.All(stem, character =>
+                Assert.True(
+                    char.IsLetterOrDigit(character) || character == '_',
+                    $"Invalid hint-name character '{character}' in '{key}'."));
+        });
     }
 
     [Fact]

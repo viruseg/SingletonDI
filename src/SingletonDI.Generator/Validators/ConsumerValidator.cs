@@ -58,6 +58,18 @@ internal static class ConsumerValidator
             return null;
         }
 
+        foreach (var containingType in typeDecl.Ancestors().OfType<TypeDeclarationSyntax>())
+        {
+            if (!containingType.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)))
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.ConsumeContainingTypeNotPartial,
+                    containingType.Identifier.GetLocation(),
+                    containingType.Identifier.ValueText));
+                return null;
+            }
+        }
+
         var consumeAttribute = FindAttribute(typeSymbol, ConsumeAttributeName);
         if (consumeAttribute == null)
         {
@@ -149,7 +161,110 @@ internal static class ConsumerValidator
             ShortName: typeSymbol.Name,
             Namespace: typeSymbol.ContainingNamespace.ToDisplayString(),
             IsPartial: true,
-            Dependencies: dependencies.ToImmutable());
+            Dependencies: dependencies.ToImmutable(),
+            DeclarationShape: CreateShape(typeDecl, typeSymbol));
+    }
+
+    private static ConsumerDeclarationShape CreateShape(
+        TypeDeclarationSyntax typeDeclaration,
+        INamedTypeSymbol typeSymbol)
+    {
+        var typeParameters = GetTypeParameters(typeDeclaration);
+        var containingTypes = typeDeclaration
+            .Ancestors()
+            .OfType<TypeDeclarationSyntax>()
+            .Reverse()
+            .Select(CreateContainingTypeShape)
+            .ToImmutableArray();
+        var namespaceDeclaration = typeDeclaration
+            .Ancestors()
+            .OfType<BaseNamespaceDeclarationSyntax>()
+            .FirstOrDefault();
+
+        return new ConsumerDeclarationShape(
+            GetDeclarationKind(typeDeclaration),
+            typeDeclaration.Identifier.ToString(),
+            GetEscapedNamespace(typeSymbol.ContainingNamespace),
+            typeParameters.Length,
+            typeParameters,
+            typeDeclaration.TypeParameterList?.ToString() ?? string.Empty,
+            GetConstraintClauses(typeDeclaration),
+            true,
+            containingTypes,
+            namespaceDeclaration is FileScopedNamespaceDeclarationSyntax);
+    }
+
+    private static ConsumerContainingTypeShape CreateContainingTypeShape(
+        TypeDeclarationSyntax typeDeclaration)
+    {
+        var typeParameters = GetTypeParameters(typeDeclaration);
+        return new ConsumerContainingTypeShape(
+            typeDeclaration.Identifier.ToString(),
+            GetDeclarationKind(typeDeclaration),
+            typeParameters.Length,
+            typeParameters,
+            typeDeclaration.TypeParameterList?.ToString() ?? string.Empty,
+            GetConstraintClauses(typeDeclaration),
+            typeDeclaration.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
+    }
+
+    private static ImmutableArray<string> GetTypeParameters(TypeDeclarationSyntax typeDeclaration)
+    {
+        return typeDeclaration.TypeParameterList?.Parameters
+            .Select(parameter => parameter.Identifier.ToString())
+            .ToImmutableArray() ?? ImmutableArray<string>.Empty;
+    }
+
+    private static string GetConstraintClauses(TypeDeclarationSyntax typeDeclaration)
+    {
+        return string.Join(
+            Environment.NewLine,
+            typeDeclaration.ConstraintClauses.Select(constraint => constraint.ToString()));
+    }
+
+    private static ConsumerDeclarationKind GetDeclarationKind(TypeDeclarationSyntax typeDeclaration)
+    {
+        return typeDeclaration switch
+        {
+            RecordDeclarationSyntax record when record.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword) =>
+                ConsumerDeclarationKind.RecordStruct,
+            RecordDeclarationSyntax => ConsumerDeclarationKind.RecordClass,
+            StructDeclarationSyntax => ConsumerDeclarationKind.Struct,
+            _ => ConsumerDeclarationKind.Class,
+        };
+    }
+
+    private static string GetEscapedNamespace(INamespaceSymbol namespaceSymbol)
+    {
+        if (namespaceSymbol.IsGlobalNamespace)
+        {
+            return string.Empty;
+        }
+
+        var namespaceName = namespaceSymbol.ToDisplayString();
+        if (namespaceName.StartsWith("global::", StringComparison.Ordinal))
+        {
+            namespaceName = namespaceName.Substring("global::".Length);
+        }
+
+        return string.Join(
+            ".",
+            namespaceName
+                .Split('.')
+                .Select(EscapeIdentifier));
+    }
+
+    private static string EscapeIdentifier(string identifier)
+    {
+        if (identifier.StartsWith("@", StringComparison.Ordinal))
+        {
+            return identifier;
+        }
+
+        return SyntaxFacts.GetKeywordKind(identifier) != SyntaxKind.None ||
+               SyntaxFacts.GetContextualKeywordKind(identifier) != SyntaxKind.None
+            ? "@" + identifier
+            : identifier;
     }
 
     private static AttributeData? FindAttribute(ISymbol symbol, string metadataName)

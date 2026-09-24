@@ -930,6 +930,140 @@ public class PropertyNameResolverTests
 
     #endregion
 
+    [Fact]
+    public void ConsumerShapes_CompileAndExposeGeneratedProperties()
+    {
+        var sources = new[]
+        {
+            """
+            using SingletonDI.Attributes;
+            namespace App;
+            [SingletonDIProvide] public sealed class Service { }
+            [SingletonDIConsume(typeof(Service))] public partial struct Consumer
+            {
+                public Service Get() => ServiceInstance;
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
+                [SingletonDIProvide] public sealed class Service { }
+                [SingletonDIConsume(typeof(Service))] public partial record Consumer
+                {
+                    public Service Get() => ServiceInstance;
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
+                [SingletonDIProvide] public sealed class Service { }
+                [SingletonDIConsume(typeof(Service))] public partial record struct Consumer
+                {
+                    public Service Get() => ServiceInstance;
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
+                [SingletonDIProvide] public sealed class Service { }
+                public partial class Outer
+                {
+                    [SingletonDIConsume(typeof(Service))]
+                    public partial struct Consumer
+                    {
+                        public Service Get() => ServiceInstance;
+                    }
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
+                [SingletonDIProvide] public sealed class Service { }
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T>
+                {
+                    public Service Get() => ServiceInstance;
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
+                [SingletonDIProvide] public sealed class Service { }
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T> where T : class, new()
+                {
+                    public Service Get() => ServiceInstance;
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
+                [SingletonDIProvide] public sealed class Service { }
+                [SingletonDIConsume(typeof(Service))]
+                public partial record Consumer<T>(T Value)
+                {
+                    public Service Get() => ServiceInstance;
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App;
+            [SingletonDIProvide] public sealed class Service { }
+            [SingletonDIConsume(typeof(Service))] public partial class @event
+            {
+                public Service Get() => ServiceInstance;
+            }
+            """,
+        };
+
+        foreach (var source in sources)
+        {
+            Assert.Empty(CompilationErrors(source));
+        }
+    }
+
+    [Fact]
+    public void NestedConsumerReportsNonPartialContainingType()
+    {
+        var compilation = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            public class Outer
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial struct Consumer
+                {
+                }
+            }
+
+            [SingletonDIProvide]
+            public class Service
+            {
+            }
+            """);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out _,
+            out var generatorDiagnostics);
+
+        Assert.Contains(generatorDiagnostics, diagnostic => diagnostic.Id == "DM0026");
+    }
+
     #region Helper Methods
 
     /// <summary>
