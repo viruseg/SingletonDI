@@ -51,17 +51,20 @@
     <ProjectReference Include="..\SingletonDI.Refactoring\SingletonDI.Refactoring.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <!-- Подтягиваем файлы генератора и анализатора прямо в папку analyzers -->
-  <ItemGroup>
-    <None Include="..\SingletonDI.Generator\bin\$(Configuration)\netstandard2.0\SingletonDI.Generator.dll"
-          Pack="true"
-          PackagePath="analyzers/dotnet/cs"
-          Visible="false" />
-
-    <None Include="..\SingletonDI.Refactoring\bin\$(Configuration)\netstandard2.0\SingletonDI.Refactoring.dll"
-          Pack="true"
-          PackagePath="analyzers/dotnet/cs"
-          Visible="false" />
-  </ItemGroup>
+  <Target Name="PackAnalyzerAssemblies" BeforeTargets="_GetPackageFiles">
+    <MSBuild
+      Projects="@(ProjectReference->'%(FullPath)')"
+      Targets="GetTargetPath"
+      Properties="TargetFramework=netstandard2.0;Configuration=$(Configuration)"
+      BuildInParallel="true">
+      <Output TaskParameter="TargetOutputs" ItemName="AnalyzerAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <None Include="@(AnalyzerAssembly)"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
 
 </Project>
