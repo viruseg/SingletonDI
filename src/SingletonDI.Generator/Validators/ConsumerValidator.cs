@@ -190,6 +190,7 @@ internal static class ConsumerValidator
             typeDeclaration.TypeParameterList?.ToString() ?? string.Empty,
             GetConstraintClauses(typeDeclaration),
             true,
+            typeSymbol.IsSealed,
             containingTypes,
             namespaceDeclaration is FileScopedNamespaceDeclarationSyntax);
     }

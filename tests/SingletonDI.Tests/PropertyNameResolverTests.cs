@@ -834,7 +834,6 @@ public class PropertyNameResolverTests
                     }
                 }
 
-                [SingletonDIConsume(typeof(MyService))]
                 public partial class ConsumerDerived : ConsumerBase
                 {
                     public void UseServiceFromDerived()
@@ -850,6 +849,45 @@ public class PropertyNameResolverTests
         var compilationErrors = CompilationErrors(SOURCE);
 
         Assert.Empty(compilationErrors);
+    }
+
+    [Fact]
+    public void SealedConsumerPropertyRemainsPrivate()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp.Services
+            {
+                [SingletonDIProvide]
+                public sealed class MyService
+                {
+                }
+
+                [SingletonDIConsume(typeof(MyService))]
+                public sealed partial class SealedConsumer
+                {
+                    public MyService Get() => MyServiceInstance;
+                }
+            }
+            """;
+
+        var compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+        var outputCompilation = compilation.AddSyntaxTrees(runResult.GeneratedTrees);
+        var generated = string.Join(
+            Environment.NewLine,
+            runResult.GeneratedTrees.Select(tree => tree.ToString()));
+
+        Assert.Empty(CompilationErrors(source));
+        Assert.Contains("private static global::MyApp.Services.MyService MyServiceInstance", generated);
+        Assert.DoesNotContain("protected static", generated);
+        Assert.DoesNotContain(
+            outputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
     /// <summary>

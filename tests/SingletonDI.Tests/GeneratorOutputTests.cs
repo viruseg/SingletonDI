@@ -297,10 +297,10 @@ public sealed class GeneratorOutputTests
         Assert.Equal("Consumer property name conflict", conflict.Descriptor.Title);
         Assert.Contains("same consumer dependency set", conflict.GetMessage());
         Assert.Contains(
-            "private static global::App.Service IServiceInstance",
+            "protected static global::App.Service IServiceInstance",
             generated);
         Assert.Contains(
-            "private static global::App.IService App_IServiceInstance",
+            "protected static global::App.IService App_IServiceInstance",
             generated);
     }
 

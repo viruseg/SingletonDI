@@ -418,7 +418,7 @@ public sealed class GeneratorCompositionTests
             Count(
                 result.GeneratedSources,
                 "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
-        Assert.Contains("private static global::Provider.FirstService SharedName", result.GeneratedSources);
+        Assert.Contains("protected static global::Provider.FirstService SharedName", result.GeneratedSources);
     }
 
     [Fact]

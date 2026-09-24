@@ -135,6 +135,7 @@ internal static class ConsumerEmitter
             indentLevel);
         indentLevel++;
 
+        var propertyAccessibility = GetPropertyAccessibility(shape);
         foreach (var dependency in consumer.Dependencies)
         {
             var propertyName = resolvePropertyName(dependency);
@@ -147,7 +148,7 @@ internal static class ConsumerEmitter
             source.AppendLine($"{Indent(indentLevel)}/// <summary>");
             source.AppendLine($"{Indent(indentLevel)}/// Gets the singleton instance of {dependencyType}.");
             source.AppendLine($"{Indent(indentLevel)}/// </summary>");
-            source.AppendLine($"{Indent(indentLevel)}private static {dependencyType} {propertyName}");
+            source.AppendLine($"{Indent(indentLevel)}{propertyAccessibility} static {dependencyType} {propertyName}");
             source.AppendLine(Indent(indentLevel) + "{");
             source.AppendLine($"{Indent(indentLevel + 1)}get");
             source.AppendLine(Indent(indentLevel + 1) + "{");
@@ -201,6 +202,13 @@ internal static class ConsumerEmitter
             ConsumerDeclarationKind.RecordStruct => "record struct",
             _ => "class",
         };
+    }
+
+    private static string GetPropertyAccessibility(ConsumerDeclarationShape shape)
+    {
+        return shape.DeclarationKind is ConsumerDeclarationKind.Struct or ConsumerDeclarationKind.RecordStruct || shape.IsSealed
+            ? "private"
+            : "protected";
     }
 
     private static string CreateHintName(string fullyQualifiedName, ISet<string> usedHintNames)

@@ -58,6 +58,7 @@ public readonly record struct ConsumerContainingTypeShape(
 /// <param name="TypeParameterList">The source type parameter list, including variance and attributes.</param>
 /// <param name="ConstraintClauses">The source constraint clauses.</param>
 /// <param name="IsPartial">Whether the consumer declaration is partial.</param>
+/// <param name="IsSealed">Whether the consumer declaration is sealed.</param>
 /// <param name="ContainingTypes">The containing declarations from outermost to innermost.</param>
 /// <param name="IsFileScoped">Whether the consumer uses a file-scoped namespace.</param>
 public readonly record struct ConsumerDeclarationShape(
@@ -69,6 +70,7 @@ public readonly record struct ConsumerDeclarationShape(
     string TypeParameterList,
     string ConstraintClauses,
     bool IsPartial,
+    bool IsSealed,
     ImmutableArray<ConsumerContainingTypeShape> ContainingTypes,
     bool IsFileScoped)
 {
@@ -93,6 +95,7 @@ public readonly record struct ConsumerDeclarationShape(
             string.Empty,
             string.Empty,
             isPartial,
+            false,
             ImmutableArray<ConsumerContainingTypeShape>.Empty,
             false);
     }
