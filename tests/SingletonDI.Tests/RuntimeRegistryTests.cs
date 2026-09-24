@@ -163,6 +163,55 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public async Task Registry_WaitsForStartedInitializersBeforeCleanupAfterSynchronousFailure()
+    {
+        var initializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCalled = 0;
+        var registry = new ServiceRegistry();
+
+        registry.RegisterProvider<IAsyncOne, AsyncOne>(
+            static () => new AsyncOne(),
+            Array.Empty<Type>(),
+            _ =>
+            {
+                initializerStarted.TrySetResult(true);
+                return releaseInitializer.Task;
+            },
+            _ =>
+            {
+                Interlocked.Exchange(ref disposeCalled, 1);
+                throw new InvalidOperationException("cleanup failed");
+            },
+            null);
+        registry.RegisterProvider<IAsyncTwo, AsyncTwo>(
+            static () => new AsyncTwo(),
+            Array.Empty<Type>(),
+            _ => throw new InvalidOperationException("initializer failed"),
+            null,
+            null);
+
+        try
+        {
+            var initialization = registry.InitializeAsync();
+            await initializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(100);
+
+            Assert.Equal(0, Volatile.Read(ref disposeCalled));
+
+            releaseInitializer.TrySetResult(true);
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => initialization);
+            Assert.Equal("initializer failed", exception.Message);
+            Assert.Equal(1, Volatile.Read(ref disposeCalled));
+        }
+        finally
+        {
+            releaseInitializer.TrySetResult(true);
+            await registry.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task Registry_PrefersAsynchronousDisposal()
     {
         var events = new List<string>();

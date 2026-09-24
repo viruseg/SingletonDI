@@ -46,11 +46,18 @@ internal sealed class ServiceGraph
                         continue;
                     }
 
-                    var instance = GetInstance(registration);
-                    var initialization = registration.InitializeAsync(instance)
-                        ?? throw new InvalidOperationException(
-                            $"Initializer for '{GetTypeName(registration.ImplementationType)}' returned null.");
-                    initializers.Add(initialization);
+                    try
+                    {
+                        var instance = GetInstance(registration);
+                        var initialization = registration.InitializeAsync(instance)
+                            ?? throw new InvalidOperationException(
+                                $"Initializer for '{GetTypeName(registration.ImplementationType)}' returned null.");
+                        initializers.Add(initialization);
+                    }
+                    catch (Exception exception)
+                    {
+                        initializers.Add(Task.FromException(exception));
+                    }
                 }
 
                 if (initializers.Count > 0)
