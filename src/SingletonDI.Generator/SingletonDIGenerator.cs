@@ -203,6 +203,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     Location.None,
                     providerAssembly.AssemblyIdentity));
             }
+            else if (!providerAssembly.HasBootstrapMethod)
+            {
+                sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.MissingProviderBootstrap,
+                    Location.None,
+                    providerAssembly.AssemblyIdentity));
+            }
         }
 
         var hasInvalidGraph = false;

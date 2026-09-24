@@ -22,6 +22,9 @@ internal static class ProviderModuleEmitter
             orderedLocalProviders,
             externalProviderAssemblies,
             isCompositionRoot);
+        var moduleTypeName = isCompositionRoot
+            ? "__SingletonDICompositionRootModule__"
+            : "__SingletonDIProviderModule__";
 
         if (!hasLocalProviders && externalAssemblies.Count == 0)
         {
@@ -48,20 +51,34 @@ internal static class ProviderModuleEmitter
         source.AppendLine();
         source.AppendLine("namespace SingletonDI.Generated");
         source.AppendLine("{");
-        source.AppendLine("    internal static class __SingletonDIProviderModule__");
+        source.AppendLine("    /// <summary>");
+        source.AppendLine("    /// Provides generated provider registrations for this assembly.");
+        source.AppendLine("    /// </summary>");
+        source.AppendLine("    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        source.AppendLine($"    public static class {moduleTypeName}");
         source.AppendLine("    {");
+        source.AppendLine("        private static int _bootstrapState;");
         source.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializerAttribute]");
         source.AppendLine("        internal static void Initialize()");
         source.AppendLine("        {");
+        source.AppendLine("            Bootstrap();");
+        source.AppendLine("        }");
+        source.AppendLine();
+        source.AppendLine("        /// <summary>");
+        source.AppendLine("        /// Registers generated providers exactly once.");
+        source.AppendLine("        /// </summary>");
+        source.AppendLine("        public static void Bootstrap()");
+        source.AppendLine("        {");
+        source.AppendLine("            if (global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 1) != 0)");
+        source.AppendLine("            {");
+        source.AppendLine("                return;");
+        source.AppendLine("            }");
+        source.AppendLine();
 
         foreach (var externalAssembly in externalAssemblies)
         {
-            var bootstrapTypeName = externalAssembly.BootstrapTypeIdentity is { } bootstrapIdentity
-                ? bootstrapIdentity.FullyQualifiedName
-                : externalAssembly.BootstrapTypeFullyQualifiedName;
-            var bootstrapType = ToGlobalTypeName(bootstrapTypeName);
-            source.AppendLine(
-                $"            global::System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof({bootstrapType}).TypeHandle);");
+            var bootstrapType = externalAssembly.BootstrapTypeIdentity!.Value.ToGlobalTypeName();
+            source.AppendLine($"            {bootstrapType}.Bootstrap();");
         }
 
         foreach (var provider in orderedLocalProviders)
@@ -113,7 +130,8 @@ internal static class ProviderModuleEmitter
         return externalProviderAssemblies
             .Where(assembly =>
                 assembly.HasModuleMarker &&
-                !string.IsNullOrWhiteSpace(assembly.BootstrapTypeFullyQualifiedName) &&
+                assembly.HasBootstrapMethod &&
+                assembly.BootstrapTypeIdentity is not null &&
                 !localAssemblyIdentities.Contains(assembly.AssemblyIdentity))
             .GroupBy(assembly => assembly.AssemblyIdentity, StringComparer.Ordinal)
             .Select(group => group.First())

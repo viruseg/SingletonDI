@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
 using System.Runtime.InteropServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -50,7 +52,114 @@ public sealed class GeneratorCompositionTests
         Assert.DoesNotContain(
             result.OutputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
-        Assert.Contains("RunClassConstructor", result.GeneratedSources);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
+    }
+
+    [Fact]
+    public void Root_ExternalBootstrapDoesNotRunUserProviderConstructor()
+    {
+        const string providerSource = """
+            using System;
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                [SingletonDIProvide]
+                public sealed class AlphaService
+                {
+                    static AlphaService()
+                    {
+                        throw new InvalidOperationException("provider constructor ran");
+                    }
+                }
+
+                [SingletonDIProvide]
+                public sealed class ZetaService
+                {
+                }
+            }
+            """;
+        const string appSource = """
+            namespace App
+            {
+                public static class Program
+                {
+                    public static bool MainExecuted;
+
+                    public static void Main()
+                    {
+                        MainExecuted = true;
+                    }
+                }
+            }
+            """;
+
+        var attributesImage = File.ReadAllBytes(typeof(SingletonDIProvideAttribute).Assembly.Location);
+        var attributesReference = MetadataReference.CreateFromImage(attributesImage);
+        var providerCompilation = CreateCompilation(
+            "ProviderLibrary",
+            providerSource,
+            [],
+            OutputKind.DynamicallyLinkedLibrary,
+            attributesReference: attributesReference);
+        var providerResult = RunGenerator(providerCompilation, compositionRoot: false);
+        Assert.DoesNotContain(
+            providerResult.Diagnostics,
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var providerImage = EmitImage(providerResult.OutputCompilation);
+        var providerReference = MetadataReference.CreateFromImage(providerImage);
+
+        var rootCompilation = CreateCompilation(
+            "RootApp",
+            appSource,
+            [providerReference],
+            OutputKind.ConsoleApplication,
+            attributesReference: attributesReference);
+        var rootResult = RunGenerator(rootCompilation, compositionRoot: true);
+        Assert.DoesNotContain(
+            rootResult.Diagnostics,
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var rootImage = EmitImage(rootResult.OutputCompilation);
+
+        Exception? loadException = null;
+        object? mainExecuted = null;
+        var loadContext = new InMemoryAssemblyLoadContext(
+            new Dictionary<string, byte[]>(StringComparer.Ordinal)
+            {
+                [typeof(SingletonDIProvideAttribute).Assembly.FullName!] = attributesImage,
+                [providerResult.OutputCompilation.Assembly.Identity.ToString()] = providerImage
+            });
+        try
+        {
+            using var providerStream = new MemoryStream(providerImage);
+            var providerAssembly = loadContext.LoadFromStream(providerStream);
+            var bootstrap = providerAssembly
+                .GetType("SingletonDI.Generated.__SingletonDIProviderModule__", throwOnError: true)!
+                .GetMethod("Bootstrap", BindingFlags.Public | BindingFlags.Static)!;
+            bootstrap.Invoke(null, null);
+            bootstrap.Invoke(null, null);
+            using var rootStream = new MemoryStream(rootImage);
+            var rootAssembly = loadContext.LoadFromStream(rootStream);
+            var programType = rootAssembly.GetType("App.Program", throwOnError: true)!;
+            var main = programType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static)!;
+            main.Invoke(null, null);
+            mainExecuted = programType
+                .GetField("MainExecuted", BindingFlags.Public | BindingFlags.Static)!
+                .GetValue(null);
+        }
+        catch (Exception exception)
+        {
+            loadException = exception;
+        }
+        finally
+        {
+            loadContext.Unload();
+        }
+
+        Assert.Null(loadException);
+        Assert.Equal(true, mainExecuted);
     }
 
     [Fact]
@@ -67,8 +176,9 @@ public sealed class GeneratorCompositionTests
             dependencies => dependencies.Any(
                 dependency => dependency.FullyQualifiedName == "global::Shared.Contracts.IDatabaseService"));
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
-        Assert.Contains("RunClassConstructor", result.GeneratedSources);
-        Assert.Contains("Provider.Service", result.GeneratedSources);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0018");
     }
 
@@ -103,7 +213,11 @@ public sealed class GeneratorCompositionTests
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Equal(1, Count(result.GeneratedSources, "internal static void Initialize()"));
-        Assert.Equal(1, Count(result.GeneratedSources, "RunClassConstructor"));
+        Assert.Equal(
+            1,
+            Count(
+                result.GeneratedSources,
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
         Assert.Contains("RegisterProvider<global::App.LocalService, global::App.LocalService>", result.GeneratedSources);
     }
 
@@ -128,7 +242,9 @@ public sealed class GeneratorCompositionTests
             compositionRoot: true);
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0020");
-        Assert.DoesNotContain("RunClassConstructor", result.GeneratedSources);
+        Assert.DoesNotContain(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
     }
 
     [Fact]
@@ -199,7 +315,9 @@ public sealed class GeneratorCompositionTests
         Assert.Contains("App.Service", diagnostic.GetMessage());
         Assert.Contains("ProviderLibrary", diagnostic.GetMessage());
         Assert.Contains("RootApp", diagnostic.GetMessage());
-        Assert.DoesNotContain("RunClassConstructor", result.GeneratedSources);
+        Assert.DoesNotContain(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
         Assert.DoesNotContain(
             result.OutputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
@@ -295,7 +413,11 @@ public sealed class GeneratorCompositionTests
             secondProviderSource: secondProviderSource);
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
-        Assert.Equal(2, Count(result.GeneratedSources, "RunClassConstructor"));
+        Assert.Equal(
+            2,
+            Count(
+                result.GeneratedSources,
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
         Assert.Contains("private static global::Provider.FirstService SharedName", result.GeneratedSources);
     }
 
@@ -426,7 +548,9 @@ public sealed class GeneratorCompositionTests
 
         Assert.Equal(
             1,
-            Count(result.GeneratedSources, "RunClassConstructor"));
+            Count(
+                result.GeneratedSources,
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0019");
     }
 
@@ -463,8 +587,9 @@ public sealed class GeneratorCompositionTests
             secondProviderSource: invalidProviderSource);
 
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0016");
-        Assert.Contains("RunClassConstructor", result.GeneratedSources);
-        Assert.Contains("ValidProvider.Service", result.GeneratedSources);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
         Assert.DoesNotContain("InvalidProvider.InvalidService", result.GeneratedSources);
     }
 
@@ -497,7 +622,9 @@ public sealed class GeneratorCompositionTests
         var result = RunComposition(providerSource, appSource, compositionRoot: true);
 
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0016");
-        Assert.Contains("RunClassConstructor", result.GeneratedSources);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
     }
 
     [Fact]
@@ -587,7 +714,9 @@ public sealed class GeneratorCompositionTests
             contractsSource: contractsSource);
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
-        Assert.Contains("RunClassConstructor", result.GeneratedSources);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
     }
 
     [Fact]
@@ -660,7 +789,9 @@ public sealed class GeneratorCompositionTests
         Assert.Contains(
             "global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::App.IMissingService>()",
             result.GeneratedSources);
-        Assert.DoesNotContain("RunClassConstructor", result.GeneratedSources);
+        Assert.DoesNotContain(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
     }
 
     [Fact]
@@ -768,6 +899,35 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void DM0021_ReportsMarkedProviderAssemblyWithoutBootstrap()
+    {
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            [assembly: SingletonDIProviderModule]
+            namespace Provider
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            "namespace App { public sealed class AppMarker { } }",
+            compositionRoot: true,
+            generateProviderModule: false);
+
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0021");
+        Assert.Contains("ProviderLibrary", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
+    }
+
+    [Fact]
     public void DM0020_ReportsReferencedProviderAssemblyWithoutMarker()
     {
         const string providerSource = """
@@ -789,7 +949,9 @@ public sealed class GeneratorCompositionTests
             generateProviderModule: false);
 
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0020");
-        Assert.DoesNotContain("RunClassConstructor", result.GeneratedSources);
+        Assert.DoesNotContain(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
     }
 
     private const string ConsumerWithContractSource = """
@@ -1024,7 +1186,8 @@ public sealed class GeneratorCompositionTests
         string source,
         IEnumerable<MetadataReference> additionalReferences,
         OutputKind outputKind,
-        MetadataReferenceResolver? metadataReferenceResolver = null)
+        MetadataReferenceResolver? metadataReferenceResolver = null,
+        MetadataReference? attributesReference = null)
     {
         var options = new CSharpCompilationOptions(
             outputKind,
@@ -1034,12 +1197,13 @@ public sealed class GeneratorCompositionTests
         return CSharpCompilation.Create(
             assemblyName,
             [CSharpSyntaxTree.ParseText(source, ParseOptions)],
-            CreateReferences(additionalReferences),
+            CreateReferences(additionalReferences, attributesReference),
             options);
     }
 
     private static ImmutableArray<MetadataReference> CreateReferences(
-        IEnumerable<MetadataReference> additionalReferences)
+        IEnumerable<MetadataReference> additionalReferences,
+        MetadataReference? attributesReference)
     {
         var references = new List<MetadataReference>();
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1057,8 +1221,15 @@ public sealed class GeneratorCompositionTests
         AddAssembly(typeof(ValueTask).Assembly.Location);
         AddAssembly(typeof(RuntimeHelpers).Assembly.Location);
         AddAssembly(typeof(RuntimeInformation).Assembly.Location);
-        AddAssembly(typeof(SingletonDIProvideAttribute).Assembly.Location);
-        AddAssembly(typeof(SingletonDIProviderModuleAttribute).Assembly.Location);
+        if (attributesReference is null)
+        {
+            AddAssembly(typeof(SingletonDIProvideAttribute).Assembly.Location);
+            AddAssembly(typeof(SingletonDIProviderModuleAttribute).Assembly.Location);
+        }
+        else
+        {
+            references.Add(attributesReference);
+        }
         AddAssembly(typeof(IAsyncDisposable).Assembly.Location);
 
         var runtimePath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
@@ -1100,6 +1271,28 @@ public sealed class GeneratorCompositionTests
     private static int Count(string source, string value)
     {
         return source.Split(value, StringSplitOptions.None).Length - 1;
+    }
+
+    private sealed class InMemoryAssemblyLoadContext : AssemblyLoadContext
+    {
+        private readonly IReadOnlyDictionary<string, byte[]> _assemblies;
+
+        internal InMemoryAssemblyLoadContext(IReadOnlyDictionary<string, byte[]> assemblies)
+            : base(isCollectible: true)
+        {
+            _assemblies = assemblies;
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            if (_assemblies.TryGetValue(assemblyName.FullName ?? assemblyName.Name!, out var image))
+            {
+                using var stream = new MemoryStream(image);
+                return LoadFromStream(stream);
+            }
+
+            return AssemblyLoadContext.Default.LoadFromAssemblyName(assemblyName);
+        }
     }
 
     private static CSharpParseOptions ParseOptions { get; } = new(

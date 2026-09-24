@@ -10,6 +10,8 @@ internal static class ProviderSymbolCollector
     private const string ProvideAttributeName = "SingletonDI.Attributes.SingletonDIProvideAttribute";
     private const string ProviderModuleMarkerName =
         "SingletonDI.Attributes.SingletonDIProviderModuleAttribute";
+    private const string GeneratedBootstrapTypeName =
+        "global::SingletonDI.Generated.__SingletonDIProviderModule__";
 
     internal static ImmutableArray<ProviderModel> CollectReferencedProviders(
         Compilation compilation,
@@ -72,7 +74,6 @@ internal static class ProviderSymbolCollector
             .Select(candidate => candidate.FullyQualifiedName)
             .ToImmutableHashSet(StringComparer.Ordinal);
         var providers = new List<ProviderModel>();
-        var providersByAssembly = new Dictionary<string, List<ProviderModel>>(StringComparer.Ordinal);
         var candidateAssemblies = candidates
             .GroupBy(candidate => candidate.AssemblyIdentity, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
@@ -94,13 +95,6 @@ internal static class ProviderSymbolCollector
             }
 
             providers.Add(model.Value);
-            if (!providersByAssembly.TryGetValue(candidate.AssemblyIdentity, out var assemblyProviders))
-            {
-                assemblyProviders = [];
-                providersByAssembly.Add(candidate.AssemblyIdentity, assemblyProviders);
-            }
-
-            assemblyProviders.Add(model.Value);
         }
 
         var assemblyModels = new List<ProviderAssemblyModel>();
@@ -113,21 +107,25 @@ internal static class ProviderSymbolCollector
                 continue;
             }
 
-            ProviderModel? bootstrapProvider = providersByAssembly.TryGetValue(
-                assemblyIdentity,
-                out var assemblyProviders)
-                ? assemblyProviders
-                    .OrderBy(provider => provider.FullyQualifiedName, StringComparer.Ordinal)
-                    .ThenBy(provider => provider.AssemblyIdentity, StringComparer.Ordinal)
-                    .First()
-                : null;
+            var bootstrapType = EnumerateTypes(assembly.GlobalNamespace)
+                .FirstOrDefault(type => string.Equals(
+                    type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    GeneratedBootstrapTypeName,
+                    StringComparison.Ordinal));
+            var bootstrapTypeName = bootstrapType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var hasModuleMarker = assembly.GetAttributes().Any(attribute =>
                 IsAttribute(attribute, ProviderModuleMarkerName));
+            var hasBootstrapMethod = bootstrapType is not null &&
+                                      bootstrapType.DeclaredAccessibility == Accessibility.Public &&
+                                      bootstrapType.IsStatic &&
+                                      HasPublicBootstrapMethod(bootstrapType);
             assemblyModels.Add(new ProviderAssemblyModel(
                 assemblyIdentity,
-                bootstrapProvider?.FullyQualifiedName ?? string.Empty,
                 hasModuleMarker,
-                bootstrapProvider?.TypeIdentity));
+                bootstrapTypeName is null
+                    ? null
+                    : new ServiceTypeIdentity(bootstrapTypeName, assemblyIdentity),
+                hasBootstrapMethod));
         }
 
         providerAssemblies = assemblyModels
@@ -137,6 +135,17 @@ internal static class ProviderSymbolCollector
             .OrderBy(provider => provider.AssemblyIdentity, StringComparer.Ordinal)
             .ThenBy(provider => provider.FullyQualifiedName, StringComparer.Ordinal)
             .ToImmutableArray();
+    }
+
+    private static bool HasPublicBootstrapMethod(INamedTypeSymbol type)
+    {
+        return type.GetMembers("Bootstrap")
+            .OfType<IMethodSymbol>()
+            .Any(method =>
+                method.IsStatic &&
+                method.DeclaredAccessibility == Accessibility.Public &&
+                method.Parameters.Length == 0 &&
+                method.ReturnsVoid);
     }
 
     internal static IEnumerable<IAssemblySymbol> GetReferencedAssemblies(

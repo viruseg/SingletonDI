@@ -47,6 +47,12 @@ public sealed class GeneratorOutputTests
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Contains("SingletonDIProviderModuleAttribute", generated);
         Assert.Contains("ModuleInitializer", generated);
+        Assert.Contains("public static class __SingletonDIProviderModule__", generated);
+        Assert.Contains("public static void Bootstrap()", generated);
+        Assert.Contains("Interlocked.Exchange", generated);
+        Assert.Contains("Provides generated provider registrations", generated);
+        Assert.Contains("Registers generated providers exactly once", generated);
+        Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.Contains("RegisterProvider<global::App.FirstService, global::App.FirstService>", generated);
         Assert.Contains("global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::App.FirstService>()", generated);
         Assert.DoesNotContain("__SingletonDIContainer__", generated);
@@ -436,15 +442,20 @@ public sealed class GeneratorOutputTests
             null);
         var externalProvider = new ProviderAssemblyModel(
             "External, Version=1.0.0.0",
-            "global::External.ExternalService",
+            true,
+            new ServiceTypeIdentity(
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__",
+                "External, Version=1.0.0.0"),
             true);
         var duplicateExternalProvider = new ProviderAssemblyModel(
             "External, Version=1.0.0.0",
-            "global::External.AnotherService",
+            true,
+            new ServiceTypeIdentity(
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__",
+                "External, Version=1.0.0.0"),
             true);
         var unmarkedProvider = new ProviderAssemblyModel(
             "Unmarked, Version=1.0.0.0",
-            "global::Unmarked.UnmarkedService",
             false);
 
         var generated = ProviderModuleEmitter.Generate(
@@ -454,10 +465,13 @@ public sealed class GeneratorOutputTests
 
         Assert.Equal(
             1,
-            generated.Split("RunClassConstructor", StringSplitOptions.None).Length - 1);
+            generated.Split(
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+                StringSplitOptions.None).Length - 1);
         Assert.Contains(
-            "typeof(global::External.ExternalService).TypeHandle",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
             generated);
+        Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.DoesNotContain("global::App.LocalService).TypeHandle", generated);
         Assert.DoesNotContain("global::Unmarked.UnmarkedService", generated);
     }
@@ -531,7 +545,10 @@ public sealed class GeneratorOutputTests
             null);
         var externalProvider = new ProviderAssemblyModel(
             "External, Version=1.0.0.0",
-            "global::External.ExternalService",
+            true,
+            new ServiceTypeIdentity(
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__",
+                "External, Version=1.0.0.0"),
             true);
 
         var generated = ProviderModuleEmitter.Generate(
@@ -539,6 +556,9 @@ public sealed class GeneratorOutputTests
             [externalProvider],
             isCompositionRoot: false);
 
+        Assert.DoesNotContain(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            generated);
         Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.Contains("RegisterProvider<global::App.LocalService, global::App.LocalService>", generated);
     }
