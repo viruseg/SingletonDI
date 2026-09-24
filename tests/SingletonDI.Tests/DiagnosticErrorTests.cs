@@ -1132,6 +1132,141 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0022_PrivateNestedProviderIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public partial class Outer
+            {
+                [SingletonDIProvide]
+                private sealed class Service
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0022");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("SingletonDI", diagnostic.Descriptor.Category);
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.Contains("Service", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0122");
+    }
+
+    [Fact]
+    public void DM0022_FileLocalProviderIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            file sealed class FileService
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0022");
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.Contains("FileService", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0122");
+    }
+
+    [Fact]
+    public void DM0022_ProviderInsideInaccessibleContainingTypeIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public partial class Outer
+            {
+                private partial class Container
+                {
+                    [SingletonDIProvide]
+                    public sealed class Service
+                    {
+                    }
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0022");
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.Contains("Service", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0122");
+    }
+
+    [Fact]
+    public void DM0022_ProtectedServiceTypeIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public class ProviderBase
+            {
+                protected interface IService
+                {
+                }
+
+                [SingletonDIProvide(ServiceType = typeof(IService))]
+                public sealed class Service : IService
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0022");
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.Contains("IService", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0122");
+    }
+
+    [Fact]
+    public void DM0022_DoesNotRejectAccessibleInternalProvider()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                internal sealed class InternalService
+                {
+                    public InternalService()
+                    {
+                    }
+                }
+
+                [SingletonDIConsume(typeof(InternalService))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0022");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.NotNull(result.OutputCompilation.GetTypeByMetadataName(
+            "SingletonDI.Generated.__SingletonDIProviderModule__"));
+    }
+
+    [Fact]
     public void DM0017_LibraryConsumerDoesNotRequireCompositionRoot()
     {
         const string source = """

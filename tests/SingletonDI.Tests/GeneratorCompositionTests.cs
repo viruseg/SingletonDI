@@ -58,6 +58,38 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void Root_ImportsPublicProviderNestedInsidePublicContainingType()
+    {
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                public partial class Container
+                {
+                    [SingletonDIProvide]
+                    public sealed class Service
+                    {
+                    }
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            "namespace App { public sealed class AppMarker { } }",
+            compositionRoot: true);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            result.GeneratedSources);
+    }
+
+    [Fact]
     public void Root_ExternalBootstrapDoesNotRunUserProviderConstructor()
     {
         const string providerSource = """

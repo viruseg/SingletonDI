@@ -153,7 +153,8 @@ internal static class ConsumerValidator
                 dependencyType.ContainingNamespace.ToDisplayString(),
                 hasProvideAttribute ? GetProviderPropertyName(dependencyType) : null,
                 isContract,
-                dependencyIdentity));
+                dependencyIdentity,
+                CanUseProtectedProperty(dependencyType, typeSymbol.ContainingAssembly)));
         }
 
         return new ConsumerModel(
@@ -356,6 +357,41 @@ internal static class ConsumerValidator
     private static ServiceTypeIdentity CreateIdentity(ITypeSymbol typeSymbol)
     {
         return ServiceTypeIdentity.FromSymbol(typeSymbol);
+    }
+
+    private static bool CanUseProtectedProperty(
+        ITypeSymbol typeSymbol,
+        IAssemblySymbol consumerAssembly)
+    {
+        if (typeSymbol is not INamedTypeSymbol namedType)
+        {
+            return false;
+        }
+
+        var isSameAssembly = string.Equals(
+            namedType.ContainingAssembly.Identity.ToString(),
+            consumerAssembly.Identity.ToString(),
+            StringComparison.Ordinal);
+
+        for (INamedTypeSymbol? current = namedType;
+             current is not null;
+             current = current.ContainingType)
+        {
+            if (current.IsFileLocal)
+            {
+                return false;
+            }
+
+            if (current.DeclaredAccessibility == Accessibility.Public ||
+                (current.DeclaredAccessibility == Accessibility.ProtectedOrInternal && isSameAssembly))
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
     private static string GetFullyQualifiedName(ITypeSymbol typeSymbol)

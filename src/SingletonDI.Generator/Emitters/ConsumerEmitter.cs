@@ -135,7 +135,6 @@ internal static class ConsumerEmitter
             indentLevel);
         indentLevel++;
 
-        var propertyAccessibility = GetPropertyAccessibility(shape);
         foreach (var dependency in consumer.Dependencies)
         {
             var propertyName = resolvePropertyName(dependency);
@@ -144,6 +143,7 @@ internal static class ConsumerEmitter
                 continue;
             }
 
+            var propertyAccessibility = GetPropertyAccessibility(shape, dependency);
             var dependencyType = ToGlobalTypeName(dependency.FullyQualifiedName);
             source.AppendLine($"{Indent(indentLevel)}/// <summary>");
             source.AppendLine($"{Indent(indentLevel)}/// Gets the singleton instance of {dependencyType}.");
@@ -204,9 +204,13 @@ internal static class ConsumerEmitter
         };
     }
 
-    private static string GetPropertyAccessibility(ConsumerDeclarationShape shape)
+    private static string GetPropertyAccessibility(
+        ConsumerDeclarationShape shape,
+        ServiceReferenceModel dependency)
     {
-        return shape.DeclarationKind is ConsumerDeclarationKind.Struct or ConsumerDeclarationKind.RecordStruct || shape.IsSealed
+        return shape.DeclarationKind is ConsumerDeclarationKind.Struct or ConsumerDeclarationKind.RecordStruct ||
+               shape.IsSealed ||
+               !dependency.CanUseProtectedProperty
             ? "private"
             : "protected";
     }

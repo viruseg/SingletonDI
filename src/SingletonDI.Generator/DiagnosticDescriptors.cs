@@ -202,6 +202,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0022: A provider or service type cannot be named from generated code.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ProviderTypeNotAccessible = Create(
+        "DM0022",
+        "Provider type is not accessible",
+        "Type '{0}' used by [SingletonDIProvide] is not accessible from generated SingletonDI code. Use a public or assembly-accessible type and containing type.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

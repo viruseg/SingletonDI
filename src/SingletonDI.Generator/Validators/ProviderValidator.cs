@@ -89,6 +89,15 @@ internal static class ProviderValidator
         var declarationLocation = location;
         var providerDisplayName = GetProviderDisplayName(typeSymbol, location);
 
+        if (!IsAccessibleFromGeneratedCode(typeSymbol, compilation))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ProviderTypeNotAccessible,
+                declarationLocation,
+                GetTypeDisplayName(typeSymbol, declarationLocation)));
+            return null;
+        }
+
         if (typeSymbol.IsGenericType || typeSymbol.TypeParameters.Length > 0)
         {
             reportDiagnostic(Diagnostic.Create(
@@ -156,6 +165,16 @@ internal static class ProviderValidator
                     ? "<invalid>"
                     : GetTypeDisplayName(serviceType, location),
                 providerDisplayName));
+            return null;
+        }
+
+        if (serviceType != null &&
+            !IsAccessibleFromGeneratedCode(serviceType, compilation))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ProviderTypeNotAccessible,
+                GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
+                GetTypeDisplayName(serviceType, location)));
             return null;
         }
 
@@ -380,6 +399,42 @@ internal static class ProviderValidator
     {
         var attributeName = attribute.AttributeClass?.ToDisplayString();
         return attributeName == metadataName || attributeName == "global::" + metadataName;
+    }
+
+    private static bool IsAccessibleFromGeneratedCode(
+        ITypeSymbol typeSymbol,
+        Compilation? compilation)
+    {
+        var isSameAssembly = compilation is null ||
+            string.Equals(
+                typeSymbol.ContainingAssembly.Identity.ToString(),
+                compilation.Assembly.Identity.ToString(),
+                StringComparison.Ordinal);
+
+        for (INamedTypeSymbol? current = typeSymbol as INamedTypeSymbol;
+             current is not null;
+             current = current.ContainingType)
+        {
+            if (current.IsFileLocal ||
+                !IsAccessibleFromGeneratedContext(current.DeclaredAccessibility, isSameAssembly))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsAccessibleFromGeneratedContext(
+        Accessibility accessibility,
+        bool isSameAssembly)
+    {
+        return accessibility switch
+        {
+            Accessibility.Public => true,
+            Accessibility.Internal or Accessibility.ProtectedOrInternal => isSameAssembly,
+            _ => false,
+        };
     }
 
     private static bool IsAssignableTo(
