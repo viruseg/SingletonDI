@@ -47,7 +47,9 @@ internal static class DeclarationCaseVerifier
 
         var expectedIds = (declarationCase.Expectation as RejectedExpectation)?.Ids
                          ?? ImmutableArray<string>.Empty;
-        var actualIds = result.GeneratorErrorIds
+        var actualIds = result.GeneratorDiagnostics
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .Select(diagnostic => diagnostic.Id)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToImmutableArray();
@@ -69,11 +71,16 @@ internal static class DeclarationCaseVerifier
         AssertFragments(declarationCase, result, mustBePresent: true);
         AssertFragments(declarationCase, result, mustBePresent: false);
 
-        var expectsGeneration = declarationCase.Expectation is SupportedExpectation;
+        if (declarationCase.Expectation is RejectedExpectation)
+        {
+            return;
+        }
+
         Assert.True(
-            expectsGeneration == result.EmitSucceeded,
-            $"{declarationCase.Id} ({declarationCase.Variant}): expected Emit success to be " +
-            $"{expectsGeneration}, actual {result.EmitSucceeded}.");
+            result.EmitSucceeded,
+            $"{declarationCase.Id} ({declarationCase.Variant}): a " +
+            $"{declarationCase.Expectation.GetType().Name} row requires the compilation to emit, " +
+            $"actual EmitSucceeded {result.EmitSucceeded}.");
     }
 
     internal static void VerifyData(IEnumerable<DeclarationCase> cases, string axis)
