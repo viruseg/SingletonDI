@@ -128,6 +128,15 @@ internal static class ProviderValidator
             return null;
         }
 
+        if (HasRequiredMembers(typeSymbol) && !HasSetsRequiredMembers(constructor))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ProviderRequiredMembersNotSupported,
+                declarationLocation,
+                providerDisplayName));
+            return null;
+        }
+
         var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol, compilation);
 
         if (initializeAsyncMethod is { Arity: > 0 })
@@ -492,6 +501,34 @@ internal static class ProviderValidator
         return !string.IsNullOrEmpty(namedArgument.Key) &&
                !namedArgument.Value.IsNull &&
                namedArgument.Value is not { Kind: TypedConstantKind.Type, Value: ITypeSymbol };
+    }
+
+    private static bool HasRequiredMembers(INamedTypeSymbol typeSymbol)
+    {
+        for (INamedTypeSymbol? current = typeSymbol; current is not null; current = current.BaseType)
+        {
+            if (current.SpecialType == SpecialType.System_Object)
+            {
+                break;
+            }
+
+            foreach (var member in current.GetMembers())
+            {
+                if (member is IPropertySymbol { IsRequired: true } ||
+                    member is IFieldSymbol { IsRequired: true })
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasSetsRequiredMembers(IMethodSymbol constructor)
+    {
+        return constructor.GetAttributes().Any(attribute =>
+            IsAttribute(attribute, "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute"));
     }
 
     private static bool HasProvideAttribute(ITypeSymbol typeSymbol)

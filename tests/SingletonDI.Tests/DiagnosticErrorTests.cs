@@ -1623,6 +1623,57 @@ public class DiagnosticErrorTests
             item => item.Id == "CS0246");
     }
 
+    [Fact]
+    public void DM0032_ProviderWithRequiredMembersIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class RequiredService
+            {
+                public required int Value { get; init; }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0032");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("Provider required members are not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("RequiredService", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS9035");
+    }
+
+    [Fact]
+    public void ProviderWithSetsRequiredMembersConstructorIsAccepted()
+    {
+        const string source = """
+            using System.Diagnostics.CodeAnalysis;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class RequiredService
+            {
+                [SetsRequiredMembers]
+                public RequiredService()
+                {
+                }
+
+                public required int Value { get; init; } = 1;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0032");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         return RunGeneratorWithOutput(source).Diagnostics;

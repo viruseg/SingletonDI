@@ -292,6 +292,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0032: A provider has required members that generated construction cannot satisfy.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ProviderRequiredMembersNotSupported = Create(
+        "DM0032",
+        "Provider required members are not supported",
+        "Provider '{0}' has required members, but its public parameterless constructor does not declare [SetsRequiredMembers].",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(
