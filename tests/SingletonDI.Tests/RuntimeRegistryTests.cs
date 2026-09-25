@@ -237,6 +237,7 @@ public sealed class RuntimeRegistryTests
     public async Task Registry_WaitsForStartedInitializersBeforeCleanupAfterSynchronousFailure()
     {
         var initializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var failureInjected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var disposeCalled = 0;
         var registry = new ServiceRegistry();
@@ -258,7 +259,11 @@ public sealed class RuntimeRegistryTests
         registry.RegisterProvider<IAsyncTwo, AsyncTwo>(
             static () => new AsyncTwo(),
             Array.Empty<Type>(),
-            _ => throw new InvalidOperationException("initializer failed"),
+            _ =>
+            {
+                failureInjected.TrySetResult(true);
+                throw new InvalidOperationException("initializer failed");
+            },
             null,
             null);
 
@@ -266,7 +271,11 @@ public sealed class RuntimeRegistryTests
         {
             var initialization = registry.InitializeAsync();
             await initializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.Delay(100);
+
+            // A fixed delay was used to let the sibling failure propagate, which is a flake on a
+            // loaded machine. The signal makes it exact: once this initializer has thrown, the
+            // failure is certain, so cleanup must still be waiting on the pending one.
+            await failureInjected.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
             Assert.Equal(0, Volatile.Read(ref disposeCalled));
 
