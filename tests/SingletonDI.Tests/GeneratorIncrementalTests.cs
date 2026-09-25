@@ -338,9 +338,16 @@ public sealed class GeneratorIncrementalTests
         driver = driver.RunGenerators(firstCompilation);
         driver = driver.RunGenerators(secondCompilation);
 
+        var runResult = driver.GetRunResult();
         Assert.DoesNotContain(
-            driver.GetRunResult().Diagnostics,
+            runResult.Diagnostics,
             diagnostic => diagnostic.Id == "DM0018");
+        var generated = string.Join(
+            Environment.NewLine,
+            runResult.Results
+                .SelectMany(result => result.GeneratedSources)
+                .Select(source => source.SourceText.ToString()));
+        Assert.Contains("__SingletonDICompositionRootModule__", generated);
     }
 
     private sealed class SnapshotTrackingGenerator : IIncrementalGenerator

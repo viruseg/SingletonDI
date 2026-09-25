@@ -6,5 +6,5 @@ namespace SingletonDI.Tests;
 internal sealed record GeneratorTestResult(
     ImmutableArray<Diagnostic> Diagnostics,
     Compilation OutputCompilation,
-    ImmutableArray<GeneratedSourceResult> GeneratedSources,
+    string GeneratedSource,
     OutputKind OutputKind);

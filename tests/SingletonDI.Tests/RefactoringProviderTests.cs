@@ -40,6 +40,9 @@ public sealed class RefactoringProviderTests
         var compilation = await changedDocument.Project.GetCompilationAsync();
         Assert.NotNull(compilation);
         Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var text = (await changedDocument.GetTextAsync()).ToString();
+        Assert.Contains("public global::System.Threading.Tasks.Task InitializeAsync()", text);
+        Assert.Contains("return global::System.Threading.Tasks.Task.CompletedTask;", text);
     }
 
     [Fact]
@@ -59,12 +62,19 @@ public sealed class RefactoringProviderTests
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
             .Single();
-        var actions = await RefactoringTestHarness.GetActionsAsync(
+        var provider = new SingletonDIProvideRefactoringProvider();
+
+        var identifierActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declaration.Identifier.Span,
+            provider);
+        var braceActions = await RefactoringTestHarness.GetActionsAsync(
             context,
             declaration.OpenBraceToken.Span,
-            new SingletonDIProvideRefactoringProvider());
+            provider);
 
-        Assert.Empty(actions);
+        Assert.Single(identifierActions);
+        Assert.Empty(braceActions);
     }
 
     [Fact]
@@ -74,18 +84,30 @@ public sealed class RefactoringProviderTests
             public class Service
             {
             }
+
+            [SingletonDI.Attributes.SingletonDIProvide]
+            public class Marked
+            {
+            }
             """;
         var context = await RefactoringTestHarness.CreateAsync(source);
-        var declaration = (await context.Document.GetSyntaxRootAsync())!
+        var declarations = (await context.Document.GetSyntaxRootAsync())!
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
-            .Single();
-        var actions = await RefactoringTestHarness.GetActionsAsync(
-            context,
-            declaration.Identifier.Span,
-            new SingletonDIProvideRefactoringProvider());
+            .ToArray();
+        var provider = new SingletonDIProvideRefactoringProvider();
 
-        Assert.Empty(actions);
+        var markedActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declarations[1].Identifier.Span,
+            provider);
+        var unmarkedActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declarations[0].Identifier.Span,
+            provider);
+
+        Assert.Single(markedActions);
+        Assert.Empty(unmarkedActions);
     }
 
     [Fact]
@@ -100,18 +122,30 @@ public sealed class RefactoringProviderTests
             {
                 public Task InitializeAsync() => Task.CompletedTask;
             }
+
+            [SingletonDIProvide]
+            public class Other
+            {
+            }
             """;
         var context = await RefactoringTestHarness.CreateAsync(source);
-        var declaration = (await context.Document.GetSyntaxRootAsync())!
+        var declarations = (await context.Document.GetSyntaxRootAsync())!
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
-            .Single();
-        var actions = await RefactoringTestHarness.GetActionsAsync(
-            context,
-            declaration.Identifier.Span,
-            new SingletonDIProvideRefactoringProvider());
+            .ToArray();
+        var provider = new SingletonDIProvideRefactoringProvider();
 
-        Assert.Empty(actions);
+        var otherActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declarations[1].Identifier.Span,
+            provider);
+        var serviceActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declarations[0].Identifier.Span,
+            provider);
+
+        Assert.Single(otherActions);
+        Assert.Empty(serviceActions);
     }
 
     [Fact]
@@ -126,18 +160,30 @@ public sealed class RefactoringProviderTests
             {
                 public ValueTask InitializeAsync() => ValueTask.CompletedTask;
             }
+
+            [SingletonDIProvide]
+            public class Other
+            {
+            }
             """;
         var context = await RefactoringTestHarness.CreateAsync(source);
-        var declaration = (await context.Document.GetSyntaxRootAsync())!
+        var declarations = (await context.Document.GetSyntaxRootAsync())!
             .DescendantNodes()
             .OfType<ClassDeclarationSyntax>()
-            .Single();
-        var actions = await RefactoringTestHarness.GetActionsAsync(
-            context,
-            declaration.Identifier.Span,
-            new SingletonDIProvideRefactoringProvider());
+            .ToArray();
+        var provider = new SingletonDIProvideRefactoringProvider();
 
-        Assert.Empty(actions);
+        var otherActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declarations[1].Identifier.Span,
+            provider);
+        var serviceActions = await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declarations[0].Identifier.Span,
+            provider);
+
+        Assert.Single(otherActions);
+        Assert.Empty(serviceActions);
     }
 
     [Fact]
@@ -168,6 +214,9 @@ public sealed class RefactoringProviderTests
         var compilation = await changedDocument.Project.GetCompilationAsync();
         Assert.NotNull(compilation);
         Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var text = (await changedDocument.GetTextAsync()).ToString();
+        Assert.Contains("public Task InitializeAsync(int value)", text);
+        Assert.Contains("public global::System.Threading.Tasks.Task InitializeAsync()", text);
     }
 
     [Fact]
@@ -195,6 +244,10 @@ public sealed class RefactoringProviderTests
         var compilation = await changedDocument.Project.GetCompilationAsync();
         Assert.NotNull(compilation);
         Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var text = (await changedDocument.GetTextAsync()).ToString();
+        Assert.Contains("public global::System.Threading.Tasks.Task InitializeAsync()", text);
+        Assert.Contains("return global::System.Threading.Tasks.Task.CompletedTask;", text);
+        Assert.DoesNotContain("using System.Threading.Tasks;", text);
     }
 
     [Fact]

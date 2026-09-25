@@ -1672,6 +1672,9 @@ public class DiagnosticErrorTests
         Assert.DoesNotContain(
             result.OutputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(
+            "RegisterProvider<global::RequiredService, global::RequiredService>",
+            result.GeneratedSource);
     }
 
     [Fact]
@@ -1788,16 +1791,16 @@ public class DiagnosticErrorTests
                 trackIncrementalGeneratorSteps: false,
                 baseDirectory: null));
         driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
-        var generatedSources = driver.GetRunResult()
-            .Results
-            .SelectMany(result => result.GeneratedSources.IsDefault
-                ? Enumerable.Empty<GeneratedSourceResult>()
-                : result.GeneratedSources.AsEnumerable())
-            .ToImmutableArray();
+        var inputTrees = compilation.SyntaxTrees.ToImmutableArray();
+        var generatedSource = string.Join(
+            Environment.NewLine,
+            outputCompilation.SyntaxTrees
+                .Where(tree => !inputTrees.Contains(tree))
+                .Select(tree => tree.ToString()));
         return new GeneratorTestResult(
             diagnostics,
             outputCompilation,
-            generatedSources,
+            generatedSource,
             outputKind);
     }
 

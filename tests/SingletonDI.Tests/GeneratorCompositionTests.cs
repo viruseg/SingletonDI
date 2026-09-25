@@ -517,6 +517,18 @@ public sealed class GeneratorCompositionTests
             secondProviderSource: secondProviderSource);
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Equal(
+            1,
+            Count(result.GeneratedSources, "static global::Provider.FirstService SharedName"));
+        Assert.Equal(
+            1,
+            Count(result.GeneratedSources, "static global::OtherProvider.SecondService SharedName"));
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::Provider.FirstService>()",
+            result.GeneratedSources);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::OtherProvider.SecondService>()",
+            result.GeneratedSources);
     }
 
     [Fact]

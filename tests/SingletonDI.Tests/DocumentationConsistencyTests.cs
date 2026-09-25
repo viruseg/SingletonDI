@@ -37,14 +37,11 @@ public sealed class DocumentationConsistencyTests
                 "Microsoft.CodeAnalysis.Testing",
                 StringComparison.Ordinal));
         var agents = File.ReadAllText(Path.Combine(root, "AGENTS.md"));
+        var documentsTestingDependency = agents.Contains(
+            "Microsoft.CodeAnalysis.Testing",
+            StringComparison.Ordinal);
 
-        if (!hasTestingDependency)
-        {
-            Assert.DoesNotContain(
-                "Microsoft.CodeAnalysis.Testing",
-                agents,
-                StringComparison.Ordinal);
-        }
+        Assert.Equal(hasTestingDependency, documentsTestingDependency);
     }
 
     [Fact]
