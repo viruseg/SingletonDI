@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 namespace SingletonDI.Tests.Coverage;
@@ -15,6 +16,8 @@ public sealed partial class ConsumerDeclarationMatrixTests
             }
         }
         """;
+
+    private const string ConsumerProperty = "protected static global::App.Service ServiceInstance";
 
     public static IEnumerable<object[]> ShapeCases =>
         ShapeRows.Select(row => new object[] { row.Id });
@@ -732,5 +735,413 @@ public sealed partial class ConsumerDeclarationMatrixTests
             new RejectedExpectation(["DM0029"]),
             [],
             ["protected static global::App.Service ServiceInstance"]),
+    ];
+
+    public static IEnumerable<object[]> NamespaceCases =>
+        NamespaceRows.Select(row => new object[] { row.Id });
+
+    [Theory]
+    [MemberData(nameof(NamespaceCases))]
+    public void Namespace(string id)
+    {
+        DeclarationCaseVerifier.Verify(NamespaceRows.Single(row => row.Id == id));
+    }
+
+    internal static readonly DeclarationCase[] NamespaceRows =
+    [
+        new(
+            "CONS-NSM-01",
+            "CONSUMER_NAMESPACE",
+            "block namespace",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace App", ConsumerProperty],
+            []),
+        new(
+            "CONS-NSM-02",
+            "CONSUMER_NAMESPACE",
+            "file-scoped namespace",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App;
+
+            [SingletonDIProvide]
+            public class Service
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public partial class Consumer
+            {
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace App;", ConsumerProperty],
+            []),
+        new(
+            "CONS-NSM-03",
+            "CONSUMER_NAMESPACE",
+            "global namespace",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+            }
+
+            [SingletonDIConsume(typeof(App.Service))]
+            public partial class Consumer
+            {
+            }
+            """,
+            new SupportedExpectation(),
+            [ConsumerProperty],
+            ["namespace "]),
+        new(
+            "CONS-NSM-04",
+            "CONSUMER_NAMESPACE",
+            "dotted name declared in one namespace",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App.Deep.Nested
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+            }
+
+            namespace App.Deep.Nested
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace App.Deep.Nested", "protected static global::App.Deep.Nested.Service ServiceInstance"],
+            []),
+        new(
+            "CONS-NSM-05",
+            "CONSUMER_NAMESPACE",
+            "nested namespace blocks",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                namespace Deep
+                {
+                    [SingletonDIProvide]
+                    public class Service
+                    {
+                    }
+
+                    [SingletonDIConsume(typeof(Service))]
+                    public partial class Consumer
+                    {
+                    }
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace App.Deep", "protected static global::App.Deep.Service ServiceInstance"],
+            []),
+        new(
+            "CONS-NSM-06",
+            "CONSUMER_NAMESPACE",
+            "namespace named with an escaped keyword",
+            """
+            using SingletonDI.Attributes;
+
+            namespace @class
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+            }
+
+            namespace @class
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace @class", "protected static global::@class.Service ServiceInstance"],
+            []),
+        new(
+            "CONS-NSM-07",
+            "CONSUMER_NAMESPACE",
+            "two namespaces in one source, consumer in the second",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+            }
+
+            namespace Other
+            {
+                [SingletonDIConsume(typeof(App.Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace Other", ConsumerProperty],
+            []),
+        new(
+            "CONS-NSM-08",
+            "CONSUMER_NAMESPACE",
+            "top-level statements next to the consumer",
+            """
+            using SingletonDI.Attributes;
+
+            return 0;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["namespace App", ConsumerProperty],
+            [],
+            OutputKind: OutputKind.ConsoleApplication),
+    ];
+
+    public static IEnumerable<object[]> GenericCases =>
+        GenericRows.Select(row => new object[] { row.Id });
+
+    [Theory]
+    [MemberData(nameof(GenericCases))]
+    public void Generic(string id)
+    {
+        DeclarationCaseVerifier.Verify(GenericRows.Single(row => row.Id == id));
+    }
+
+    internal static readonly DeclarationCase[] GenericRows =
+    [
+        new(
+            "CONS-GEN-01",
+            "CONSUMER_GENERIC",
+            "unconstrained type parameter",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T>
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["partial class Consumer<T>", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-02",
+            "CONSUMER_GENERIC",
+            "class constraint",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T> where T : class
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["where T : class", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-03",
+            "CONSUMER_GENERIC",
+            "struct constraint",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T> where T : struct
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["where T : struct", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-04",
+            "CONSUMER_GENERIC",
+            "new() constraint",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T> where T : new()
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["where T : new()", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-05",
+            "CONSUMER_GENERIC",
+            "notnull constraint",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T> where T : notnull
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["where T : notnull", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-06",
+            "CONSUMER_GENERIC",
+            "two type parameters",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<TFirst, TSecond>
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["partial class Consumer<TFirst, TSecond>", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-07",
+            "CONSUMER_GENERIC",
+            "several constraints in one clause",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T> where T : class, global::System.IDisposable, new()
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["where T : class,global::System.IDisposable,new()", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-08",
+            "CONSUMER_GENERIC",
+            "consumer inside a generic containing type",
+            ProviderSource + """
+
+            namespace App
+            {
+                public partial class Outer<T>
+                {
+                    [SingletonDIConsume(typeof(Service))]
+                    public partial class Consumer
+                    {
+                    }
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["partial class Outer<T>", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-09",
+            "CONSUMER_GENERIC",
+            "generic containing type with a constraint",
+            ProviderSource + """
+
+            namespace App
+            {
+                public partial class Outer<T> where T : class
+                {
+                    [SingletonDIConsume(typeof(Service))]
+                    public partial class Consumer
+                    {
+                    }
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            ["partial class Outer<T>", "where T : class", ConsumerProperty],
+            []),
+        new(
+            "CONS-GEN-10",
+            "CONSUMER_GENERIC",
+            "attribute on a type parameter",
+            """
+            using System;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [AttributeUsage(AttributeTargets.GenericParameter)]
+                public sealed class TypeParameterMarkerAttribute : Attribute
+                {
+                }
+
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<[TypeParameterMarker] T>
+                {
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0031"]),
+            [],
+            [ConsumerProperty]),
     ];
 }
