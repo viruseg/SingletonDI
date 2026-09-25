@@ -1728,6 +1728,32 @@ public class DiagnosticErrorTests
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0017");
     }
 
+    [Fact]
+    public void DM0027_CompositionRootWithoutLocalAttributesReportsLanguageVersion()
+    {
+        const string source = """
+            namespace App
+            {
+                public static class Program
+                {
+                    public static void Main()
+                    {
+                    }
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(
+            source,
+            compositionRoot: true,
+            outputKind: OutputKind.ConsoleApplication,
+            languageVersion: LanguageVersion.CSharp7_3);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0027");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal(Location.None, diagnostic.Location);
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         return RunGeneratorWithOutput(source).Diagnostics;
@@ -1745,14 +1771,15 @@ public class DiagnosticErrorTests
         string source,
         bool compositionRoot = false,
         OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
-        bool includeOutputTypeProperty = true)
+        bool includeOutputTypeProperty = true,
+        LanguageVersion languageVersion = LanguageVersion.Latest)
     {
-        var compilation = CreateCompilation(source, outputKind);
+        var compilation = CreateCompilation(source, outputKind, languageVersion);
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
             additionalTexts: Array.Empty<AdditionalText>(),
             parseOptions: new CSharpParseOptions(
-                LanguageVersion.Latest,
+                languageVersion,
                 preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]),
             optionsProvider: new GeneratorTestAnalyzerConfigOptionsProvider(
                 new GeneratorTestOptions(compositionRoot, outputKind, includeOutputTypeProperty)),
@@ -1776,7 +1803,8 @@ public class DiagnosticErrorTests
 
     private static CSharpCompilation CreateCompilation(
         string source,
-        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
+        LanguageVersion languageVersion = LanguageVersion.Latest)
     {
         var references = new List<MetadataReference>
         {
@@ -1813,7 +1841,7 @@ public class DiagnosticErrorTests
             [CSharpSyntaxTree.ParseText(
                 source,
                 new CSharpParseOptions(
-                    LanguageVersion.Latest,
+                    languageVersion,
                     preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
             references,
             new CSharpCompilationOptions(outputKind));

@@ -34,9 +34,12 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .WithTrackingName("ReferencedCompositionSnapshot");
 
         context.RegisterSourceOutput(
-            context.CompilationProvider,
-            static (sourceProductionContext, compilation) =>
-                ReportLanguageDiagnostics(compilation, sourceProductionContext.ReportDiagnostic));
+            context.CompilationProvider.Combine(generatorOptions),
+            static (sourceProductionContext, input) =>
+            {
+                var (compilation, options) = input;
+                ReportLanguageDiagnostics(compilation, options, sourceProductionContext.ReportDiagnostic);
+            });
 
         var providerCandidates = context.SyntaxProvider
             .ForAttributeWithMetadataName(
@@ -789,11 +792,12 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
     private static void ReportLanguageDiagnostics(
         Compilation compilation,
+        GeneratorOptions options,
         Action<Diagnostic> reportDiagnostic)
     {
         var inputLocation = FindGeneratorAttributeLocation(compilation, "SingletonDIConsume") ??
             FindGeneratorAttributeLocation(compilation, "SingletonDIProvide");
-        if (inputLocation is null)
+        if (inputLocation is null && !options.IsCompositionRoot)
         {
             return;
         }
@@ -803,7 +807,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.GeneratedLanguageVersionNotSupported,
-                inputLocation,
+                inputLocation ?? Location.None,
                 effectiveVersion));
         }
 
