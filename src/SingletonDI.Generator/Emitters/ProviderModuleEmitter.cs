@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Security.Cryptography;
 using System.Text;
 using SingletonDI.Generator.Models;
 
@@ -6,6 +7,8 @@ namespace SingletonDI.Generator.Emitters;
 
 internal static class ProviderModuleEmitter
 {
+    private const string ProviderModuleTypePrefix = "__SingletonDIProviderModule__";
+
     internal static string Generate(
         ImmutableArray<ProviderModel> localProviders,
         ImmutableArray<ProviderAssemblyModel> externalProviderAssemblies,
@@ -24,7 +27,7 @@ internal static class ProviderModuleEmitter
             isCompositionRoot);
         var moduleTypeName = isCompositionRoot
             ? "__SingletonDICompositionRootModule__"
-            : "__SingletonDIProviderModule__";
+            : GetProviderModuleTypeName(orderedLocalProviders[0].AssemblyIdentity);
 
         if (!hasLocalProviders && externalAssemblies.Count == 0)
         {
@@ -106,6 +109,15 @@ internal static class ProviderModuleEmitter
         source.AppendLine("    }");
         source.AppendLine("}");
         return source.ToString();
+    }
+
+    private static string GetProviderModuleTypeName(string assemblyIdentity)
+    {
+        using var sha256 = SHA256.Create();
+        var hash = BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(assemblyIdentity)))
+            .Replace("-", string.Empty)
+            .ToLowerInvariant();
+        return ProviderModuleTypePrefix + "_" + hash;
     }
 
     private static List<ProviderAssemblyModel> GetExternalAssemblies(

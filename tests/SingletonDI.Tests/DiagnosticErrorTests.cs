@@ -1262,8 +1262,11 @@ public class DiagnosticErrorTests
         Assert.DoesNotContain(
             result.OutputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
-        Assert.NotNull(result.OutputCompilation.GetTypeByMetadataName(
-            "SingletonDI.Generated.__SingletonDIProviderModule__"));
+        Assert.Contains(
+            result.OutputCompilation.SyntaxTrees,
+            tree => tree.GetRoot().ToString().Contains(
+                "class __SingletonDIProviderModule__",
+                StringComparison.Ordinal));
     }
 
     [Fact]

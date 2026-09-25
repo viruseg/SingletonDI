@@ -10,7 +10,9 @@ internal static class ProviderSymbolCollector
     private const string ProvideAttributeName = "SingletonDI.Attributes.SingletonDIProvideAttribute";
     private const string ProviderModuleMarkerName =
         "SingletonDI.Attributes.SingletonDIProviderModuleAttribute";
-    private const string GeneratedBootstrapTypeName =
+    private const string LegacyGeneratedBootstrapTypeName =
+        "global::SingletonDI.Generated.__SingletonDIProviderModule__";
+    private const string GeneratedBootstrapTypeNamePrefix =
         "global::SingletonDI.Generated.__SingletonDIProviderModule__";
 
     internal static ImmutableArray<ProviderModel> CollectReferencedProviders(
@@ -88,10 +90,7 @@ internal static class ProviderSymbolCollector
             .GroupBy(candidate => candidate.AssemblyIdentity, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
         var bootstrapTypes = referencedTypes
-            .Where(referencedType => string.Equals(
-                referencedType.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                GeneratedBootstrapTypeName,
-                StringComparison.Ordinal))
+            .Where(referencedType => IsGeneratedBootstrapType(referencedType.Type))
             .GroupBy(
                 referencedType => referencedType.Assembly.Identity.ToString(),
                 StringComparer.Ordinal)
@@ -159,12 +158,20 @@ internal static class ProviderSymbolCollector
             .ToImmutableArray();
     }
 
+    private static bool IsGeneratedBootstrapType(INamedTypeSymbol type)
+    {
+        var typeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return string.Equals(typeName, LegacyGeneratedBootstrapTypeName, StringComparison.Ordinal) ||
+               typeName.StartsWith(GeneratedBootstrapTypeNamePrefix + "_", StringComparison.Ordinal);
+    }
+
     private static bool HasPublicBootstrapMethod(INamedTypeSymbol type)
     {
         return type.GetMembers("Bootstrap")
             .OfType<IMethodSymbol>()
             .Any(method =>
                 method.IsStatic &&
+                method.Arity == 0 &&
                 method.DeclaredAccessibility == Accessibility.Public &&
                 method.Parameters.Length == 0 &&
                 method.ReturnsVoid);

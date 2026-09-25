@@ -53,7 +53,7 @@ public sealed class GeneratorCompositionTests
             result.OutputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -85,7 +85,7 @@ public sealed class GeneratorCompositionTests
             result.OutputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -167,8 +167,14 @@ public sealed class GeneratorCompositionTests
         {
             using var providerStream = new MemoryStream(providerImage);
             var providerAssembly = loadContext.LoadFromStream(providerStream);
-            var bootstrap = providerAssembly
-                .GetType("SingletonDI.Generated.__SingletonDIProviderModule__", throwOnError: true)!
+            var bootstrapType = providerAssembly
+                .GetTypes()
+                .Single(type =>
+                    type.Namespace == "SingletonDI.Generated" &&
+                    type.Name.StartsWith(
+                        "__SingletonDIProviderModule__",
+                        StringComparison.Ordinal));
+            var bootstrap = bootstrapType
                 .GetMethod("Bootstrap", BindingFlags.Public | BindingFlags.Static)!;
             bootstrap.Invoke(null, null);
             bootstrap.Invoke(null, null);
@@ -209,7 +215,7 @@ public sealed class GeneratorCompositionTests
                 dependency => dependency.FullyQualifiedName == "global::Shared.Contracts.IDatabaseService"));
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0018");
     }
@@ -249,7 +255,7 @@ public sealed class GeneratorCompositionTests
             1,
             Count(
                 result.GeneratedSources,
-                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__"));
         Assert.Contains("RegisterProvider<global::App.LocalService, global::App.LocalService>", result.GeneratedSources);
     }
 
@@ -275,7 +281,7 @@ public sealed class GeneratorCompositionTests
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0020");
         Assert.DoesNotContain(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -348,7 +354,7 @@ public sealed class GeneratorCompositionTests
         Assert.Contains("ProviderLibrary", diagnostic.GetMessage());
         Assert.Contains("RootApp", diagnostic.GetMessage());
         Assert.DoesNotContain(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
         Assert.DoesNotContain(
             result.OutputCompilation.GetDiagnostics(),
@@ -445,11 +451,14 @@ public sealed class GeneratorCompositionTests
             secondProviderSource: secondProviderSource);
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Equal(
             2,
             Count(
                 result.GeneratedSources,
-                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__"));
         Assert.Contains("protected static global::Provider.FirstService SharedName", result.GeneratedSources);
     }
 
@@ -582,7 +591,7 @@ public sealed class GeneratorCompositionTests
             1,
             Count(
                 result.GeneratedSources,
-                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();"));
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__"));
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0019");
     }
 
@@ -620,7 +629,7 @@ public sealed class GeneratorCompositionTests
 
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0016");
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
         Assert.DoesNotContain("InvalidProvider.InvalidService", result.GeneratedSources);
     }
@@ -655,7 +664,7 @@ public sealed class GeneratorCompositionTests
 
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0016");
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -747,7 +756,7 @@ public sealed class GeneratorCompositionTests
 
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -822,7 +831,7 @@ public sealed class GeneratorCompositionTests
             "global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::App.IMissingService>()",
             result.GeneratedSources);
         Assert.DoesNotContain(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -1056,7 +1065,7 @@ public sealed class GeneratorCompositionTests
         var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0021");
         Assert.Contains("ProviderLibrary", diagnostic.GetMessage());
         Assert.DoesNotContain(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 
@@ -1083,7 +1092,7 @@ public sealed class GeneratorCompositionTests
 
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0020");
         Assert.DoesNotContain(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             result.GeneratedSources);
     }
 

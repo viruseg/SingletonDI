@@ -626,10 +626,10 @@ public sealed class GeneratorOutputTests
         Assert.Equal(
             1,
             generated.Split(
-                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__",
                 StringSplitOptions.None).Length - 1);
         Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             generated);
         Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.DoesNotContain("global::App.LocalService).TypeHandle", generated);
@@ -717,7 +717,7 @@ public sealed class GeneratorOutputTests
             isCompositionRoot: false);
 
         Assert.DoesNotContain(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
+            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
             generated);
         Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.Contains("RegisterProvider<global::App.LocalService, global::App.LocalService>", generated);
