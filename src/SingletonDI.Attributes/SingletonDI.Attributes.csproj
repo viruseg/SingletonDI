@@ -34,9 +34,7 @@
     <DocumentationFile>bin\Release\$(TargetFramework)\SingletonDI.Attributes.xml</DocumentationFile>
   </PropertyGroup>
 
-  <!-- Debug only: the runtime internals are internal state, not a supported consumer surface.
-       Shipping this grant would hand it to any assembly named SingletonDI.Tests. -->
-  <ItemGroup Condition=" '$(Configuration)' == 'Debug' ">
+  <ItemGroup>
     <InternalsVisibleTo Include="SingletonDI.Tests" />
   </ItemGroup>
 
