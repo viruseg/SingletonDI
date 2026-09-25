@@ -132,8 +132,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0002 = diagnostics.FirstOrDefault(d => d.Id == "DM0002");
-        Assert.NotNull(dm0002);
+        var dm0002 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0002");
         Assert.Equal("Cannot use [SingletonDIProvide] on abstract class", dm0002.Descriptor.Title);
     }
 
@@ -158,8 +157,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Equal("Consumer property name conflict", dm0003.Descriptor.Title);
         Assert.Equal(
             "Consumer property 'DatabaseServiceInstance' conflicts with the property resolved for service 'global::MyApp.DatabaseService' " +
@@ -202,8 +200,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Contains("MyApp_Services_DatabaseServiceInstance", dm0003.GetMessage());
 
         // Verify Location is not None
@@ -234,8 +231,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert - should report DM0003
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
         Assert.Contains("global::MyApp.DatabaseService", dm0003.GetMessage());
 
@@ -263,8 +259,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert - self-conflict IS an error
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
         Assert.Contains("global::MyApp.DatabaseService", dm0003.GetMessage());
 
@@ -296,8 +291,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert - self-conflict IS an error
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Equal(
             "Consumer property 'DatabaseServiceInstance' conflicts with the property resolved for service " +
             "'global::SingletonDI.SampleApp.DatabaseService' in the same consumer dependency set. " +
@@ -335,8 +329,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert - self-conflict IS an error
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Contains("MyApp_Other_DatabaseServiceInstance", dm0003.GetMessage());
 
         // Verify Location is not None
@@ -367,8 +360,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert - self-conflict IS an error
-        var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
-        Assert.NotNull(dm0003);
+        var dm0003 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0003");
         Assert.Contains("SingletonDI_SampleApp_DatabaseServiceInstance", dm0003.GetMessage());
 
         // Verify Location is not None
@@ -544,8 +536,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0004 = diagnostics.FirstOrDefault(d => d.Id == "DM0004");
-        Assert.NotNull(dm0004);
+        var dm0004 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0004");
         Assert.Contains("MyService", dm0004.GetMessage());
         Assert.Contains("public parameterless constructor", dm0004.GetMessage());
     }
@@ -584,8 +575,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0004 = diagnostics.FirstOrDefault(d => d.Id == "DM0004");
-        Assert.NotNull(dm0004);
+        var dm0004 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0004");
         Assert.Contains("MyService", dm0004.GetMessage());
     }
 
@@ -623,8 +613,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0005 = diagnostics.FirstOrDefault(d => d.Id == "DM0005");
-        Assert.NotNull(dm0005);
+        var dm0005 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0005");
         Assert.Contains("private", dm0005.GetMessage());
     }
 
@@ -663,8 +652,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0005 = diagnostics.FirstOrDefault(d => d.Id == "DM0005");
-        Assert.NotNull(dm0005);
+        var dm0005 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0005");
         Assert.Contains("protected", dm0005.GetMessage());
     }
 
@@ -707,8 +695,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0006 = diagnostics.FirstOrDefault(d => d.Id == "DM0006");
-        Assert.NotNull(dm0006);
+        var dm0006 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0006");
         Assert.Contains("NonProviderService", dm0006.GetMessage());
         Assert.Contains("does not have the [SingletonDIProvide] attribute", dm0006.GetMessage());
     }
@@ -750,8 +737,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0007 = diagnostics.FirstOrDefault(d => d.Id == "DM0007");
-        Assert.NotNull(dm0007);
+        var dm0007 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0007");
         Assert.Contains("MyConsumer", dm0007.GetMessage());
         Assert.Contains("must be declared as partial", dm0007.GetMessage());
     }
@@ -798,8 +784,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0009 = diagnostics.FirstOrDefault(d => d.Id == "DM0009");
-        Assert.NotNull(dm0009);
+        var dm0009 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0009");
         Assert.Contains("Circular dependency detected", dm0009.GetMessage());
     }
 
@@ -861,8 +846,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0009 = diagnostics.FirstOrDefault(d => d.Id == "DM0009");
-        Assert.NotNull(dm0009);
+        var dm0009 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0009");
         Assert.Contains("Circular dependency detected", dm0009.GetMessage());
     }
 
@@ -903,8 +887,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0010 = diagnostics.FirstOrDefault(d => d.Id == "DM0010");
-        Assert.NotNull(dm0010);
+        var dm0010 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0010");
         Assert.Contains("MyService", dm0010.GetMessage());
         Assert.Contains("specified multiple times", dm0010.GetMessage());
     }
@@ -944,8 +927,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0012 = diagnostics.FirstOrDefault(d => d.Id == "DM0012");
-        Assert.NotNull(dm0012);
+        var dm0012 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0012");
         Assert.Equal("Method InitializeAsync in class 'MyService' is static. InitializeAsync must be an instance method.", dm0012.GetMessage());
     }
 
@@ -970,8 +952,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
-        Assert.NotNull(dm0013);
+        var dm0013 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0013");
         Assert.Contains("123InvalidName", dm0013.GetMessage());
         Assert.Contains("valid C# identifier", dm0013.GetMessage());
     }
@@ -997,8 +978,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
-        Assert.NotNull(dm0013);
+        var dm0013 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0013");
         Assert.Contains("my-property", dm0013.GetMessage());
     }
 
@@ -1023,8 +1003,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
-        Assert.NotNull(dm0013);
+        var dm0013 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0013");
         Assert.Contains("''", dm0013.GetMessage());
     }
 
@@ -1049,8 +1028,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0013 = diagnostics.FirstOrDefault(d => d.Id == "DM0013");
-        Assert.NotNull(dm0013);
+        var dm0013 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0013");
         Assert.Contains("'   '", dm0013.GetMessage());
     }
 
@@ -1075,8 +1053,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0014 = diagnostics.FirstOrDefault(d => d.Id == "DM0014");
-        Assert.NotNull(dm0014);
+        var dm0014 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0014");
         Assert.Contains("class", dm0014.GetMessage());
         Assert.Contains("reserved keyword", dm0014.GetMessage());
     }
@@ -1102,8 +1079,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0014 = diagnostics.FirstOrDefault(d => d.Id == "DM0014");
-        Assert.NotNull(dm0014);
+        var dm0014 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0014");
         Assert.Contains("void", dm0014.GetMessage());
     }
 
@@ -1176,8 +1152,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
-        Assert.NotNull(dm0015);
+        var dm0015 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0015");
         Assert.Equal("Generic types are not supported for singletons", dm0015.Descriptor.Title);
         Assert.Equal(
             "Generic type 'Repository' cannot be a singleton. Generic types are not supported.",
@@ -1209,8 +1184,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
-        Assert.NotNull(dm0015);
+        var dm0015 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0015");
         Assert.Equal("Generic types are not supported for singletons", dm0015.Descriptor.Title);
         Assert.Equal(
             "Generic type 'Repository' cannot be a singleton. Generic types are not supported.",
@@ -1242,8 +1216,7 @@ public class DiagnosticErrorTests
         var diagnostics = RunGenerator(SOURCE);
 
         // Assert
-        var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
-        Assert.NotNull(dm0015);
+        var dm0015 = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "DM0015");
         Assert.Contains("Service", dm0015.GetMessage());
     }
 
