@@ -262,6 +262,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0029: A file-local consumer cannot be reopened by generated code.
+    /// </summary>
+    public static readonly DiagnosticDescriptor FileLocalConsumerNotSupported = Create(
+        "DM0029",
+        "File-local consumer is not supported",
+        "Consumer '{0}' is file-local and cannot be reopened by generated code.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

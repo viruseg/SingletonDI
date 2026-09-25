@@ -1556,6 +1556,35 @@ public class DiagnosticErrorTests
         Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == "DM0017");
     }
 
+    [Fact]
+    public void DM0029_FileLocalConsumerIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            file partial class FileConsumer
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0029");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("File-local consumer is not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("FileConsumer", diagnostic.GetMessage());
+        Assert.True(diagnostic.Location.IsInSource);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Severity == DiagnosticSeverity.Error);
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         return RunGeneratorWithOutput(source).Diagnostics;

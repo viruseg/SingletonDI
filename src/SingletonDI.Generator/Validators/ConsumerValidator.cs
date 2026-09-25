@@ -95,6 +95,18 @@ internal static class ConsumerValidator
             return null;
         }
 
+        for (INamedTypeSymbol? current = typeSymbol; current is not null; current = current.ContainingType)
+        {
+            if (current.IsFileLocal)
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.FileLocalConsumerNotSupported,
+                    typeDecl.Identifier.GetLocation(),
+                    typeSymbol.Name));
+                return null;
+            }
+        }
+
         var consumeAttributeSyntax = consumeAttribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
         var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
         var dependencyTypes = GetTypeArguments(consumeAttribute, argumentLocations);
