@@ -282,6 +282,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0031: Attributes on consumer type parameters cannot be reconstructed in generated source.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConsumerTypeParameterAttributesNotSupported = Create(
+        "DM0031",
+        "Consumer type parameter attributes are not supported",
+        "Consumer '{0}' declares attributes on a type parameter, which cannot be represented in generated source.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

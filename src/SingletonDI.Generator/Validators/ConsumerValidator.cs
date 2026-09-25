@@ -107,6 +107,15 @@ internal static class ConsumerValidator
             }
         }
 
+        if (HasTypeParameterAttributes(typeDecl))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ConsumerTypeParameterAttributesNotSupported,
+                typeDecl.Identifier.GetLocation(),
+                typeSymbol.Name));
+            return null;
+        }
+
         var consumeAttributeSyntax = consumeAttribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
         var aliasQualifiedType = consumeAttributeSyntax?
             .DescendantNodes()
@@ -442,6 +451,16 @@ internal static class ConsumerValidator
     private static ServiceTypeIdentity CreateIdentity(ITypeSymbol typeSymbol)
     {
         return ServiceTypeIdentity.FromSymbol(typeSymbol);
+    }
+
+    private static bool HasTypeParameterAttributes(TypeDeclarationSyntax typeDeclaration)
+    {
+        return typeDeclaration.TypeParameterList?.Parameters
+                   .Any(parameter => parameter.AttributeLists.Count > 0) == true ||
+               typeDeclaration.Ancestors()
+                   .OfType<TypeDeclarationSyntax>()
+                   .Any(containingType => containingType.TypeParameterList?.Parameters
+                       .Any(parameter => parameter.AttributeLists.Count > 0) == true);
     }
 
     private static bool CanUseProtectedProperty(

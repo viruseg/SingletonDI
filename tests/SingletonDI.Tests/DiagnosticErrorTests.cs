@@ -1585,6 +1585,44 @@ public class DiagnosticErrorTests
             item => item.Severity == DiagnosticSeverity.Error);
     }
 
+    [Fact]
+    public void DM0031_TypeParameterAttributesAreRejected()
+    {
+        const string source = """
+            using System;
+            using Marker = App.MarkerAttribute;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [AttributeUsage(AttributeTargets.GenericParameter)]
+                public sealed class MarkerAttribute : Attribute
+                {
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class GenericConsumer<[Marker] T>
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0031");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("Consumer type parameter attributes are not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("GenericConsumer", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS0246");
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         return RunGeneratorWithOutput(source).Diagnostics;
