@@ -161,9 +161,10 @@ public class DiagnosticErrorTests
         var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
         Assert.NotNull(dm0003);
         Assert.Equal("Consumer property name conflict", dm0003.Descriptor.Title);
-        Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
-        Assert.Contains("DatabaseService", dm0003.GetMessage());
-        Assert.Contains("same consumer dependency set", dm0003.GetMessage());
+        Assert.Equal(
+            "Consumer property 'DatabaseServiceInstance' conflicts with the property resolved for service 'global::MyApp.DatabaseService' " +
+            "in the same consumer dependency set. Use distinct names or the namespace-qualified fallback.",
+            dm0003.GetMessage());
 
         // Verify Location is not None and points to the argument
         Assert.NotEqual(Location.None, dm0003.Location);
@@ -236,7 +237,7 @@ public class DiagnosticErrorTests
         var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
         Assert.NotNull(dm0003);
         Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
-        Assert.Contains("DatabaseService", dm0003.GetMessage());
+        Assert.Contains("global::MyApp.DatabaseService", dm0003.GetMessage());
 
         // Verify Location is not None
         Assert.NotEqual(Location.None, dm0003.Location);
@@ -265,7 +266,7 @@ public class DiagnosticErrorTests
         var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
         Assert.NotNull(dm0003);
         Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
-        Assert.Contains("DatabaseService", dm0003.GetMessage());
+        Assert.Contains("global::MyApp.DatabaseService", dm0003.GetMessage());
 
         // Verify Location is not None
         Assert.NotEqual(Location.None, dm0003.Location);
@@ -297,8 +298,11 @@ public class DiagnosticErrorTests
         // Assert - self-conflict IS an error
         var dm0003 = diagnostics.FirstOrDefault(d => d.Id == "DM0003");
         Assert.NotNull(dm0003);
-        Assert.Contains("DatabaseServiceInstance", dm0003.GetMessage());
-        Assert.Contains("DatabaseService", dm0003.GetMessage());
+        Assert.Equal(
+            "Consumer property 'DatabaseServiceInstance' conflicts with the property resolved for service " +
+            "'global::SingletonDI.SampleApp.DatabaseService' in the same consumer dependency set. " +
+            "Use distinct names or the namespace-qualified fallback.",
+            dm0003.GetMessage());
 
         // Verify Location is not None
         Assert.NotEqual(Location.None, dm0003.Location);
@@ -1175,8 +1179,9 @@ public class DiagnosticErrorTests
         var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
         Assert.NotNull(dm0015);
         Assert.Equal("Generic types are not supported for singletons", dm0015.Descriptor.Title);
-        Assert.Contains("Repository", dm0015.GetMessage());
-        Assert.Contains("Generic type", dm0015.GetMessage());
+        Assert.Equal(
+            "Generic type 'Repository' cannot be a singleton. Generic types are not supported.",
+            dm0015.GetMessage());
 
         // Verify Location is on the attribute, not the class identifier
         Assert.NotEqual(Location.None, dm0015.Location);
@@ -1207,8 +1212,9 @@ public class DiagnosticErrorTests
         var dm0015 = diagnostics.FirstOrDefault(d => d.Id == "DM0015");
         Assert.NotNull(dm0015);
         Assert.Equal("Generic types are not supported for singletons", dm0015.Descriptor.Title);
-        Assert.Contains("Repository", dm0015.GetMessage());
-        Assert.Contains("Generic type", dm0015.GetMessage());
+        Assert.Equal(
+            "Generic type 'Repository' cannot be a singleton. Generic types are not supported.",
+            dm0015.GetMessage());
 
         // Verify Location is on the attribute, not the class identifier
         Assert.NotEqual(Location.None, dm0015.Location);
