@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using SingletonDI.Attributes;
 using SingletonDI.Generator;
+using SingletonDI.Tests.Coverage;
 using Xunit;
 
 namespace SingletonDI.Tests;
@@ -1991,76 +1992,20 @@ public class DiagnosticErrorTests
         bool includeOutputTypeProperty = true,
         LanguageVersion languageVersion = LanguageVersion.Latest)
     {
-        var compilation = CreateCompilation(source, outputKind, languageVersion);
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
-            additionalTexts: Array.Empty<AdditionalText>(),
-            parseOptions: new CSharpParseOptions(
-                languageVersion,
-                preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]),
-            optionsProvider: new GeneratorTestAnalyzerConfigOptionsProvider(
-                new GeneratorTestOptions(compositionRoot, outputKind, includeOutputTypeProperty)),
-            driverOptions: new GeneratorDriverOptions(
-                IncrementalGeneratorOutputKind.None,
-                trackIncrementalGeneratorSteps: false,
-                baseDirectory: null));
-        driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
-        var inputTrees = compilation.SyntaxTrees.ToImmutableArray();
-        var generatedSource = string.Join(
-            Environment.NewLine,
-            outputCompilation.SyntaxTrees
-                .Where(tree => !inputTrees.Contains(tree))
-                .Select(tree => tree.ToString()));
-        return new GeneratorTestResult(
-            diagnostics,
-            outputCompilation,
-            generatedSource,
-            outputKind);
-    }
-
-    private static CSharpCompilation CreateCompilation(
-        string source,
-        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
-        LanguageVersion languageVersion = LanguageVersion.Latest)
-    {
-        var references = new List<MetadataReference>
-        {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(ValueTask).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(RuntimeHelpers).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(RuntimeInformation).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(SingletonDIProvideAttribute).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(SingletonDIProviderModuleAttribute).Assembly.Location),
-        };
-
-        var assemblyPath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-        foreach (var assemblyName in new[]
-                 {
-                     "System.Runtime",
-                     "System.Runtime.CompilerServices",
-                     "System.Threading.Tasks",
-                     "System.Runtime.InteropServices",
-                     "System.Collections",
-                     "System.Linq",
-                     "netstandard",
-                 })
-        {
-            var path = Path.Combine(assemblyPath, assemblyName + ".dll");
-            if (File.Exists(path))
+        var result = DeclarationMatrixHarness.Run(
+            source,
+            new MatrixRunOptions
             {
-                references.Add(MetadataReference.CreateFromFile(path));
-            }
-        }
-
-        return CSharpCompilation.Create(
-            "TestAssembly",
-            [CSharpSyntaxTree.ParseText(
-                source,
-                new CSharpParseOptions(
-                    languageVersion,
-                    preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
-            references,
-            new CSharpCompilationOptions(outputKind));
+                CompositionRoot = compositionRoot,
+                OutputKind = outputKind,
+                LanguageVersion = languageVersion,
+                NullableContextProviderEnabled = false,
+                IncludeOutputTypeProperty = includeOutputTypeProperty,
+            });
+        return new GeneratorTestResult(
+            result.GeneratorDiagnostics,
+            result.OutputCompilation,
+            result.GeneratedSource,
+            outputKind);
     }
 }
