@@ -423,6 +423,86 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void ProviderInheritsConsumeDependenciesFromBaseType()
+    {
+        // SingletonDIConsumeAttribute is Inherited = true. GetAttributes only reports directly
+        // declared attributes, so a provider deriving from a consuming base type used to be
+        // registered with no dependencies and could be constructed before what it needs.
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class DatabaseService
+                {
+                }
+
+                [SingletonDIConsume(typeof(DatabaseService))]
+                public partial class NeedsDatabase
+                {
+                }
+
+                [SingletonDIProvide]
+                public sealed partial class ReportService : NeedsDatabase
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Empty(result.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.Contains(
+            "RegisterProvider<global::App.ReportService, global::App.ReportService>",
+            result.GeneratedSource);
+        Assert.Contains("typeof(global::App.DatabaseService)", result.GeneratedSource);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void ProviderOverridingInheritedConsumeDependenciesWins()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class DatabaseService
+                {
+                }
+
+                [SingletonDIProvide]
+                public sealed class CacheService
+                {
+                }
+
+                [SingletonDIConsume(typeof(DatabaseService))]
+                public partial class NeedsDatabase
+                {
+                }
+
+                [SingletonDIProvide]
+                [SingletonDIConsume(typeof(CacheService))]
+                public sealed partial class ReportService : NeedsDatabase
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Empty(result.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("typeof(global::App.CacheService)", result.GeneratedSource);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void DM0004_ProvideMissingParameterlessConstructor()
     {
         // Arrange

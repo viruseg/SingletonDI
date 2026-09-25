@@ -338,7 +338,7 @@ internal static class ProviderValidator
         Location location,
         Action<Diagnostic> reportDiagnostic)
     {
-        var consumeAttribute = FindAttribute(typeSymbol, ConsumeAttributeName);
+        var consumeAttribute = FindAttributeIncludingBaseTypes(typeSymbol, ConsumeAttributeName);
         if (consumeAttribute == null)
         {
             return ImmutableArray<ServiceTypeIdentity>.Empty;
@@ -677,6 +677,34 @@ internal static class ProviderValidator
     {
         return symbol.GetAttributes()
             .FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
+    }
+
+    /// <summary>
+    /// Finds an attribute that is declared on the symbol or inherited from a base type.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ISymbol.GetAttributes"/> only reports directly declared attributes, so an
+    /// attribute declared with <c>Inherited = true</c> is invisible on a derived symbol even though
+    /// the runtime applies it. A declaration on the most derived type wins, and the returned data
+    /// still points at the declaration site, so diagnostics land on the attribute the dependency
+    /// was actually written on.
+    /// </remarks>
+    private static AttributeData? FindAttributeIncludingBaseTypes(
+        INamedTypeSymbol typeSymbol,
+        string metadataName)
+    {
+        for (INamedTypeSymbol? current = typeSymbol;
+             current is not null && current.SpecialType != SpecialType.System_Object;
+             current = current.BaseType)
+        {
+            var declared = FindAttribute(current, metadataName);
+            if (declared is not null)
+            {
+                return declared;
+            }
+        }
+
+        return null;
     }
 
     private static Location? GetAttributeLocation(AttributeData attribute)
