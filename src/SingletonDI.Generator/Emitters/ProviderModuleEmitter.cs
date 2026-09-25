@@ -76,6 +76,11 @@ internal static class ProviderModuleEmitter
         source.AppendLine("        /// <summary>");
         source.AppendLine("        /// Registers generated providers exactly once.");
         source.AppendLine("        /// </summary>");
+        source.AppendLine("        /// <remarks>");
+        source.AppendLine("        /// A failure part-way through releases the guard and rethrows, so the caller sees the");
+        source.AppendLine("        /// original error at the bootstrap site instead of a later missing-dependency failure");
+        source.AppendLine("        /// over a half-registered graph.");
+        source.AppendLine("        /// </remarks>");
         source.AppendLine("        public static void Bootstrap()");
         source.AppendLine("        {");
         source.AppendLine("            if (global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 1) != 0)");
@@ -83,18 +88,15 @@ internal static class ProviderModuleEmitter
         source.AppendLine("                return;");
         source.AppendLine("            }");
         source.AppendLine();
-
-        foreach (var externalAssembly in externalAssemblies)
-        {
-            var bootstrapType = externalAssembly.BootstrapTypeIdentity!.Value.ToGlobalTypeName();
-            source.AppendLine($"            {bootstrapType}.Bootstrap();");
-        }
-
-        foreach (var provider in orderedLocalProviders)
-        {
-            AppendProviderRegistration(source, provider);
-        }
-
+        source.AppendLine("            try");
+        source.AppendLine("            {");
+        AppendBootstrapBody(source, externalAssemblies, orderedLocalProviders);
+        source.AppendLine("            }");
+        source.AppendLine("            catch");
+        source.AppendLine("            {");
+        source.AppendLine("                global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 0);");
+        source.AppendLine("                throw;");
+        source.AppendLine("            }");
         source.AppendLine("        }");
         source.AppendLine();
 
@@ -157,6 +159,28 @@ internal static class ProviderModuleEmitter
             .ToList();
     }
 
+    private static void AppendBootstrapBody(
+        StringBuilder source,
+        IReadOnlyList<ProviderAssemblyModel> externalAssemblies,
+        ImmutableArray<ProviderModel> orderedLocalProviders)
+    {
+        foreach (var externalAssembly in externalAssemblies)
+        {
+            var bootstrapType = externalAssembly.BootstrapTypeIdentity!.Value.ToGlobalTypeName();
+            source.AppendLine($"                {bootstrapType}.Bootstrap();");
+        }
+
+        if (externalAssemblies.Count > 0)
+        {
+            source.AppendLine();
+        }
+
+        foreach (var provider in orderedLocalProviders)
+        {
+            AppendProviderRegistration(source, provider);
+        }
+    }
+
     private static void AppendProviderRegistration(StringBuilder source, ProviderModel provider)
     {
         var implementationType = ToGlobalTypeName(provider.FullyQualifiedName);
@@ -167,12 +191,12 @@ internal static class ProviderModuleEmitter
                 : implementationType;
 
         source.AppendLine(
-            $"            global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<{serviceType}, {implementationType}>(");
-        source.AppendLine($"                () => new {implementationType}(),");
+            $"                global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<{serviceType}, {implementationType}>(");
+        source.AppendLine($"                    () => new {implementationType}(),");
         AppendDependencies(source, provider.DependencyIdentities);
         source.AppendLine(provider.HasInitializeAsyncMethod
-            ? "                static value => ToTask(value.InitializeAsync()),"
-            : "                null,");
+            ? "                    static value => ToTask(value.InitializeAsync()),"
+            : "                    null,");
         AppendDisposeDelegates(source, provider);
         source.AppendLine();
     }
@@ -183,7 +207,7 @@ internal static class ProviderModuleEmitter
     {
         if (dependencies.IsDefault || dependencies.IsEmpty)
         {
-            source.AppendLine("                global::System.Array.Empty<global::System.Type>(),");
+            source.AppendLine("                    global::System.Array.Empty<global::System.Type>(),");
             return;
         }
 
@@ -192,20 +216,20 @@ internal static class ProviderModuleEmitter
             .ToImmutableArray();
         if (distinctDependencies.IsEmpty)
         {
-            source.AppendLine("                global::System.Array.Empty<global::System.Type>(),");
+            source.AppendLine("                    global::System.Array.Empty<global::System.Type>(),");
             return;
         }
 
-        source.AppendLine("                new global::System.Type[]");
-        source.AppendLine("                {");
+        source.AppendLine("                    new global::System.Type[]");
+        source.AppendLine("                    {");
         for (var index = 0; index < distinctDependencies.Length; index++)
         {
             var separator = index == distinctDependencies.Length - 1 ? string.Empty : ",";
             source.AppendLine(
-                $"                    typeof({distinctDependencies[index].ToGlobalTypeName()}){separator}");
+                $"                        typeof({distinctDependencies[index].ToGlobalTypeName()}){separator}");
         }
 
-        source.AppendLine("                },");
+        source.AppendLine("                    },");
     }
 
     private static void AppendDisposeDelegates(
@@ -214,22 +238,22 @@ internal static class ProviderModuleEmitter
     {
         if (provider.IsAsyncDisposable)
         {
-            source.AppendLine("                null,");
+            source.AppendLine("                    null,");
             source.AppendLine(
-                $"                static value => ((global::System.IAsyncDisposable)value).DisposeAsync().AsTask());");
+                $"                    static value => ((global::System.IAsyncDisposable)value).DisposeAsync().AsTask());");
             return;
         }
 
         if (provider.IsDisposable)
         {
             source.AppendLine(
-                $"                static value => ((global::System.IDisposable)value).Dispose(),");
-            source.AppendLine("                null);");
+                $"                    static value => ((global::System.IDisposable)value).Dispose(),");
+            source.AppendLine("                    null);");
             return;
         }
 
-        source.AppendLine("                null,");
-        source.AppendLine("                null);");
+        source.AppendLine("                    null,");
+        source.AppendLine("                    null);");
     }
 
     private static string ToGlobalTypeName(string fullyQualifiedName)

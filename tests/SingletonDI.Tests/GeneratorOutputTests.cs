@@ -60,6 +60,49 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_ReleasesBootstrapGuardWhenRegistrationFails()
+    {
+        // The guard used to be claimed before any registration ran, so a failure left it claimed
+        // for good: every later Bootstrap() silently returned and initialization then built a graph
+        // over a half-registered set, failing with a misleading missing-dependency error.
+        var compilation = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class FirstService
+                {
+                }
+
+                [SingletonDIProvide]
+                public sealed class SecondService
+                {
+                }
+            }
+            """);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var generated = GetGeneratedSource(driver.GetRunResult());
+
+        const string claim = "if (global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 1) != 0)";
+        const string release = "global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 0);";
+        var claimIndex = generated.IndexOf(claim, StringComparison.Ordinal);
+        var releaseIndex = generated.IndexOf(release, StringComparison.Ordinal);
+        var firstRegistration = generated.IndexOf("__SingletonDIHost__.RegisterProvider", StringComparison.Ordinal);
+        var rethrowIndex = generated.IndexOf("throw;", StringComparison.Ordinal);
+
+        Assert.True(claimIndex >= 0, "The bootstrap guard is missing.");
+        Assert.True(releaseIndex > claimIndex, "The guard is never released.");
+        Assert.True(
+            firstRegistration > claimIndex && firstRegistration < releaseIndex,
+            "Registrations must run inside the guarded region.");
+        Assert.True(rethrowIndex > releaseIndex, "The original error must be rethrown after releasing.");
+    }
+
+    [Fact]
     public void Generator_EmitsFileScopedConsumerNamespace()
     {
         var compilation = CreateCompilation(
