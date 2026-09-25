@@ -117,16 +117,14 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
             // Preserve the leading trivia (comments, XML docs) from the original constructor
             var leadingTrivia = existingParameterlessCtor.GetLeadingTrivia();
 
-            var newModifiers = MakePublicModifiers(existingParameterlessCtor.Modifiers);
+            var newModifiers = AnnotateModifiers(MakePublicModifiers(existingParameterlessCtor.Modifiers));
 
             var newConstructor = existingParameterlessCtor
                 .WithModifiers(newModifiers)
-                .WithLeadingTrivia(leadingTrivia)
-                .WithAdditionalAnnotations(Formatter.Annotation);
+                .WithLeadingTrivia(leadingTrivia);
 
             var newMembers = typeDeclaration.Members.Replace(existingParameterlessCtor, newConstructor);
-            var newTypeDeclaration = typeDeclaration.WithMembers(newMembers)
-                .WithAdditionalAnnotations(Formatter.Annotation);
+            var newTypeDeclaration = typeDeclaration.WithMembers(newMembers);
 
             var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
             if (root is null)
@@ -140,16 +138,13 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
             // No parameterless constructor exists, create a new public one
             var constructor = SyntaxFactory.ConstructorDeclaration(typeDeclaration.Identifier)
                 .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
-                .WithBody(SyntaxFactory.Block());
-
-            // Add formatting annotation
-            constructor = constructor.WithAdditionalAnnotations(Formatter.Annotation);
+                .WithBody(SyntaxFactory.Block())
+                .WithAdditionalAnnotations(Formatter.Annotation);
 
             // Insert the constructor at the beginning of the members
             var newMembers = typeDeclaration.Members.Insert(0, constructor);
 
-            var newTypeDeclaration = typeDeclaration.WithMembers(newMembers)
-                .WithAdditionalAnnotations(Formatter.Annotation);
+            var newTypeDeclaration = typeDeclaration.WithMembers(newMembers);
 
             var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
             if (root is null)
@@ -177,6 +172,27 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         newModifiers = newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
 
         return newModifiers;
+    }
+
+    /// <summary>
+    /// Marks a rewritten modifier list for formatting.
+    /// </summary>
+    /// <remarks>
+    /// The formatter re-lays out every token inside an annotated range. Annotating the enclosing
+    /// declaration or method instead would reformat the whole type or method body, so a fix that
+    /// changes one modifier produced a diff across hundreds of unrelated lines. The first modifier
+    /// is the token that needs spacing, because a freshly inserted one carries no trivia.
+    /// </remarks>
+    private static SyntaxTokenList AnnotateModifiers(SyntaxTokenList modifiers)
+    {
+        if (modifiers.Count == 0)
+        {
+            return modifiers;
+        }
+
+        return modifiers.Replace(
+            modifiers[0],
+            modifiers[0].WithAdditionalAnnotations(Formatter.Annotation));
     }
 
     private static async Task<Document> MakeMethodPublicAsync(
@@ -219,9 +235,8 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         }
 
         var newMethodDeclaration = methodDeclaration
-            .WithModifiers(newModifiers)
-            .WithLeadingTrivia(leadingTrivia)
-            .WithAdditionalAnnotations(Formatter.Annotation);
+            .WithModifiers(AnnotateModifiers(newModifiers))
+            .WithLeadingTrivia(leadingTrivia);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null)
@@ -240,13 +255,12 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         var leadingTrivia = methodDeclaration.GetLeadingTrivia();
 
         // Remove static modifier from the method
-        var newModifiers = SyntaxFactory.TokenList(
-            methodDeclaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.StaticKeyword)));
+        var newModifiers = AnnotateModifiers(SyntaxFactory.TokenList(
+            methodDeclaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.StaticKeyword))));
 
         var newMethodDeclaration = methodDeclaration
             .WithModifiers(newModifiers)
-            .WithLeadingTrivia(leadingTrivia)
-            .WithAdditionalAnnotations(Formatter.Annotation);
+            .WithLeadingTrivia(leadingTrivia);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null)

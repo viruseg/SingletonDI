@@ -440,9 +440,140 @@ public class CodeFixProviderTests
         await VerifyProviderCodeFixAsync(test, expected, "DM0012");
     }
 
-#endregion
+    #endregion
 
-#region SingletonDIConsumerCodeFixProvider Tests
+    #region Formatting Scope Tests
+
+    [Fact]
+    public async Task DM0005_MakeMethodPublic_LeavesMethodBodyUnformatted()
+    {
+        // Annotating the whole method for formatting re-lays out every token inside it, so a fix
+        // that changes one modifier rewrote the body and produced a diff on unrelated lines.
+        const string test = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            class Service
+            {
+                private Task InitializeAsync()
+                {
+                    int total=0;
+                    for(int i=0;i<10;i++)
+                    {
+                        total+=i*2;
+                    }
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+
+        const string expected = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            class Service
+            {
+                public Task InitializeAsync()
+                {
+                    int total=0;
+                    for(int i=0;i<10;i++)
+                    {
+                        total+=i*2;
+                    }
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+
+        await VerifyCodeFixExactlyAsync(test, expected, "DM0005", new SingletonDIProviderCodeFixProvider());
+    }
+
+    [Fact]
+    public async Task DM0012_RemoveStaticModifier_LeavesMethodBodyUnformatted()
+    {
+        const string test = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            class Service
+            {
+                public static Task InitializeAsync()
+                {
+                    int value=1;
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+
+        const string expected = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            class Service
+            {
+                public Task InitializeAsync()
+                {
+                    int value=1;
+                    return Task.CompletedTask;
+                }
+            }
+            """;
+
+        await VerifyCodeFixExactlyAsync(test, expected, "DM0012", new SingletonDIProviderCodeFixProvider());
+    }
+
+    [Fact]
+    public async Task DM0004_MakeConstructorPublic_LeavesRemainingMembersUnformatted()
+    {
+        const string test = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            class Service
+            {
+                private Service()
+                {
+                    int counter=0;
+                }
+
+                public int GetValue()
+                {
+                    int result=1;
+                    return result;
+                }
+            }
+            """;
+
+        const string expected = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            class Service
+            {
+                public Service()
+                {
+                    int counter=0;
+                }
+
+                public int GetValue()
+                {
+                    int result=1;
+                    return result;
+                }
+            }
+            """;
+
+        await VerifyCodeFixExactlyAsync(test, expected, "DM0004", new SingletonDIProviderCodeFixProvider());
+    }
+
+    #endregion
+
+    #region SingletonDIConsumerCodeFixProvider Tests
+
 
     [Fact]
     public async Task DM0010_RemoveDuplicateType()
@@ -1204,19 +1335,21 @@ public class CodeFixProviderTests
 
     /// <summary>
     /// Applies the fix, formats the result the way the IDE does, and compares the document
-    /// text verbatim. Unlike <see cref="VerifyCodeFixAsync"/> this keeps comments, documentation
-    /// and preprocessor directives, so a fix that relocates or drops them fails here.
+    /// text verbatim. Unlike <see cref="VerifyCodeFixAsync"/> this keeps comments, documentation,
+    /// preprocessor directives and untouched formatting, so a fix that relocates or drops them,
+    /// or that reformats code it had no business touching, fails here.
     /// </summary>
-    private static async Task VerifyPartialCodeFixExactlyAsync(
+    private static async Task VerifyCodeFixExactlyAsync(
         string testSource,
         string expectedSource,
-        string diagnosticId)
+        string diagnosticId,
+        CodeFixProvider codeFixProvider)
     {
         var document = await CodeFixTestHarness.ApplyFirstAndFormatAsync(
             testSource,
             diagnosticId,
-            new SingletonDIPartialCodeFixProvider(),
-            "Add 'partial' modifier");
+            codeFixProvider,
+            ExpectedTitle(codeFixProvider, diagnosticId));
 
         var actual = (await document.GetTextAsync()).ToString();
         Assert.Equal(expectedSource, actual);
@@ -1228,13 +1361,20 @@ public class CodeFixProviderTests
             compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
     }
 
-    private static async Task VerifyCodeFixAsync(
+    private static async Task VerifyPartialCodeFixExactlyAsync(
         string testSource,
         string expectedSource,
-        string diagnosticId,
-        CodeFixProvider codeFixProvider)
+        string diagnosticId)
     {
-        var expectedTitle = (codeFixProvider, diagnosticId) switch
+        await VerifyCodeFixExactlyAsync(
+            testSource,
+            expectedSource,
+            diagnosticId,
+            new SingletonDIPartialCodeFixProvider());
+    }
+
+    private static string ExpectedTitle(CodeFixProvider codeFixProvider, string diagnosticId) =>
+        (codeFixProvider, diagnosticId) switch
         {
             (SingletonDIProviderCodeFixProvider, "DM0004") => "Add public parameterless constructor",
             (SingletonDIProviderCodeFixProvider, "DM0005") => "Make method public",
@@ -1243,6 +1383,14 @@ public class CodeFixProviderTests
             (SingletonDIPartialCodeFixProvider, "DM0007") => "Add 'partial' modifier",
             _ => throw new ArgumentException($"Unknown diagnostic/provider combination: {diagnosticId}")
         };
+
+    private static async Task VerifyCodeFixAsync(
+        string testSource,
+        string expectedSource,
+        string diagnosticId,
+        CodeFixProvider codeFixProvider)
+    {
+        var expectedTitle = ExpectedTitle(codeFixProvider, diagnosticId);
 
         var result = await CodeFixTestHarness.ApplyFirstAsync(
             testSource,
