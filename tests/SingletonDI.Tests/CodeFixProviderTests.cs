@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Composition;
+using Microsoft.CodeAnalysis.CodeRefactorings;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -1221,6 +1223,47 @@ public class CodeFixProviderTests
 
         Assert.NotEmpty(fixable);
         Assert.All(fixable, id => Assert.Contains(id, reported));
+    }
+
+    [Fact]
+    public void EveryCodeFixAndRefactoringProviderIsExportedForMef()
+    {
+        // The code fixes ship inside the package under analyzers/dotnet/cs, so a provider the host
+        // cannot discover never loads in the IDE while the suite stays green - every other test
+        // constructs the providers directly. Assert the export contract each one declares.
+        var providers = new CodeFixProvider[]
+            {
+                new SingletonDIProviderCodeFixProvider(),
+                new SingletonDIPartialCodeFixProvider(),
+                new SingletonDIConsumerCodeFixProvider()
+            }
+            .Cast<object>()
+            .Concat([new SingletonDIProvideRefactoringProvider()]);
+
+        foreach (var provider in providers)
+        {
+            var type = provider.GetType();
+            var codeFixExport = type.GetCustomAttribute<ExportCodeFixProviderAttribute>();
+            var refactoringExport = type.GetCustomAttribute<ExportCodeRefactoringProviderAttribute>();
+
+            Assert.True(
+                codeFixExport is not null || refactoringExport is not null,
+                $"{type.Name} has no code fix or refactoring export.");
+            var export = (ExportCodeFixProviderAttribute?)codeFixExport;
+            if (export is not null)
+            {
+                Assert.Contains(LanguageNames.CSharp, export.Languages);
+                Assert.Equal(type.Name, export.Name);
+            }
+            else
+            {
+                Assert.Contains(
+                    LanguageNames.CSharp,
+                    ((ExportCodeRefactoringProviderAttribute)refactoringExport!).Languages);
+            }
+
+            Assert.NotNull(type.GetCustomAttribute<SharedAttribute>());
+        }
     }
 
     [Fact]
