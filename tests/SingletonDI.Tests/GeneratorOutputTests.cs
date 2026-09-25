@@ -675,6 +675,17 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void ProviderModuleEmitter_ReturnsEmptyForNoProviders()
+    {
+        var generated = ProviderModuleEmitter.Generate(
+            ImmutableArray<ProviderModel>.Empty,
+            ImmutableArray<ProviderAssemblyModel>.Empty,
+            isCompositionRoot: false);
+
+        Assert.Equal(string.Empty, generated);
+    }
+
+    [Fact]
     public void ProviderModuleEmitter_SortsLocalProvidersDeterministically()
     {
         var secondProvider = new ProviderModel(

@@ -25,14 +25,14 @@ internal static class ProviderModuleEmitter
             orderedLocalProviders,
             externalProviderAssemblies,
             isCompositionRoot);
-        var moduleTypeName = isCompositionRoot
-            ? "__SingletonDICompositionRootModule__"
-            : GetProviderModuleTypeName(orderedLocalProviders[0].AssemblyIdentity);
-
         if (!hasLocalProviders && externalAssemblies.Count == 0)
         {
             return string.Empty;
         }
+
+        var moduleTypeName = isCompositionRoot
+            ? "__SingletonDICompositionRootModule__"
+            : GetProviderModuleTypeName(orderedLocalProviders[0].AssemblyIdentity);
 
         var source = new StringBuilder();
         source.AppendLine("#nullable enable");
