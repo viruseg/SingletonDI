@@ -72,7 +72,7 @@ internal static class ProviderSymbolCollector
                 continue;
             }
 
-            var fullyQualifiedName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var fullyQualifiedName = type.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
             var assemblyIdentity = type.ContainingAssembly.Identity.ToString();
             var candidateKey = CreateProviderKey(assemblyIdentity, fullyQualifiedName);
             if (visitedCandidates.Add(candidateKey))
@@ -135,7 +135,7 @@ internal static class ProviderSymbolCollector
             }
 
             bootstrapTypes.TryGetValue(assemblyIdentity, out var bootstrapType);
-            var bootstrapTypeName = bootstrapType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var bootstrapTypeName = bootstrapType?.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
             var hasModuleMarker = assembly.GetAttributes().Any(attribute =>
                 IsAttribute(attribute, ProviderModuleMarkerName));
             var hasBootstrapMethod = bootstrapType is not null &&
@@ -268,7 +268,7 @@ internal static class ProviderSymbolCollector
 
         return types
             .OrderBy(type => type.Assembly.Identity.ToString(), StringComparer.Ordinal)
-            .ThenBy(type => type.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
+            .ThenBy(type => type.Type.ToDisplayString(SymbolDisplayFormats.CodeGeneration), StringComparer.Ordinal)
             .ToImmutableArray();
     }
 

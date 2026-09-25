@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using SingletonDI.Generator.Helpers;
 using SingletonDI.Generator.Models;
 
 namespace SingletonDI.Generator.Validators;
@@ -315,7 +316,7 @@ internal static class ConsumerValidator
         return type is null
             ? typeSyntax
             : SyntaxFactory.ParseTypeName(
-                type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                type.ToDisplayString(SymbolDisplayFormats.CodeGeneration));
     }
 
     private static ConsumerDeclarationKind GetDeclarationKind(TypeDeclarationSyntax typeDeclaration)
@@ -523,6 +524,6 @@ internal static class ConsumerValidator
 
     private static string GetFullyQualifiedName(ITypeSymbol typeSymbol)
     {
-        return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return typeSymbol.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
     }
 }

@@ -1132,6 +1132,45 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void PredefinedTypeAsServiceTypeProducesCompilableModule()
+    {
+        // The predefined types render by their C# keyword, so a name destined for generated code
+        // must not be produced by a format that aliases them. Emitting 'global::object' is a CS1001
+        // in the generated module, and the validator accepts this input, so nothing else would
+        // have reported it.
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide(ServiceType = typeof(object))]
+                public sealed class ObjectService
+                {
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(ObjectService), typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Empty(result.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("global::System.Object, global::App.ObjectService", result.GeneratedSource);
+        Assert.DoesNotContain("global::object", result.GeneratedSource);
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void DM0022_PrivateNestedProviderIsRejected()
     {
         const string source = """

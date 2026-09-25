@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using SingletonDI.Generator.Helpers;
 
 namespace SingletonDI.Generator.Models;
 
@@ -125,7 +126,7 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
 
     internal static ServiceTypeIdentity FromSymbol(ITypeSymbol type)
     {
-        var fullyQualifiedName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var fullyQualifiedName = type.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
         var assemblyIdentity = type.ContainingAssembly?.Identity.ToString() ?? string.Empty;
         return new ServiceTypeIdentity(
             fullyQualifiedName,
@@ -149,7 +150,7 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
         if (type is not INamedTypeSymbol namedType)
         {
             return CreateDefaultCanonicalIdentity(
-                type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                type.ToDisplayString(SymbolDisplayFormats.CodeGeneration),
                 type.ContainingAssembly?.Identity.ToString() ?? string.Empty);
         }
 
@@ -160,7 +161,7 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
         if (!hasConstructedContext)
         {
             return CreateDefaultCanonicalIdentity(
-                namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                namedType.ToDisplayString(SymbolDisplayFormats.CodeGeneration),
                 namedType.ContainingAssembly?.Identity.ToString() ?? string.Empty);
         }
 
@@ -171,7 +172,7 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
             ? string.Empty
             : CreateSymbolCanonicalIdentity(namedType.ContainingType);
         return $"constructed:{namedType.ContainingAssembly?.Identity.ToString() ?? string.Empty}\u001f" +
-               $"{namedType.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}\u001e" +
+               $"{namedType.OriginalDefinition.ToDisplayString(SymbolDisplayFormats.CodeGeneration)}\u001e" +
                $"{containingType}\u001e{typeArguments}";
     }
 
@@ -194,7 +195,7 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
 
     private static string FormatTypeArgument(ITypeSymbol type)
     {
-        var display = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var display = type.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
         var assemblyIdentity = type.ContainingAssembly?.Identity.ToString() ?? string.Empty;
         if (type is not INamedTypeSymbol namedType || namedType.TypeArguments.Length == 0)
         {

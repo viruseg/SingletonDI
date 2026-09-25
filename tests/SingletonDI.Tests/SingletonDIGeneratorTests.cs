@@ -238,7 +238,7 @@ public class SingletonDIGeneratorTests
 
         Assert.NotNull(model);
         Assert.Empty(diagnostics);
-        Assert.Equal("global::App.IBox<object>", model!.Value.ServiceTypeFullyQualifiedName);
+        Assert.Equal("global::App.IBox<global::System.Object>", model!.Value.ServiceTypeFullyQualifiedName);
     }
 
     [Fact]

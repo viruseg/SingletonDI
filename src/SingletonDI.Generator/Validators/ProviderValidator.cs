@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using SingletonDI.Generator.Helpers;
 using SingletonDI.Generator.Models;
 
 namespace SingletonDI.Generator.Validators;
@@ -736,7 +737,7 @@ internal static class ProviderValidator
 
     private static string GetTypeDisplayName(ITypeSymbol typeSymbol, Location location)
     {
-        var displayName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var displayName = typeSymbol.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
         return location.IsInSource
             ? displayName
             : $"{displayName}, {typeSymbol.ContainingAssembly.Identity}";
@@ -749,12 +750,12 @@ internal static class ProviderValidator
             return typeSymbol.Name;
         }
 
-        return $"{typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}, " +
+        return $"{typeSymbol.ToDisplayString(SymbolDisplayFormats.CodeGeneration)}, " +
                typeSymbol.ContainingAssembly.Identity;
     }
 
     private static string GetFullyQualifiedName(ITypeSymbol typeSymbol)
     {
-        return typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return typeSymbol.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
     }
 }
