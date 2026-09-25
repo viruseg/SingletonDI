@@ -130,17 +130,6 @@ internal static class PropertyNameResolver
         foreach (var reference in references)
         {
             var propertyName = localPropertyNames[reference.FullyQualifiedName];
-            if (!reference.IsContract &&
-                providerPropertyNames.TryGetValue(reference.FullyQualifiedName, out var providerPropertyName))
-            {
-                propertyName = providerPropertyName;
-                if (customPropertyNames.TryGetValue(reference.FullyQualifiedName, out var customName) &&
-                    !string.IsNullOrEmpty(customName))
-                {
-                    propertyName = customName!;
-                }
-            }
-
             preferredPropertyNames[reference.FullyQualifiedName] = propertyName;
         }
 
@@ -201,17 +190,6 @@ internal static class PropertyNameResolver
         {
             var identity = GetReferenceIdentity(reference);
             var propertyName = localPropertyNames[identity];
-            if (!reference.IsContract &&
-                providerPropertyNames.TryGetValue(identity, out var providerPropertyName))
-            {
-                propertyName = providerPropertyName;
-                if (customPropertyNames.TryGetValue(identity, out var customName) &&
-                    !string.IsNullOrEmpty(customName))
-                {
-                    propertyName = customName!;
-                }
-            }
-
             preferredPropertyNames[identity] = propertyName;
         }
 

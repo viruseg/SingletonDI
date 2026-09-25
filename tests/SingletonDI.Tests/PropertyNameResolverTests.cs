@@ -206,6 +206,40 @@ public class PropertyNameResolverTests
         Assert.Empty(compilationErrors);
     }
 
+    [Fact]
+    public void TC04B_SeparateConsumersWithSameShortNameUseLocalPropertyNames()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace NamespaceA
+            {
+                [SingletonDIProvide]
+                public class Service { }
+            }
+
+            namespace NamespaceB
+            {
+                [SingletonDIProvide]
+                public class Service { }
+            }
+
+            [SingletonDIConsume(typeof(NamespaceA.Service))]
+            public partial class FirstConsumer
+            {
+                public NamespaceA.Service Get() => ServiceInstance;
+            }
+
+            [SingletonDIConsume(typeof(NamespaceB.Service))]
+            public partial class SecondConsumer
+            {
+                public NamespaceB.Service Get() => ServiceInstance;
+            }
+            """;
+
+        Assert.Empty(CompilationErrors(source));
+    }
+
     /// <summary>
     /// TC05: Three providers with the same ShortName.
     /// Expected property names: {Namespace}_{ShortName}Instance for all three
@@ -771,7 +805,7 @@ public class PropertyNameResolverTests
                 {
                     public void UseServiceA()
                     {
-                        NamespaceA.Service service = NamespaceA_ServiceInstance;
+                        NamespaceA.Service service = ServiceInstance;
                     }
                 }
 
