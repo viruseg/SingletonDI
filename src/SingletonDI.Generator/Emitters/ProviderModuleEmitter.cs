@@ -9,6 +9,12 @@ internal static class ProviderModuleEmitter
 {
     private const string ProviderModuleTypePrefix = "__SingletonDIProviderModule__";
 
+    /// <summary>
+    /// Module type name emitted for an assembly that both hosts providers and is a composition
+    /// root. Exposed so the referencing side can discover the same name.
+    /// </summary>
+    internal const string CompositionRootModuleTypeName = "__SingletonDICompositionRootModule__";
+
     internal static string Generate(
         ImmutableArray<ProviderModel> localProviders,
         ImmutableArray<ProviderAssemblyModel> externalProviderAssemblies,
@@ -31,7 +37,7 @@ internal static class ProviderModuleEmitter
         }
 
         var moduleTypeName = isCompositionRoot
-            ? "__SingletonDICompositionRootModule__"
+            ? CompositionRootModuleTypeName
             : GetProviderModuleTypeName(orderedLocalProviders[0].AssemblyIdentity);
 
         var source = new StringBuilder();

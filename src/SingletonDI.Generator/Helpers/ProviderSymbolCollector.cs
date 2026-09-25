@@ -166,6 +166,7 @@ internal static class ProviderSymbolCollector
         var metadataNames = new[]
         {
             GeneratedModuleNamespace + ProviderModuleEmitter.GetProviderModuleTypeName(assemblyIdentity),
+            GeneratedModuleNamespace + ProviderModuleEmitter.CompositionRootModuleTypeName,
             LegacyGeneratedBootstrapTypeName,
         };
 

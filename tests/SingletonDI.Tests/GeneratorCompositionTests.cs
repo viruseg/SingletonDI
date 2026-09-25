@@ -1234,6 +1234,41 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void Root_BootstrapsReferencedAssemblyThatIsItselfACompositionRoot()
+    {
+        // An assembly that hosts providers and is also marked as a composition root emits the
+        // composition-root module name instead of the hashed one. The referencing root has to probe
+        // for it, otherwise the assembly looks like a marked provider module with no bootstrap and
+        // the second root reports DM0021 against it.
+        const string providerSource = """
+            using SingletonDI.Attributes;
+            using Shared.Contracts;
+
+            namespace Provider
+            {
+                [SingletonDIProvide(ServiceType = typeof(IDatabaseService))]
+                public sealed class DatabaseService : IDatabaseService
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            "namespace App { public sealed class AppMarker { } }",
+            compositionRoot: true,
+            providerIsCompositionRoot: true);
+
+        Assert.Empty(result.Diagnostics.Where(item => item.Severity == DiagnosticSeverity.Error));
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDICompositionRootModule__.Bootstrap();",
+            result.GeneratedSources);
+        Assert.DoesNotContain(
+            result.Diagnostics,
+            item => item.Id == "DM0021");
+    }
+
+    [Fact]
     public void DM0021_ReportsMarkedProviderAssemblyWithoutBootstrap()
     {
         const string providerSource = """
@@ -1351,7 +1386,8 @@ public sealed class GeneratorCompositionTests
         string? contractsSource = null,
         string? secondProviderSource = null,
         bool generateProviderModule = true,
-        bool duplicateProviderReference = false)
+        bool duplicateProviderReference = false,
+        bool providerIsCompositionRoot = false)
     {
         var contractsCompilation = CreateCompilation(
             "Shared.Contracts",
@@ -1372,7 +1408,7 @@ public sealed class GeneratorCompositionTests
                 providerReferences,
                 OutputKind.DynamicallyLinkedLibrary);
             var providerResult = generateProviderModule
-                ? RunGenerator(providerCompilation, compositionRoot: false)
+                ? RunGenerator(providerCompilation, compositionRoot: providerIsCompositionRoot)
                 : new CompositionRunResult(
                     ImmutableArray<Diagnostic>.Empty,
                     string.Empty,
