@@ -12,7 +12,7 @@ public static class SingletonDIInitializer
     private static readonly object Sync = new();
     private static ShutdownManager? _shutdownManager;
     private static Task? _disposeTask;
-    private static Task? _queuedInitializationTask;
+    private static QueuedInitialization? _queuedInitialization;
     private static long _lifecycleVersion;
 
     /// <summary>
@@ -26,12 +26,14 @@ public static class SingletonDIInitializer
     /// <returns>
     /// A task that completes after every provider instance has been created and every
     /// <c>InitializeAsync</c> method returning <see cref="Task"/> or <see cref="ValueTask"/> has completed.
+    /// A request queued behind an active disposal fails with <see cref="InvalidOperationException"/>
+    /// when a later disposal request supersedes it.
     /// </returns>
     public static Task InitializeAsync(bool registerShutdownHandlers = true)
     {
         Task initializationTask;
         Task? pendingDisposal;
-        TaskCompletionSource<object?>? queuedCompletion = null;
+        QueuedInitialization? queuedInitialization = null;
         long lifecycleVersion;
 
         lock (Sync)
@@ -40,14 +42,13 @@ public static class SingletonDIInitializer
             lifecycleVersion = _lifecycleVersion;
             if (pendingDisposal is not null)
             {
-                if (_queuedInitializationTask is null)
+                if (_queuedInitialization is null)
                 {
-                    queuedCompletion = new TaskCompletionSource<object?>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
-                    _queuedInitializationTask = queuedCompletion.Task;
+                    queuedInitialization = new QueuedInitialization();
+                    _queuedInitialization = queuedInitialization;
                 }
 
-                initializationTask = _queuedInitializationTask!;
+                initializationTask = _queuedInitialization.Task;
             }
             else
             {
@@ -55,9 +56,9 @@ public static class SingletonDIInitializer
             }
         }
 
-        if (queuedCompletion is not null)
+        if (queuedInitialization is not null)
         {
-            _ = CompleteQueuedInitializationAsync(pendingDisposal!, queuedCompletion);
+            _ = CompleteQueuedInitializationAsync(pendingDisposal!, queuedInitialization);
         }
 
         if (registerShutdownHandlers && pendingDisposal is null)
@@ -109,6 +110,12 @@ public static class SingletonDIInitializer
 
         lock (Sync)
         {
+            if (_queuedInitialization is not null)
+            {
+                _queuedInitialization.IsInvalidated = true;
+                _queuedInitialization = null;
+            }
+
             if (_disposeTask is not null)
             {
                 return new ValueTask(_disposeTask);
@@ -148,26 +155,37 @@ public static class SingletonDIInitializer
 
     private static async Task CompleteQueuedInitializationAsync(
         Task disposalTask,
-        TaskCompletionSource<object?> completion)
+        QueuedInitialization queuedInitialization)
     {
         try
         {
             await disposalTask.ConfigureAwait(false);
-            var initializationTask = Registry.InitializeAsync();
+            Task initializationTask;
+            lock (Sync)
+            {
+                if (queuedInitialization.IsInvalidated)
+                {
+                    throw new InvalidOperationException(
+                        "Initialization was superseded by a disposal request.");
+                }
+
+                initializationTask = Registry.InitializeAsync();
+            }
+
             await initializationTask.ConfigureAwait(false);
-            completion.TrySetResult(null);
+            queuedInitialization.Completion.TrySetResult(null);
         }
         catch (Exception exception)
         {
-            completion.TrySetException(exception);
+            queuedInitialization.Completion.TrySetException(exception);
         }
         finally
         {
             lock (Sync)
             {
-                if (ReferenceEquals(_queuedInitializationTask, completion.Task))
+                if (ReferenceEquals(_queuedInitialization, queuedInitialization))
                 {
-                    _queuedInitializationTask = null;
+                    _queuedInitialization = null;
                 }
             }
         }
@@ -247,5 +265,20 @@ public static class SingletonDIInitializer
     {
         _shutdownManager ??= new ShutdownManager(static () => DisposeAsync(), Environment.Exit);
         _shutdownManager.Register();
+    }
+
+    private sealed class QueuedInitialization
+    {
+        internal QueuedInitialization()
+        {
+            Completion = new TaskCompletionSource<object?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        internal TaskCompletionSource<object?> Completion { get; }
+
+        internal bool IsInvalidated { get; set; }
+
+        internal Task Task => Completion.Task;
     }
 }

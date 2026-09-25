@@ -251,6 +251,126 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
+    public async Task DisposeAsync_SupersedesReinitializationQueuedBehindActiveDisposal()
+    {
+        await TestGate.WaitAsync();
+        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var createCount = 0;
+        var disposeCount = 0;
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.RegisterProvider<ISupersededService, SupersededService>(
+                () =>
+                {
+                    Interlocked.Increment(ref createCount);
+                    return new SupersededService();
+                },
+                Array.Empty<Type>(),
+                null,
+                null,
+                async _ =>
+                {
+                    disposalStarted.TrySetResult(true);
+                    await releaseDisposal.Task;
+                    Interlocked.Increment(ref disposeCount);
+                });
+
+            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+            var firstDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
+            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var queuedInitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+            var secondDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
+
+            releaseDisposal.TrySetResult(true);
+            await Task.WhenAll(firstDisposal, secondDisposal);
+            var supersededException = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await queuedInitialization);
+
+            Assert.Equal("Initialization was superseded by a disposal request.", supersededException.Message);
+            Assert.Equal(1, Volatile.Read(ref createCount));
+            Assert.Equal(1, Volatile.Read(ref disposeCount));
+            Assert.Throws<InvalidOperationException>(() => __SingletonDIHost__.Resolve<ISupersededService>());
+        }
+        finally
+        {
+            releaseDisposal.TrySetResult(true);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AfterSupersededQueueWaitsForLatestDisposalAndSucceeds()
+    {
+        await TestGate.WaitAsync();
+        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var createCount = 0;
+        var disposeCount = 0;
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.RegisterProvider<IReplacementSupersededService, ReplacementSupersededService>(
+                () =>
+                {
+                    Interlocked.Increment(ref createCount);
+                    return new ReplacementSupersededService();
+                },
+                Array.Empty<Type>(),
+                null,
+                null,
+                async _ =>
+                {
+                    if (Interlocked.Increment(ref disposeCount) == 1)
+                    {
+                        disposalStarted.TrySetResult(true);
+                        await releaseDisposal.Task;
+                    }
+                });
+
+            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+            var firstDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
+            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var supersededInitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+            var secondDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
+            var replacementInitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+
+            releaseDisposal.TrySetResult(true);
+            await Task.WhenAll(firstDisposal, secondDisposal);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await supersededInitialization);
+            await replacementInitialization;
+
+            Assert.Equal(2, Volatile.Read(ref createCount));
+            Assert.Equal(1, Volatile.Read(ref disposeCount));
+            Assert.NotNull(__SingletonDIHost__.Resolve<IReplacementSupersededService>());
+        }
+        finally
+        {
+            releaseDisposal.TrySetResult(true);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
     public async Task InitializeAsync_FailedInitializationCanRetry()
     {
         await TestGate.WaitAsync();
@@ -316,6 +436,22 @@ public sealed class SingletonDIInitializerTests
     }
 
     private sealed class OverlapService : IOverlapService
+    {
+    }
+
+    private interface ISupersededService
+    {
+    }
+
+    private sealed class SupersededService : ISupersededService
+    {
+    }
+
+    private interface IReplacementSupersededService
+    {
+    }
+
+    private sealed class ReplacementSupersededService : IReplacementSupersededService
     {
     }
 
