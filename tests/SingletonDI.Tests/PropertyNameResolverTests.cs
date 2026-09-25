@@ -1124,36 +1124,6 @@ public class PropertyNameResolverTests
         }
     }
 
-    [Fact]
-    public void NestedConsumerReportsNonPartialContainingType()
-    {
-        var compilation = CreateCompilation(
-            """
-            using SingletonDI.Attributes;
-
-            public class Outer
-            {
-                [SingletonDIConsume(typeof(Service))]
-                public partial struct Consumer
-                {
-                }
-            }
-
-            [SingletonDIProvide]
-            public class Service
-            {
-            }
-            """);
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
-
-        driver.RunGeneratorsAndUpdateCompilation(
-            compilation,
-            out _,
-            out var generatorDiagnostics);
-
-        Assert.Contains(generatorDiagnostics, diagnostic => diagnostic.Id == "DM0026");
-    }
-
     #region Helper Methods
 
     /// <summary>

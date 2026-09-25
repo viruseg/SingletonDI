@@ -419,6 +419,72 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0026_NestedConsumerRequiresPartialContainingType()
+    {
+        // DM0026 is the one diagnostic that had no dedicated test: it was asserted with a single
+        // id check buried in the property-name test file, so its severity, title, message and
+        // location were never pinned.
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                public class Outer
+                {
+                    [SingletonDIConsume(typeof(Service))]
+                    public partial struct Consumer
+                    {
+                    }
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        var dm0026 = Assert.Single(result.Diagnostics, diagnostic => diagnostic.Id == "DM0026");
+        Assert.Equal(DiagnosticSeverity.Error, dm0026.Severity);
+        Assert.Equal("Consumer containing type is not partial", dm0026.Descriptor.Title);
+        Assert.Equal("Containing type 'Outer' of a nested consumer must be partial.", dm0026.GetMessage());
+        Assert.True(dm0026.Location.IsInSource);
+    }
+
+    [Fact]
+    public void DM0026_NotReportedWhenContainingTypeIsPartial()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                public partial class Outer
+                {
+                    [SingletonDIConsume(typeof(Service))]
+                    public partial struct Consumer
+                    {
+                    }
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0026");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void ProviderInheritsConsumeDependenciesFromBaseType()
     {
         // SingletonDIConsumeAttribute is Inherited = true. GetAttributes only reports directly
