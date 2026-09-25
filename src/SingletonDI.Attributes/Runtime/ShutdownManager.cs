@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SingletonDI.Generated;
@@ -236,9 +237,16 @@ internal sealed class ShutdownManager : IDisposable
         try
         {
             var disposeTask = GetDisposeTask();
+
+            // The delay is raced against disposal, so a shutdown that finishes promptly would
+            // otherwise leave the timer rooted in the TimerQueue until it fires. Cancelling the
+            // source releases it as soon as the race is decided.
+            using var timeout = new CancellationTokenSource();
             var completedTask = await Task.WhenAny(
                 disposeTask,
-                Task.Delay(_shutdownTimeout)).ConfigureAwait(false);
+                Task.Delay(_shutdownTimeout, timeout.Token)).ConfigureAwait(false);
+            timeout.Cancel();
+
             if (completedTask == disposeTask)
             {
                 await disposeTask.ConfigureAwait(false);
