@@ -698,29 +698,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         return identity.ToDiagnosticString();
     }
 
-    private static string FormatCycle(
-        ImmutableArray<string> cycle,
-        IReadOnlyCollection<ProviderModel> providers)
-    {
-        var providersByName = providers
-            .GroupBy(provider => provider.FullyQualifiedName, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        var includeAssemblyNames = providers.Any(provider => !provider.Location.IsInSource);
-        return string.Join(
-            " -> ",
-            cycle.Select(cycleName =>
-            {
-                if (!providersByName.TryGetValue(cycleName, out var provider))
-                {
-                    return cycleName;
-                }
-
-                return includeAssemblyNames || !provider.Location.IsInSource
-                    ? FormatProviderName(provider)
-                    : provider.FullyQualifiedName;
-            }));
-    }
-
     private static string FormatProviderName(ProviderModel provider)
     {
         return provider.Location.IsInSource
@@ -778,16 +755,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 string.Equals(options.OutputType, "WinExe", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(options.OutputType, "ConsoleApplication", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(options.OutputType, "WindowsApplication", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool IsExecutable(GeneratorOptions options, Compilation compilation)
-    {
-        if (!string.IsNullOrWhiteSpace(options.OutputType))
-        {
-            return IsExecutable(options);
-        }
-
-        return compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication;
     }
 
     private static void ReportLanguageDiagnostics(
