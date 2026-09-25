@@ -1,6 +1,8 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 using SingletonDI.Refactoring;
 using Xunit;
 
@@ -893,6 +895,150 @@ public class CodeFixProviderTests
     {
         var codeFixProvider = new SingletonDIProviderCodeFixProvider();
         await VerifyCodeFixAsync(testSource, expectedSource, diagnosticId, codeFixProvider);
+    }
+
+    [Fact]
+    public async Task DM0010_FixAllChangesDoNotOverlap()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class ServiceA
+            {
+            }
+
+            [SingletonDIProvide]
+            public class ServiceB
+            {
+            }
+
+            [SingletonDIConsume(typeof(ServiceA), typeof(ServiceA))]
+            public partial class FirstConsumer
+            {
+            }
+
+            [SingletonDIConsume(typeof(ServiceB), typeof(ServiceB))]
+            public partial class SecondConsumer
+            {
+            }
+            """;
+
+        var changes = await CodeFixTestHarness.GetFixAllTextChangesAsync(
+            source,
+            "DM0010",
+            new SingletonDIConsumerCodeFixProvider());
+
+        Assert.Equal(2, changes.Length);
+        AssertNoOverlap(changes);
+    }
+
+    [Fact]
+    public async Task DM0007_FixAllChangesDoNotOverlap()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class Service
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public class FirstConsumer
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public class SecondConsumer
+            {
+            }
+            """;
+
+        var changes = await CodeFixTestHarness.GetFixAllTextChangesAsync(
+            source,
+            "DM0007",
+            new SingletonDIPartialCodeFixProvider());
+
+        Assert.Equal(2, changes.Length);
+        AssertNoOverlap(changes);
+    }
+
+    [Fact]
+    public async Task DM0004_FixAllChangesDoNotOverlap()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class FirstService
+            {
+                private FirstService()
+                {
+                }
+            }
+
+            [SingletonDIProvide]
+            public class SecondService
+            {
+                private SecondService()
+                {
+                }
+            }
+            """;
+
+        var changes = await CodeFixTestHarness.GetFixAllTextChangesAsync(
+            source,
+            "DM0004",
+            new SingletonDIProviderCodeFixProvider());
+
+        Assert.Equal(2, changes.Length);
+        AssertNoOverlap(changes);
+    }
+
+    [Fact]
+    public async Task DM0010_FixAllChangesDoNotOverlapForTwoDuplicatePairsInOneAttribute()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class ServiceA
+            {
+            }
+
+            [SingletonDIProvide]
+            public class ServiceB
+            {
+            }
+
+            [SingletonDIConsume(typeof(ServiceA), typeof(ServiceA), typeof(ServiceB), typeof(ServiceB))]
+            public partial class Consumer
+            {
+            }
+            """;
+
+        var changes = await CodeFixTestHarness.GetFixAllTextChangesAsync(
+            source,
+            "DM0010",
+            new SingletonDIConsumerCodeFixProvider());
+
+        Assert.Equal(2, changes.Length);
+        AssertNoOverlap(changes);
+    }
+
+    private static void AssertNoOverlap(ImmutableArray<TextChange> changes)
+    {
+        var ordered = changes
+            .OrderBy(change => change.Span.Start)
+            .ThenBy(change => change.Span.End)
+            .ToArray();
+        for (var index = 1; index < ordered.Length; index++)
+        {
+            Assert.True(
+                ordered[index - 1].Span.End <= ordered[index].Span.Start,
+                $"Fix-all changes overlap: [{ordered[index - 1].Span}] and [{ordered[index].Span}].");
+        }
     }
 
     private static async Task VerifyConsumerCodeFixAsync(string testSource, string expectedSource, string diagnosticId)

@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using SingletonDI.Generator;
+using Xunit;
 
 namespace SingletonDI.Tests;
 
@@ -21,41 +22,9 @@ internal static class CodeFixTestHarness
         CodeFixProvider provider,
         string expectedTitle)
     {
-        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
-        var references = CreateReferences();
-        var compilation = CSharpCompilation.Create(
-            "CodeFixTestAssembly",
-            [CSharpSyntaxTree.ParseText(source, parseOptions)],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(
-            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
-            additionalTexts: Array.Empty<AdditionalText>(),
-            parseOptions: parseOptions,
-            optionsProvider: null,
-            driverOptions: new GeneratorDriverOptions(
-                IncrementalGeneratorOutputKind.None,
-                trackIncrementalGeneratorSteps: false,
-                baseDirectory: null));
-        driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var generatorDiagnostics);
-        var diagnostic = generatorDiagnostics.Single(item => item.Id == diagnosticId);
-
-        var workspace = new AdhocWorkspace();
-        var projectId = ProjectId.CreateNewId("CodeFixTestProject");
-        var documentId = DocumentId.CreateNewId(projectId, "Source.cs");
-        var projectInfo = ProjectInfo.Create(
-                projectId,
-                VersionStamp.Create(),
-                "CodeFixTestProject",
-                "CodeFixTestAssembly",
-                LanguageNames.CSharp)
-            .WithMetadataReferences(references)
-            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
-            .WithParseOptions(parseOptions);
-        var solution = workspace.CurrentSolution
-            .AddProject(projectInfo)
-            .AddDocument(documentId, "Source.cs", SourceText.From(source));
-        var document = solution.GetDocument(documentId)!;
+        var workspace = await CreateWorkspaceAsync(source, diagnosticId);
+        var document = workspace.Document;
+        var diagnostic = Assert.Single(workspace.Diagnostics);
         var registeredActions = ImmutableArray.CreateBuilder<CodeAction>();
         var context = new CodeFixContext(
             document,
@@ -78,9 +47,107 @@ internal static class CodeFixTestHarness
 
         var operations = await action.GetOperationsAsync(CancellationToken.None);
         var operation = operations.Single();
-        operation.Apply(workspace, CancellationToken.None);
-        var changedDocument = workspace.CurrentSolution.GetDocument(documentId)!;
+        operation.Apply(workspace.Workspace, CancellationToken.None);
+        var changedDocument = workspace.Workspace.CurrentSolution.GetDocument(document.Id)!;
         return new CodeFixApplicationResult(changedDocument, action, registeredActions.ToImmutable());
+    }
+
+    /// <summary>
+    /// Produces the text changes that a fix-all run would have to merge for every
+    /// diagnostic of <paramref name="diagnosticId"/> in the document.
+    /// </summary>
+    /// <remarks>
+    /// The batch fixer itself is internal Roslyn API and cannot be executed from a test.
+    /// Non-overlapping changes are the precondition it needs to apply all fixes in one
+    /// pass, so this is the property the tests can assert.
+    /// </remarks>
+    internal static async Task<ImmutableArray<TextChange>> GetFixAllTextChangesAsync(
+        string source,
+        string diagnosticId,
+        CodeFixProvider provider)
+    {
+        var workspace = await CreateWorkspaceAsync(source, diagnosticId);
+        var document = workspace.Document;
+        var registered = new List<(CodeAction Action, Diagnostic Diagnostic)>();
+
+        foreach (var diagnostic in workspace.Diagnostics)
+        {
+            var context = new CodeFixContext(
+                document,
+                diagnostic,
+                (action, fixedDiagnostics) => registered.Add((action, fixedDiagnostics.Single())),
+                CancellationToken.None);
+            await provider.RegisterCodeFixesAsync(context);
+        }
+
+        var changes = ImmutableArray.CreateBuilder<TextChange>();
+        foreach (var (action, _) in registered)
+        {
+            var operations = await action.GetOperationsAsync(CancellationToken.None);
+            var applyChanges = operations.OfType<ApplyChangesOperation>().SingleOrDefault();
+            if (applyChanges is null)
+            {
+                throw new InvalidOperationException(
+                    $"Code fix '{action.Title}' did not produce a single document change.");
+            }
+
+            var changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
+            if (changedDocument is null)
+            {
+                throw new InvalidOperationException(
+                    $"Code fix '{action.Title}' did not change the source document.");
+            }
+
+            changes.AddRange(await changedDocument.GetTextChangesAsync(document));
+        }
+
+        Assert.NotEmpty(changes);
+        return changes.ToImmutable();
+    }
+
+    private static async Task<CodeFixWorkspace> CreateWorkspaceAsync(
+        string source,
+        string diagnosticId)
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var references = CreateReferences();
+        var compilation = CSharpCompilation.Create(
+            "CodeFixTestAssembly",
+            [CSharpSyntaxTree.ParseText(source, parseOptions)],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: false,
+                baseDirectory: null));
+        driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out var generatorDiagnostics);
+        var diagnostics = generatorDiagnostics
+            .Where(item => item.Id == diagnosticId)
+            .ToImmutableArray();
+
+        var workspace = new AdhocWorkspace();
+        var projectId = ProjectId.CreateNewId("CodeFixTestProject");
+        var documentId = DocumentId.CreateNewId(projectId, "Source.cs");
+        var projectInfo = ProjectInfo.Create(
+                projectId,
+                VersionStamp.Create(),
+                "CodeFixTestProject",
+                "CodeFixTestAssembly",
+                LanguageNames.CSharp)
+            .WithMetadataReferences(references)
+            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary))
+            .WithParseOptions(parseOptions);
+        var solution = workspace.CurrentSolution
+            .AddProject(projectInfo)
+            .AddDocument(documentId, "Source.cs", SourceText.From(source));
+        var document = solution.GetDocument(documentId)!;
+        await document.GetSyntaxRootAsync();
+        return new CodeFixWorkspace(workspace, document, diagnostics);
     }
 
     private static IReadOnlyList<MetadataReference> CreateReferences()
@@ -111,4 +178,9 @@ internal static class CodeFixTestHarness
 
         return references;
     }
+
+    private sealed record CodeFixWorkspace(
+        AdhocWorkspace Workspace,
+        Document Document,
+        ImmutableArray<Diagnostic> Diagnostics);
 }
