@@ -676,6 +676,69 @@ public sealed class SingletonDIInitializerTests
     {
     }
 
+    [Fact]
+    public async Task InitializeAsync_DoesNotHoldProcessLockWhileRunningProviderCode()
+    {
+        // A provider factory is user code and may take seconds - a database or HTTP connect is
+        // ordinary. Holding the process-wide lifecycle lock across it blocked every other lifecycle
+        // call in the process, stalled the main thread inside AppDomain.ProcessExit, and would
+        // deadlock against a factory that starts a thread which does not flow the execution context.
+        await TestGate.WaitAsync();
+        var factoryEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFactory = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.RegisterProvider<IBlockedFactoryService, BlockedFactoryService>(
+                () =>
+                {
+                    factoryEntered.TrySetResult(true);
+                    releaseFactory.Task.GetAwaiter().GetResult();
+                    return new BlockedFactoryService();
+                },
+                Array.Empty<Type>(),
+                null,
+                null,
+                null);
+
+            // The factory blocks its caller, so initialization runs off the test thread. Reaching
+            // this point proves the registry is already in its Initializing state.
+            var initialization = Task.Run(
+                () => SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false));
+            await factoryEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Only the synchronous part of the call is under test: whether taking the process-wide
+            // lifecycle lock has to wait for the factory that is currently running. Awaiting the
+            // returned ValueTask would instead wait for the pending initialization, which is correct
+            // in both revisions and would tell us nothing.
+            var disposeCall = Task.Run(() => SingletonDIInitializer.DisposeAsync());
+            var returnedInTime = await Task.WhenAny(disposeCall, Task.Delay(TimeSpan.FromSeconds(5)))
+                == disposeCall;
+
+            releaseFactory.TrySetResult(true);
+            Assert.True(
+                returnedInTime,
+                "DisposeAsync() blocked on the lifecycle lock while a provider factory was running.");
+            await initialization.WaitAsync(TimeSpan.FromSeconds(5));
+            await (await disposeCall).AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            releaseFactory.TrySetResult(true);
+            await SingletonDIInitializer.DisposeAsync();
+            TestGate.Release();
+        }
+    }
+
+    private interface IBlockedFactoryService
+    {
+    }
+
+    private sealed class BlockedFactoryService : IBlockedFactoryService
+    {
+    }
+
     private interface IOverlapService
     {
     }

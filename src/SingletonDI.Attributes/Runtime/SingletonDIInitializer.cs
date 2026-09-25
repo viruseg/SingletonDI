@@ -35,7 +35,6 @@ public static class SingletonDIInitializer
     /// </exception>
     public static Task InitializeAsync(bool registerShutdownHandlers = true)
     {
-        Task initializationTask;
         Task? pendingDisposal;
         QueuedInitialization? queuedInitialization = null;
         long lifecycleVersion;
@@ -46,19 +45,18 @@ public static class SingletonDIInitializer
             lifecycleVersion = _lifecycleVersion;
             if (pendingDisposal is not null)
             {
-                if (_queuedInitialization is null)
-                {
-                    queuedInitialization = new QueuedInitialization();
-                    _queuedInitialization = queuedInitialization;
-                }
-
-                initializationTask = _queuedInitialization.Task;
-            }
-            else
-            {
-                initializationTask = Registry.InitializeAsync();
+                queuedInitialization = _queuedInitialization ??= new QueuedInitialization();
             }
         }
+
+        // Deliberately outside the lock. This call creates every provider instance and runs the
+        // synchronous prefix of every initializer, so holding a process-wide lock across it would
+        // block every other lifecycle call in the process for the duration, stall the main thread
+        // inside AppDomain.ProcessExit, and deadlock against a factory that starts a thread which
+        // does not flow the execution context. The registry serializes the start on its own state.
+        var initializationTask = queuedInitialization is not null
+            ? queuedInitialization.Task
+            : Registry.InitializeAsync();
 
         if (queuedInitialization is not null)
         {
@@ -112,7 +110,6 @@ public static class SingletonDIInitializer
     public static ValueTask DisposeAsync()
     {
         TaskCompletionSource<object?> completion;
-        Task registryDisposalTask;
         long lifecycleVersion;
 
         lock (Sync)
@@ -129,10 +126,34 @@ public static class SingletonDIInitializer
             }
 
             lifecycleVersion = ++_lifecycleVersion;
-            registryDisposalTask = Registry.DisposeAsync().AsTask();
             completion = new TaskCompletionSource<object?>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             _disposeTask = completion.Task;
+        }
+
+        // Outside the lock for the same reason as InitializeAsync: this invokes provider disposers.
+        // A disposal that starts in between is handled by the registry, which queues an
+        // initialization behind it rather than running concurrently.
+        Task registryDisposalTask;
+        try
+        {
+            registryDisposalTask = Registry.DisposeAsync().AsTask();
+        }
+        catch (Exception exception)
+        {
+            // The registry rejects reentrant lifecycle calls synchronously. Release the state
+            // claimed above, and fault the task rather than leaving it pending forever, so a
+            // caller that already took it fails fast instead of waiting on a task nothing completes.
+            lock (Sync)
+            {
+                if (ReferenceEquals(_disposeTask, completion.Task))
+                {
+                    _disposeTask = null;
+                }
+            }
+
+            completion.TrySetException(exception);
+            return new ValueTask(completion.Task);
         }
 
         _ = CompleteDisposalAsync(registryDisposalTask, completion, lifecycleVersion);
@@ -167,19 +188,20 @@ public static class SingletonDIInitializer
         try
         {
             await disposalTask.ConfigureAwait(false);
-            Task initializationTask;
+
+            bool invalidated;
             lock (Sync)
             {
-                if (queuedInitialization.IsInvalidated)
-                {
-                    throw new InvalidOperationException(
-                        "Initialization was superseded by a disposal request.");
-                }
-
-                initializationTask = Registry.InitializeAsync();
+                invalidated = queuedInitialization.IsInvalidated;
             }
 
-            await initializationTask.ConfigureAwait(false);
+            if (invalidated)
+            {
+                throw new InvalidOperationException(
+                    "Initialization was superseded by a disposal request.");
+            }
+
+            await Registry.InitializeAsync().ConfigureAwait(false);
             queuedInitialization.Completion.TrySetResult(null);
         }
         catch (Exception exception)
