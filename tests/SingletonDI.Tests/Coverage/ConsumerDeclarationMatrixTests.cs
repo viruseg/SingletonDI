@@ -809,8 +809,8 @@ public sealed partial class ConsumerDeclarationMatrixTests
             }
             """,
             new SupportedExpectation(),
-            [ConsumerProperty],
-            ["namespace "]),
+            [ConsumerProperty, "partial class Consumer"],
+            ["namespace", "namespace ;", "namespace App", "namespace App;"]),
         new(
             "CONS-NSM-04",
             "CONSUMER_NAMESPACE",
