@@ -62,9 +62,7 @@ internal static class DeclarationCaseVerifier
 
         Assert.True(
             result.CompilerErrors.IsEmpty,
-            $"{declarationCase.Id} ({declarationCase.Variant}): the source itself does not compile, " +
-            $"so the row proves nothing. Compiler errors:{Environment.NewLine}" +
-            $"{string.Join(Environment.NewLine, result.CompilerErrors.Select(error => error.ToString()))}");
+            FormatCompilerErrors(declarationCase, result));
 
         AssertFragments(declarationCase, result, mustBePresent: true);
         AssertFragments(declarationCase, result, mustBePresent: false);
@@ -197,6 +195,42 @@ internal static class DeclarationCaseVerifier
         "CONDITIONAL_COMPILATION" => "COND",
         _ => throw new InvalidOperationException($"Unknown axis {axis}."),
     };
+
+    private static string FormatCompilerErrors(
+        DeclarationCase declarationCase,
+        MatrixRunResult result)
+    {
+        var sourceErrors = result.CompilerErrors
+            .Where(error => !IsInGeneratedFile(error))
+            .ToImmutableArray();
+        var generatedErrors = result.CompilerErrors
+            .Where(IsInGeneratedFile)
+            .ToImmutableArray();
+
+        if (generatedErrors.IsEmpty)
+        {
+            return $"{declarationCase.Id} ({declarationCase.Variant}): the row's own source does not " +
+                   $"compile, so the row proves nothing. Compiler errors in the row's own source:" +
+                   Environment.NewLine + Format(sourceErrors);
+        }
+
+        var headline = sourceErrors.IsEmpty
+            ? "the row's own source compiled, but the generated code does not, so the row is pointing at a " +
+              "generator defect and must not be edited"
+            : "the row's own source does not compile either, so the row proves nothing on both counts";
+        return $"{declarationCase.Id} ({declarationCase.Variant}): {headline}. " +
+               $"Compiler errors in generated files:" + Environment.NewLine + Format(generatedErrors) +
+               (sourceErrors.IsEmpty
+                   ? string.Empty
+                   : Environment.NewLine + "Compiler errors in the row's own source:" + Environment.NewLine +
+                     Format(sourceErrors));
+    }
+
+    private static string Format(ImmutableArray<Diagnostic> errors) =>
+        string.Join(Environment.NewLine, errors.Select(error => error.ToString()));
+
+    private static bool IsInGeneratedFile(Diagnostic diagnostic) =>
+        !string.IsNullOrEmpty(diagnostic.Location.SourceTree?.FilePath);
 
     private static void AssertFragments(
         DeclarationCase declarationCase,

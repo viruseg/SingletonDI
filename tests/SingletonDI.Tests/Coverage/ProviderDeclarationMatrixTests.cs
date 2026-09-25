@@ -1158,7 +1158,7 @@ public sealed partial class ProviderDeclarationMatrixTests
             }
             """,
             new SilentlyIgnoredExpectation(),
-            [],
+            [ServiceFactory],
             [InitializerCall]),
         new(
             "PROV-INI-14",
@@ -1178,7 +1178,7 @@ public sealed partial class ProviderDeclarationMatrixTests
             }
             """,
             new SilentlyIgnoredExpectation(),
-            [],
+            [ServiceFactory],
             [InitializerCall]),
         new(
             "PROV-INI-15",
@@ -1202,12 +1202,12 @@ public sealed partial class ProviderDeclarationMatrixTests
             }
             """,
             new SilentlyIgnoredExpectation(),
-            [],
+            [ServiceFactory],
             [InitializerCall]),
         new(
             "PROV-INI-16",
             "PROVIDER_INITIALIZER",
-            "initializer as an explicit interface implementation",
+            "explicit interface implementation, rejected as an inaccessible initializer",
             """
             using System.Threading.Tasks;
             using SingletonDI.Attributes;
@@ -1226,9 +1226,9 @@ public sealed partial class ProviderDeclarationMatrixTests
                 }
             }
             """,
-            new SilentlyIgnoredExpectation(),
+            new RejectedExpectation(["DM0005"]),
             [],
-            [InitializerCall]),
+            [ServiceFactory]),
         new(
             "PROV-INI-17",
             "PROVIDER_INITIALIZER",
