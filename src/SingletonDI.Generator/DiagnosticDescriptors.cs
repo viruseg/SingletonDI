@@ -272,6 +272,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0030: An aliased service type cannot be represented in generated source.
+    /// </summary>
+    public static readonly DiagnosticDescriptor AliasedServiceTypeNotSupported = Create(
+        "DM0030",
+        "Aliased service type is not supported",
+        "Service type '{0}' uses an extern alias that cannot be represented in generated SingletonDI source.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

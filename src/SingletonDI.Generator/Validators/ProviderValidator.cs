@@ -177,6 +177,15 @@ internal static class ProviderValidator
             return null;
         }
 
+        if (serviceType is not null && HasAliasQualifiedType(provideAttribute))
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.AliasedServiceTypeNotSupported,
+                GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
+                GetTypeDisplayName(serviceType, location)));
+            return null;
+        }
+
         if (serviceType is INamedTypeSymbol { IsUnboundGenericType: true })
         {
             reportDiagnostic(Diagnostic.Create(
@@ -446,6 +455,18 @@ internal static class ProviderValidator
         }
 
         return (propertyName, propertyNameLocation);
+    }
+
+    private static bool HasAliasQualifiedType(AttributeData attribute)
+    {
+        var attributeSyntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+        return attributeSyntax?
+            .DescendantNodes()
+            .OfType<TypeOfExpressionSyntax>()
+            .Any(typeOfExpression => typeOfExpression.Type
+                .DescendantNodesAndSelf()
+                .OfType<AliasQualifiedNameSyntax>()
+                .Any()) == true;
     }
 
     private static ITypeSymbol? GetServiceType(AttributeData provideAttribute)

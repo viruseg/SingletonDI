@@ -1316,6 +1316,85 @@ public sealed class GeneratorCompositionTests
         return RunGenerator(appCompilation, compositionRoot: true);
     }
 
+    [Fact]
+    public void AliasedProviderServiceTypeIsRejected()
+    {
+        var contractsCompilation = CSharpCompilation.Create(
+            "AliasContracts",
+            [CSharpSyntaxTree.ParseText(
+                "namespace AliasContracts { public interface IAliasService { } }",
+                ParseOptions)],
+            CreateReferences([], null),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var contractReference = MetadataReference.CreateFromImage(
+            EmitImage(contractsCompilation),
+            MetadataReferenceProperties.Assembly.WithAliases(new[] { "AliasContract" }));
+        var source = """
+            extern alias AliasContract;
+
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide(ServiceType = typeof(AliasContract::AliasContracts.IAliasService))]
+                public sealed class AliasProvider : AliasContract::AliasContracts.IAliasService
+                {
+                }
+            }
+            """;
+        var compilation = CreateCompilation(
+            "AliasProviderApp",
+            source,
+            [contractReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var result = RunGenerator(compilation, compositionRoot: false);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0030");
+
+        Assert.Equal("Aliased service type is not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("IAliasService", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id is "CS0400" or "CS0311");
+    }
+
+    [Fact]
+    public void AliasedConsumerDependencyIsRejected()
+    {
+        var contractsCompilation = CSharpCompilation.Create(
+            "AliasContracts",
+            [CSharpSyntaxTree.ParseText(
+                "namespace AliasContracts { public interface IAliasService { } }",
+                ParseOptions)],
+            CreateReferences([], null),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var contractReference = MetadataReference.CreateFromImage(
+            EmitImage(contractsCompilation),
+            MetadataReferenceProperties.Assembly.WithAliases(new[] { "AliasContract" }));
+        var source = """
+            extern alias AliasContract;
+
+            using SingletonDI.Attributes;
+
+            [SingletonDIConsume(typeof(AliasContract::AliasContracts.IAliasService))]
+            public partial class AliasConsumer
+            {
+            }
+            """;
+        var compilation = CreateCompilation(
+            "AliasConsumerApp",
+            source,
+            [contractReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var result = RunGenerator(compilation, compositionRoot: false);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0030");
+
+        Assert.Equal("Aliased service type is not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("IAliasService", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id is "CS0400" or "CS0311");
+    }
+
     private static CompositionRunResult RunSingleCompilation(
         string source,
         bool compositionRoot,

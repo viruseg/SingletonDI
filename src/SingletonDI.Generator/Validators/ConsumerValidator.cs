@@ -108,6 +108,22 @@ internal static class ConsumerValidator
         }
 
         var consumeAttributeSyntax = consumeAttribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+        var aliasQualifiedType = consumeAttributeSyntax?
+            .DescendantNodes()
+            .OfType<TypeOfExpressionSyntax>()
+            .FirstOrDefault(typeOfExpression => typeOfExpression.Type
+                .DescendantNodesAndSelf()
+                .OfType<AliasQualifiedNameSyntax>()
+                .Any());
+        if (aliasQualifiedType is not null)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.AliasedServiceTypeNotSupported,
+                aliasQualifiedType.GetLocation(),
+                aliasQualifiedType.Type.ToString()));
+            return null;
+        }
+
         var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
         var dependencyTypes = GetTypeArguments(consumeAttribute, argumentLocations);
 
