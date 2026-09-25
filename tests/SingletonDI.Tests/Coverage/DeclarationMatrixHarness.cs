@@ -94,9 +94,12 @@ internal static class DeclarationMatrixHarness
         var errors = output.GetDiagnostics()
             .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .ToImmutableArray();
-        var generatorErrorIds = errors
+        var generatorErrorIds = generatorDiagnostics
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .Where(diagnostic => diagnostic.Descriptor.Category == "SingletonDI")
             .Select(diagnostic => diagnostic.Id)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(id => id, StringComparer.Ordinal)
             .ToImmutableArray();
         var compilerErrors = errors
             .Where(diagnostic => diagnostic.Descriptor.Category != "SingletonDI")

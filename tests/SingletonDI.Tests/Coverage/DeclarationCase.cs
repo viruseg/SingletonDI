@@ -47,9 +47,7 @@ internal static class DeclarationCaseVerifier
 
         var expectedIds = (declarationCase.Expectation as RejectedExpectation)?.Ids
                          ?? ImmutableArray<string>.Empty;
-        var actualIds = result.GeneratorDiagnostics
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .Select(diagnostic => diagnostic.Id)
+        var actualIds = result.GeneratorErrorIds
             .Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.Ordinal)
             .ToImmutableArray();
