@@ -26,8 +26,16 @@ SingletonDI/
 - **Build solution:** `dotnet build SingletonDI.slnx --configuration Release`
 - **Build generator:** `dotnet build src/SingletonDI.Generator/SingletonDI.Generator.csproj`
 - **Run sample:** `dotnet run --project src/SingletonDI.SampleApp/SingletonDI.SampleApp.csproj`
-- **Test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --no-restore --nologo`
-- **Focused test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --filter "FullyQualifiedName~TestClass.TestMethod" --no-restore --nologo`
+- **Test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --no-restore --nologo --logger "console;verbosity=minimal" --blame-hang --blame-hang-timeout 300s --blame-hang-dump-type mini`
+- **Focused test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --filter "FullyQualifiedName~TestClass.TestMethod" --no-restore --nologo --logger "console;verbosity=minimal" --blame-hang --blame-hang-timeout 300s --blame-hang-dump-type mini`
+
+`--blame-hang` is mandatory, not optional: without it a stuck `testhost` never exits and the agent session has to be
+unblocked by hand. When it fires, the output names the test that hung and a dump is written under
+`tests/SingletonDI.Tests/TestResults`. Raise `--blame-hang-timeout` only after checking how long a legitimate cold
+run takes; three target frameworks are tested per invocation.
+
+The test suite takes several minutes because it packs the runtime and builds it against SDK 8, 9, and 10. Give the
+command a tool timeout well above that instead of raising the blame timeout.
 
 ## Important characteristics
 
@@ -50,5 +58,6 @@ SingletonDI/
 
 - Use `GeneratorTestResult` for compilation and diagnostic assertions.
 - Use `CodeFixTestHarness` and `RefactoringTestHarness` for real code-action and refactoring pipelines.
+- Start child `dotnet` processes only through `DotnetProcessRunner` so a stuck build cannot hang the test run.
 - Assert exact diagnostic IDs, severity, locations, messages, and generated compilation results.
 - Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 8, 9, and 10.

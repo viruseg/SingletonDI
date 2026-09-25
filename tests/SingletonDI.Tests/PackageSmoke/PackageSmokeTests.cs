@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Xunit;
 
 namespace SingletonDI.Tests;
@@ -6,6 +5,9 @@ namespace SingletonDI.Tests;
 public sealed class PackageSmokeTests
 {
     private const string PackageVersion = "1.1.0";
+    private const int LockAttempts = 2400;
+    private const int LockLogInterval = 100;
+    private const int LockRetryDelay = 100;
 
     private static readonly (string Directory, string Version)[] SdkDirectories =
     [
@@ -152,7 +154,7 @@ public sealed class PackageSmokeTests
     private static async Task<FileStream> AcquirePackageSmokeLock()
     {
         var lockPath = Path.Combine(Path.GetTempPath(), "SingletonDI.PackageSmokeTests.lock");
-        for (var attempt = 0; attempt < 1800; attempt++)
+        for (var attempt = 1; attempt <= LockAttempts; attempt++)
         {
             try
             {
@@ -164,11 +166,26 @@ public sealed class PackageSmokeTests
             }
             catch (IOException)
             {
-                await Task.Delay(100);
+                // dotnet test runs the target frameworks concurrently, so up to one testhost per framework
+                // queues here. A testhost orphaned by a killed run holds the lock indefinitely instead.
+                if (attempt == LockAttempts)
+                {
+                    break;
+                }
+
+                if (attempt % LockLogInterval == 0)
+                {
+                    Console.WriteLine(
+                        $"Waiting for the package smoke lock at {lockPath}, attempt {attempt}/{LockAttempts}.");
+                }
+
+                await Task.Delay(LockRetryDelay);
             }
         }
 
-        throw new TimeoutException("Timed out waiting for the package smoke test lock.");
+        throw new TimeoutException(
+            $"Timed out after {LockAttempts * LockRetryDelay} ms waiting for the package smoke " +
+            $"lock at {lockPath}. Another test run is still active; close it or delete the lock file.");
     }
 
     private static async Task<ProcessResult> RunDotnetAsync(
@@ -176,38 +193,16 @@ public sealed class PackageSmokeTests
         IReadOnlyList<string> arguments,
         string? nugetPackages = null)
     {
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var environment = nugetPackages is null
+            ? null
+            : new Dictionary<string, string?> { ["NUGET_PACKAGES"] = nugetPackages };
+        var result = await DotnetProcessRunner.RunAsync(
+            workingDirectory,
+            arguments,
+            arguments.Contains("run") ? DotnetProcessRunner.RunTimeout : DotnetProcessRunner.BuildTimeout,
+            environment);
 
-        startInfo.Environment["MSBUILDDISABLENODEREUSE"] = "1";
-        startInfo.Environment.Remove("MSBuildSDKsPath");
-        startInfo.Environment.Remove("MSBuildExtensionsPath");
-        startInfo.Environment.Remove("DOTNET_MSBUILD_SDK_RESOLVER_SDKS_DIR");
-
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        if (nugetPackages is not null)
-        {
-            startInfo.Environment["NUGET_PACKAGES"] = nugetPackages;
-        }
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start dotnet.");
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync();
-        var standardErrorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var output = await standardOutputTask;
-        var error = await standardErrorTask;
-        return new ProcessResult(process.ExitCode, output + error);
+        return new ProcessResult(result.ExitCode, result.Output);
     }
 
     private static string FindRepositoryRoot()

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using Xunit;
@@ -99,32 +98,22 @@ public sealed class PackageContentTests
         string artifactsPath,
         string packagePath)
     {
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add("pack");
-        startInfo.ArgumentList.Add(projectPath);
-        startInfo.ArgumentList.Add("--configuration");
-        startInfo.ArgumentList.Add("Release");
-        startInfo.ArgumentList.Add("--artifacts-path");
-        startInfo.ArgumentList.Add(artifactsPath);
-        startInfo.ArgumentList.Add("--output");
-        startInfo.ArgumentList.Add(packagePath);
-        startInfo.ArgumentList.Add("--nologo");
+        var result = await DotnetProcessRunner.RunAsync(
+            workingDirectory,
+            [
+                "pack",
+                projectPath,
+                "--configuration",
+                "Release",
+                "--artifacts-path",
+                artifactsPath,
+                "--output",
+                packagePath,
+                "--nologo",
+            ],
+            DotnetProcessRunner.BuildTimeout);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start dotnet pack.");
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var output = await outputTask;
-        var error = await errorTask;
-        return (process.ExitCode, output + error);
+        return (result.ExitCode, result.Output);
     }
 
     private static async Task<string> ComputeHashAsync(string path)

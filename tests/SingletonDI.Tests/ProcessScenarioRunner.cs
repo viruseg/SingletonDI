@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using SingletonDI.InterProjectFixtures.RootApp;
 
 namespace SingletonDI.Tests;
@@ -16,30 +15,18 @@ internal static class ProcessScenarioRunner
     {
         var assemblyPath = typeof(Program).Assembly.Location;
         var workingDirectory = Path.GetDirectoryName(assemblyPath)!;
-        var startInfo = new ProcessStartInfo("dotnet")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        startInfo.ArgumentList.Add(assemblyPath);
+        var result = await DotnetProcessRunner.RunAsync(
+            workingDirectory,
+            [assemblyPath],
+            DotnetProcessRunner.RunTimeout);
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Could not start the RootApp fixture process.");
-        var standardOutput = process.StandardOutput.ReadToEndAsync();
-        var standardError = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var output = await standardOutput;
-        var error = await standardError;
-        if (process.ExitCode != 0)
+        if (result.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"RootApp fixture exited with code {process.ExitCode}.{Environment.NewLine}{error}{output}");
+                $"RootApp fixture exited with code {result.ExitCode}.{Environment.NewLine}{result.Output}");
         }
 
-        return Parse(output);
+        return Parse(result.StandardOutput);
     }
 
     private static ProcessScenarioResult Parse(string output)
