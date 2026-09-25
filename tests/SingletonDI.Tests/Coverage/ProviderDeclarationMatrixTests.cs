@@ -856,5 +856,32 @@ public sealed partial class ProviderDeclarationMatrixTests
             new SupportedExpectation(),
             [ServiceFactory],
             []),
+        new(
+            "PROV-CTOR-14",
+            "PROVIDER_CONSTRUCTOR",
+            "required members on the base type without SetsRequiredMembers",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public required string Name { get; set; }
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                    public Service()
+                    {
+                        Name = string.Empty;
+                    }
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0032"]),
+            [],
+            [ServiceFactory]),
     ];
 }
