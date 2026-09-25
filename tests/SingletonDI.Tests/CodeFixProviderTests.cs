@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -1179,6 +1180,47 @@ public class CodeFixProviderTests
     {
         var codeFixProvider = new SingletonDIProviderCodeFixProvider();
         await VerifyCodeFixAsync(testSource, expectedSource, diagnosticId, codeFixProvider);
+    }
+
+    [Fact]
+    public void EveryCodeFixProviderSupportsFixAll()
+    {
+        // A provider whose GetFixAllProvider returns null silently disables fix-all in the IDE.
+        // Nothing asserted that, and AGENTS.md claimed fix-all was covered.
+        foreach (var provider in new CodeFixProvider[]
+                 {
+                     new SingletonDIProviderCodeFixProvider(),
+                     new SingletonDIPartialCodeFixProvider(),
+                     new SingletonDIConsumerCodeFixProvider()
+                 })
+        {
+            Assert.NotNull(provider.GetFixAllProvider());
+        }
+    }
+
+    [Fact]
+    public void EveryCodeFixProviderFixesExactlyTheDiagnosticsTheGeneratorReports()
+    {
+        var fixable = new CodeFixProvider[]
+            {
+                new SingletonDIProviderCodeFixProvider(),
+                new SingletonDIPartialCodeFixProvider(),
+                new SingletonDIConsumerCodeFixProvider()
+            }
+            .SelectMany(provider => provider.FixableDiagnosticIds)
+            .ToImmutableHashSet(StringComparer.Ordinal);
+
+        var reported = typeof(SingletonDI.Generator.DiagnosticDescriptors)
+            .Assembly
+            .GetType("SingletonDI.Generator.DiagnosticDescriptors")!
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.FieldType == typeof(DiagnosticDescriptor))
+            .Select(field => (DiagnosticDescriptor)field.GetValue(null)!)
+            .Select(descriptor => descriptor.Id)
+            .ToImmutableHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(fixable);
+        Assert.All(fixable, id => Assert.Contains(id, reported));
     }
 
     [Fact]

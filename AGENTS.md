@@ -71,7 +71,7 @@ instead of waiting silently for minutes; delete the lock file after confirming n
 
 - Use `GeneratorTestResult` for compilation and diagnostic assertions.
 - Use `CodeFixTestHarness` and `RefactoringTestHarness` for real code-action and refactoring pipelines.
-- `WellKnownFixAllProviders.BatchFixer` is internal Roslyn API and cannot be executed from a test; cover fix-all with `CodeFixTestHarness.GetFixAllTextChangesAsync` and assert that the text changes of one document do not overlap.
+- `WellKnownFixAllProviders.BatchFixer` is internal Roslyn API and cannot be executed from a test; cover fix-all with `CodeFixTestHarness.GetFixAllTextChangesAsync` and assert that the text changes of one document do not overlap. Assert separately that every `CodeFixProvider` returns a non-null `GetFixAllProvider()`, since `null` silently disables fix-all in the IDE.
 - Start child `dotnet` processes only through `DotnetProcessRunner` so a stuck build cannot hang the test run.
 - Assert exact diagnostic IDs, severity, locations, messages, and generated compilation results.
 - Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 10.
