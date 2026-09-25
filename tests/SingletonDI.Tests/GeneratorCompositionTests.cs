@@ -176,7 +176,12 @@ public sealed class GeneratorCompositionTests
                         StringComparison.Ordinal));
             var bootstrap = bootstrapType
                 .GetMethod("Bootstrap", BindingFlags.Public | BindingFlags.Static)!;
-            bootstrap.Invoke(null, null);
+
+            // The idempotency guard is an Interlocked.Exchange, and a provider assembly's module
+            // initializer calls Bootstrap() while a composition root calls it from its own module
+            // initializer - two different threads. Only sequential calls had ever been exercised,
+            // so a lost update would register the provider twice or throw from a module initializer.
+            Parallel.For(0, 64, _ => bootstrap.Invoke(null, null));
             bootstrap.Invoke(null, null);
             using var rootStream = new MemoryStream(rootImage);
             var rootAssembly = loadContext.LoadFromStream(rootStream);
