@@ -762,7 +762,11 @@ public sealed class GeneratorOutputTests
             true);
         var unmarkedProvider = new ProviderAssemblyModel(
             "Unmarked, Version=1.0.0.0",
-            false);
+            false,
+            new ServiceTypeIdentity(
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__Unmarked",
+                "Unmarked, Version=1.0.0.0"),
+            true);
 
         var generated = ProviderModuleEmitter.Generate(
             [localProvider],
@@ -772,14 +776,16 @@ public sealed class GeneratorOutputTests
         Assert.Equal(
             1,
             generated.Split(
-                "global::SingletonDI.Generated.__SingletonDIProviderModule__",
+                "global::SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap();",
                 StringSplitOptions.None).Length - 1);
-        Assert.Contains(
-            "global::SingletonDI.Generated.__SingletonDIProviderModule__",
-            generated);
         Assert.DoesNotContain("RunClassConstructor", generated);
         Assert.DoesNotContain("global::App.LocalService).TypeHandle", generated);
-        Assert.DoesNotContain("global::Unmarked.UnmarkedService", generated);
+
+        // The unmarked assembly does carry a bootstrap type and a public bootstrap method, so this
+        // only holds if the emitter honours the module marker instead of the mere presence of a
+        // bootstrap. Before, the fixture had no bootstrap identity at all and the assertion could
+        // not fail.
+        Assert.DoesNotContain("__SingletonDIProviderModule__Unmarked", generated);
     }
 
     [Fact]
