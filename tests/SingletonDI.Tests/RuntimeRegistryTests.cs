@@ -272,7 +272,8 @@ public sealed class RuntimeRegistryTests
 
             releaseInitializer.TrySetResult(true);
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => initialization);
-            Assert.Equal("initializer failed", exception.Message);
+            Assert.Contains("failed to initialize", exception.Message);
+            Assert.Equal("initializer failed", exception.InnerException?.Message);
             Assert.Equal(1, Volatile.Read(ref disposeCalled));
         }
         finally
@@ -417,6 +418,30 @@ public sealed class RuntimeRegistryTests
         var messages = exception.InnerExceptions.Select(inner => inner.Message).ToArray();
         Assert.Contains("second disposal failed", messages);
         Assert.Contains("third disposal failed", messages);
+    }
+
+    [Fact]
+    public async Task Registry_NamesTheProviderWhoseCreationFailed()
+    {
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IWorkingService, WorkingService>(
+            static () => new WorkingService(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+        registry.RegisterProvider<IFailingCreationService, FailingCreationService>(
+            static () => throw new System.Net.Sockets.SocketException(10061),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => registry.InitializeAsync());
+
+        Assert.Contains(nameof(FailingCreationService), exception.Message);
+        Assert.IsType<System.Net.Sockets.SocketException>(exception.InnerException);
     }
 
     [Fact]
@@ -662,7 +687,8 @@ public sealed class RuntimeRegistryTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => registry.InitializeAsync());
 
-        Assert.Equal("initialization failed", exception.Message);
+        Assert.Contains("failed to initialize", exception.Message);
+        Assert.Equal("initialization failed", exception.InnerException?.Message);
         Assert.Equal(
             new[]
             {
@@ -716,7 +742,8 @@ public sealed class RuntimeRegistryTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => registry.InitializeAsync());
 
-        Assert.Equal("initialization failed", exception.Message);
+        Assert.Contains("failed to initialize", exception.Message);
+        Assert.Equal("initialization failed", exception.InnerException?.Message);
         Assert.Equal(1, rootDisposeCount);
         Assert.Equal(1, middleDisposeCount);
         await registry.DisposeAsync();
@@ -1032,10 +1059,25 @@ public sealed class RuntimeRegistryTests
     {
     }
 
-    private interface ISecondFailingDisposable
+    private interface IWorkingService
     {
     }
 
+    private sealed class WorkingService : IWorkingService
+    {
+    }
+
+    private interface IFailingCreationService
+    {
+    }
+
+    private sealed class FailingCreationService : IFailingCreationService
+    {
+    }
+
+    private interface ISecondFailingDisposable
+    {
+    }
     private sealed class SecondFailingDisposable : ISecondFailingDisposable
     {
     }

@@ -46,18 +46,8 @@ internal sealed class ServiceGraph
                         continue;
                     }
 
-                    try
-                    {
-                        var instance = GetInstance(registration);
-                        var initialization = registration.InitializeAsync(instance)
-                            ?? throw new InvalidOperationException(
-                                $"Initializer for '{GetTypeName(registration.ImplementationType)}' returned null.");
-                        initializers.Add(initialization);
-                    }
-                    catch (Exception exception)
-                    {
-                        initializers.Add(Task.FromException(exception));
-                    }
+                    var instance = GetInstance(registration);
+                    initializers.Add(RunInitializerAsync(registration, instance));
                 }
 
                 if (initializers.Count > 0)
@@ -201,6 +191,31 @@ internal sealed class ServiceGraph
         }
     }
 
+    /// <summary>
+    /// Awaits one provider's initializer and attributes any failure to that provider.
+    /// </summary>
+    /// <remarks>
+    /// A level runs its initializers concurrently and <see cref="Task.WhenAll(Task[])"/> reports a
+    /// single fault, so without this a provider whose initializer threw was reported as a bare
+    /// exception with no indication of which provider in the level was at fault.
+    /// </remarks>
+    private static async Task RunInitializerAsync(ProviderRegistration registration, object instance)
+    {
+        try
+        {
+            var initialization = registration.InitializeAsync!(instance)
+                ?? throw new InvalidOperationException(
+                    $"Initializer for '{GetTypeName(registration.ImplementationType)}' returned null.");
+            await initialization.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Provider '{GetTypeName(registration.ImplementationType)}' failed to initialize.",
+                exception);
+        }
+    }
+
     private void CreateInstances()
     {
         foreach (var level in _levels)
@@ -212,12 +227,28 @@ internal sealed class ServiceGraph
                     continue;
                 }
 
-                var instance = registration.Factory()
-                    ?? throw new InvalidOperationException(
-                        $"Factory for '{GetTypeName(registration.ImplementationType)}' returned null.");
+                var instance = CreateInstance(registration);
                 AddInstance(registration.ImplementationType, instance);
             }
         }
+    }
+
+    private static object CreateInstance(ProviderRegistration registration)
+    {
+        object? instance;
+        try
+        {
+            instance = registration.Factory();
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Provider '{GetTypeName(registration.ImplementationType)}' failed to be created.",
+                exception);
+        }
+
+        return instance ?? throw new InvalidOperationException(
+            $"Factory for '{GetTypeName(registration.ImplementationType)}' returned null.");
     }
 
     private bool IsCreated(Type implementationType)

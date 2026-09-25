@@ -583,7 +583,8 @@ public sealed class SingletonDIInitializerTests
 
             var firstException = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false));
-            Assert.Equal("first initialization failed", firstException.Message);
+            Assert.Contains("failed to initialize", firstException.Message);
+            Assert.Equal("first initialization failed", firstException.InnerException?.Message);
 
             await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
 
