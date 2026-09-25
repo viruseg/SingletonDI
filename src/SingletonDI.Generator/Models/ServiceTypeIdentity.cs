@@ -8,7 +8,7 @@ namespace SingletonDI.Generator.Models;
 /// </summary>
 public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
 {
-    private readonly string? canonicalIdentity;
+    private readonly string canonicalIdentity;
     private readonly string? typeArgumentDisplay;
 
     /// <summary>
@@ -17,7 +17,11 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
     /// <param name="fullyQualifiedName">The fully qualified metadata name of the type.</param>
     /// <param name="assemblyIdentity">The identity of the assembly containing the type.</param>
     public ServiceTypeIdentity(string fullyQualifiedName, string assemblyIdentity)
-        : this(fullyQualifiedName, assemblyIdentity, null, null)
+        : this(
+            fullyQualifiedName,
+            assemblyIdentity,
+            CreateDefaultCanonicalIdentity(fullyQualifiedName, assemblyIdentity),
+            null)
     {
     }
 
@@ -29,7 +33,8 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
     {
         FullyQualifiedName = fullyQualifiedName;
         AssemblyIdentity = assemblyIdentity;
-        this.canonicalIdentity = canonicalIdentity;
+        this.canonicalIdentity = canonicalIdentity ??
+            CreateDefaultCanonicalIdentity(fullyQualifiedName, assemblyIdentity);
         this.typeArgumentDisplay = typeArgumentDisplay;
     }
 
@@ -43,8 +48,15 @@ public readonly struct ServiceTypeIdentity : IEquatable<ServiceTypeIdentity>
     /// </summary>
     public string AssemblyIdentity { get; }
 
-    internal string CanonicalIdentity =>
-        canonicalIdentity ?? CreateDefaultCanonicalIdentity(FullyQualifiedName, AssemblyIdentity);
+    /// <summary>
+    /// Gets the identity that decides whether two service identities denote the same CLR type.
+    /// </summary>
+    /// <remarks>
+    /// Always materialized, never recomputed on demand: this is the hash of a key in every graph
+    /// lookup, and a readonly struct cannot memoize lazily. The default constructor path used to
+    /// rebuild the string on every Equals and GetHashCode, three throwaway strings per probe.
+    /// </remarks>
+    internal string CanonicalIdentity => canonicalIdentity;
 
     /// <summary>
     /// Returns the assembly-qualified diagnostic representation of the type.
