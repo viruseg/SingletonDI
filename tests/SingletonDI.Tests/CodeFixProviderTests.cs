@@ -10,8 +10,12 @@ namespace SingletonDI.Tests;
 
 /// <summary>
 /// Tests for CodeFixProviders in SingletonDI.Refactoring.
-/// These tests verify that code fixes preserve comments, XML documentation, and unrelated members.
 /// </summary>
+/// <remarks>
+/// Every fix is compared on normalized whitespace, so the structural check tolerates the
+/// inconsistent indentation of the fixtures. Comments, documentation and preprocessor directives
+/// are dropped by that comparison and are asserted separately.
+/// </remarks>
 public class CodeFixProviderTests
 {
     [Fact]
@@ -1064,8 +1068,8 @@ public class CodeFixProviderTests
     [Fact]
     public async Task DM0007_AddPartialModifier_WithoutModifiersKeepsRegionDirective()
     {
-        // A stranded #region follows the new modifier, which is CS1040, and the workspace
-        // formatter cannot repair it - the fix would turn a valid file into a broken one.
+        // A #region between the attribute list and the keyword is leading trivia of the keyword,
+        // so it used to end up stranded after the inserted modifier.
         var test = """
                    using SingletonDI.Attributes;
 
@@ -1352,7 +1356,7 @@ public class CodeFixProviderTests
             ExpectedTitle(codeFixProvider, diagnosticId));
 
         var actual = (await document.GetTextAsync()).ToString();
-        Assert.Equal(expectedSource, actual);
+        Assert.Equal(NormalizeNewLines(expectedSource), NormalizeNewLines(actual));
 
         var compilation = await document.Project.GetCompilationAsync();
         Assert.NotNull(compilation);
@@ -1401,10 +1405,44 @@ public class CodeFixProviderTests
         var normalizedExpected = NormalizeWhitespace(expectedSource);
 
         Assert.Equal(normalizedExpected, NormalizeWhitespace(fixedSource));
+        AssertCommentsPreserved(testSource, fixedSource);
         var compilation = await result.Document.Project.GetCompilationAsync();
         Assert.NotNull(compilation);
         Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Id == diagnosticId);
+        Assert.Empty(
+            compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
     }
+
+    /// <summary>
+    /// Asserts that the fix kept every comment, documentation comment and preprocessor directive,
+    /// in order and verbatim.
+    /// </summary>
+    /// <remarks>
+    /// The structural comparison above runs on normalized whitespace, which discards all of them.
+    /// Without this guard a fix could delete a type's XML documentation or push a #region off the
+    /// start of its line and still pass.
+    /// </remarks>
+    private static void AssertCommentsPreserved(string before, string after)
+    {
+        Assert.Equal(Comments(before), Comments(after));
+    }
+
+    private static string[] Comments(string source) =>
+        CSharpSyntaxTree.ParseText(source)
+            .GetRoot()
+            .DescendantTrivia()
+            .Where(IsCommentOrDirective)
+            .Select(trivia => trivia.ToFullString())
+            .ToArray();
+
+    private static bool IsCommentOrDirective(SyntaxTrivia trivia) =>
+        trivia.IsKind(SyntaxKind.SingleLineCommentTrivia)
+        || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia)
+        || trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)
+        || trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia)
+        || trivia.IsKind(SyntaxKind.RegionDirectiveTrivia)
+        || trivia.IsKind(SyntaxKind.EndRegionDirectiveTrivia)
+        || trivia.IsKind(SyntaxKind.PreprocessingMessageTrivia);
 
     private static string NormalizeWhitespace(string source)
     {
@@ -1412,6 +1450,13 @@ public class CodeFixProviderTests
         var root = tree.GetRoot();
         return root.NormalizeWhitespace().ToFullString();
     }
+
+    /// <summary>
+    /// Replaces line endings with a fixed marker so the comparison does not depend on the host
+    /// newline convention - the workspace formatter rewrites trailing trivia in its own style.
+    /// </summary>
+    private static string NormalizeNewLines(string source) =>
+        source.Replace("\r\n", "\n", StringComparison.Ordinal);
 
 #endregion
 }
