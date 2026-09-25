@@ -1622,7 +1622,10 @@ internal sealed class GeneratorTestAnalyzerConfigOptionsProvider : AnalyzerConfi
     public override AnalyzerConfigOptions GetOptions(AdditionalText additionalText) => _options;
 }
 
-internal readonly record struct GeneratorTestOptions(bool IsCompositionRoot, OutputKind OutputKind);
+internal readonly record struct GeneratorTestOptions(
+    bool IsCompositionRoot,
+    OutputKind OutputKind,
+    bool IncludeOutputType = true);
 
 internal sealed class GeneratorTestAnalyzerConfigOptions : AnalyzerConfigOptions
 {
@@ -1633,13 +1636,16 @@ internal sealed class GeneratorTestAnalyzerConfigOptions : AnalyzerConfigOptions
         _values = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["build_property.SingletonDICompositionRoot"] = options.IsCompositionRoot ? "true" : "false",
-            ["build_property.OutputType"] = options.OutputKind switch
+        };
+        if (options.IncludeOutputType)
+        {
+            _values["build_property.OutputType"] = options.OutputKind switch
             {
                 OutputKind.ConsoleApplication => "Exe",
                 OutputKind.WindowsApplication => "WinExe",
                 _ => "Library",
-            },
-        };
+            };
+        }
     }
 
     public override bool TryGetValue(string key, out string value)

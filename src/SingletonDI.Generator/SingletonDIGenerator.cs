@@ -182,7 +182,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             var (((consumerCandidatesForOutput, providerCandidatesForOutput), language), options) = input;
             if (!language.CanEmit ||
                 ((consumerCandidatesForOutput.IsDefault || consumerCandidatesForOutput.IsEmpty) &&
-                 (options.IsCompositionRoot || !IsExecutable(options))))
+                 (options.IsCompositionRoot || (!IsExecutable(options) && !language.IsExecutable))))
             {
                 return;
             }
@@ -191,6 +191,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 consumerCandidatesForOutput,
                 providerCandidatesForOutput,
                 options,
+                IsExecutable(options) || language.IsExecutable,
                 sourceProductionContext);
         });
 
@@ -203,7 +204,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(referencedValidationInputs, (sourceProductionContext, input) =>
         {
             var (((providerCandidatesForValidation, snapshot), language), options) = input;
-            if (!language.CanEmit || options.IsCompositionRoot || !IsExecutable(options))
+            if (!language.CanEmit || options.IsCompositionRoot ||
+                (!IsExecutable(options) && !language.IsExecutable))
             {
                 return;
             }
@@ -463,6 +465,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         ImmutableArray<ConsumerCandidate> consumerCandidates,
         ImmutableArray<ProviderCandidate> providerCandidates,
         GeneratorOptions options,
+        bool isExecutable,
         SourceProductionContext sourceProductionContext)
     {
         var providerModels = GetProviderModels(providerCandidates);
@@ -472,7 +475,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         var customPropertyNames = providerModels
             .ToImmutableDictionary(provider => provider.TypeIdentity, provider => provider.PropertyName);
         var consumerModels = new List<ConsumerModel>();
-        var isExecutable = IsExecutable(options);
 
         foreach (var candidate in consumerCandidates)
         {
@@ -818,7 +820,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
     private readonly record struct LanguageSupport(
         LanguageVersion EffectiveVersion,
-        bool HasFileScopedConsumer)
+        bool HasFileScopedConsumer,
+        bool IsExecutable)
     {
         public bool CanEmit =>
             EffectiveVersion.CompareTo(LanguageVersion.CSharp9) >= 0 &&
@@ -834,7 +837,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     {
         return new LanguageSupport(
             GetEffectiveLanguageVersion(compilation),
-            FindFileScopedConsumerLocation(compilation) is not null);
+            FindFileScopedConsumerLocation(compilation) is not null,
+            compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication);
     }
 
     private static LanguageVersion GetEffectiveLanguageVersion(Compilation compilation)

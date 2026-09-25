@@ -1700,6 +1700,34 @@ public class DiagnosticErrorTests
             item => item.Id == "CS8604");
     }
 
+    [Fact]
+    public void DM0017_UsesCompilationOutputKindWhenOutputTypePropertyIsMissing()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            public interface IExternalService
+            {
+            }
+
+            [SingletonDIConsume(typeof(IExternalService))]
+            public partial class Consumer
+            {
+                public static void Main()
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(
+            source,
+            compositionRoot: false,
+            outputKind: OutputKind.ConsoleApplication,
+            includeOutputTypeProperty: false);
+
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0017");
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         return RunGeneratorWithOutput(source).Diagnostics;
@@ -1716,7 +1744,8 @@ public class DiagnosticErrorTests
     private static GeneratorTestResult RunGeneratorWithOutput(
         string source,
         bool compositionRoot = false,
-        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
+        bool includeOutputTypeProperty = true)
     {
         var compilation = CreateCompilation(source, outputKind);
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
@@ -1726,7 +1755,7 @@ public class DiagnosticErrorTests
                 LanguageVersion.Latest,
                 preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]),
             optionsProvider: new GeneratorTestAnalyzerConfigOptionsProvider(
-                new GeneratorTestOptions(compositionRoot, outputKind)),
+                new GeneratorTestOptions(compositionRoot, outputKind, includeOutputTypeProperty)),
             driverOptions: new GeneratorDriverOptions(
                 IncrementalGeneratorOutputKind.None,
                 trackIncrementalGeneratorSteps: false,
