@@ -1674,6 +1674,32 @@ public class DiagnosticErrorTests
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 
+    [Fact]
+    public void DM0033_NullableInitializerReturnTypeIsRejected()
+    {
+        const string source = """
+            #nullable enable
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public Task? InitializeAsync() => null;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0033");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("Nullable initializer return type is not supported", diagnostic.Descriptor.Title);
+        Assert.Contains("Service", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id == "CS8604");
+    }
+
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         return RunGeneratorWithOutput(source).Diagnostics;

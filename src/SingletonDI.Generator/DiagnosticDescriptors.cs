@@ -302,6 +302,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0033: A provider initializer returns a nullable Task or ValueTask.
+    /// </summary>
+    public static readonly DiagnosticDescriptor NullableInitializerNotSupported = Create(
+        "DM0033",
+        "Nullable initializer return type is not supported",
+        "InitializeAsync on provider '{0}' must return a non-nullable Task or ValueTask.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

@@ -139,6 +139,15 @@ internal static class ProviderValidator
 
         var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol, compilation);
 
+        if (initializeAsyncMethod?.ReturnType.NullableAnnotation == NullableAnnotation.Annotated)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.NullableInitializerNotSupported,
+                initializeAsyncMethod.Locations.FirstOrDefault() ?? declarationLocation,
+                providerDisplayName));
+            return null;
+        }
+
         if (initializeAsyncMethod is { Arity: > 0 })
         {
             reportDiagnostic(Diagnostic.Create(
