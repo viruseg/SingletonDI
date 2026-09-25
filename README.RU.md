@@ -329,6 +329,12 @@ public partial class OrderController { }
 
 При конфликте имён типов (например, `Foo.Bar` и `Baz.Bar`) генерируются имена с префиксом пространства имён.
 
+## Совместимость пакета
+
+Версия `1.1.0` целится в `net10.0`. Упакованные сборки генератора и рефакторинга используют базовую линию Roslyn `4.8` и проверяются на SDK `10.0.401`. Сгенерированный исходный код требует C# 9 или новее; объявления consumer в file-scoped namespace требуют C# 10 или новее.
+
+Пакет размещает сборки генератора и рефакторинга в `analyzers/dotnet/cs`, поэтому они подключаются автоматически через ссылку на пакет `SingletonDI`.
+
 ## API SingletonDIInitializer
 
 Runtime-часть SingletonDI предоставляет общепроцессный класс `SingletonDIInitializer`. Сгенерированные provider-модули регистрируются в этом runtime-реестре, а сгенерированные свойства потребителей разрешают сервисы из него.
@@ -427,6 +433,19 @@ public static async Task Main(string[] args)
 | **DM0018** | Error | No provider for requested service |
 | **DM0019** | Error | Multiple providers for service key |
 | **DM0020** | Error | Provider module marker is missing |
+| **DM0021** | Error | Provider module bootstrap method is missing |
+| **DM0022** | Error | Provider or service type is not accessible from generated code |
+| **DM0023** | Error | Generic `InitializeAsync` methods are not supported |
+| **DM0024** | Error | Open generic dependencies are not supported |
+| **DM0025** | Error | Generated consumer property name already exists |
+| **DM0026** | Error | A containing consumer type must be partial |
+| **DM0027** | Error | Generated source requires C# 9 or later |
+| **DM0028** | Error | File-scoped consumers require C# 10 or later |
+| **DM0029** | Error | File-local consumer is not supported |
+| **DM0030** | Error | Aliased service type is not supported |
+| **DM0031** | Error | Consumer type parameter attributes are not supported |
+| **DM0032** | Error | Provider required members are not supported |
+| **DM0033** | Error | Nullable initializer return type is not supported |
 
 Идентификаторы сервисов и провайдеров в межпроектной диагностике включают содержащую их сборку. Повторные ссылки на одну сборку дедуплицируются, а одинаковые имена типов из разных сборок остаются разными CLR-типами. `DM0019` также выдаётся для конфликтов локальных `ServiceType`-сопоставлений, не только в composition root, и сообщает все конфликтующие identity провайдеров. Диагностика также сообщает о неоднозначности, когда одно полное имя связано с несколькими identity, например локальный `App.Service` и подключённый `App.Service`; assembly identity сохраняются.
 
@@ -611,6 +630,58 @@ public sealed class DatabaseService { }
 ### DM0020: Provider module marker is missing
 
 Возникает, когда подключённая публичная provider-сборка не содержит сгенерированный assembly marker `SingletonDIProviderModuleAttribute`. Provider-пакет или проект должен быть собран совместимыми generator/runtime-протоколом SingletonDI до того, как composition root сможет его загрузить.
+
+### DM0021: Provider module bootstrap method is missing
+
+Возникает, когда помеченная provider-сборка не предоставляет публичный статический параметрический метод `Bootstrap()`. Пересоберите провайдера совместимым генератором SingletonDI.
+
+### DM0022: Provider or service type is not accessible from generated code
+
+Возникает, когда сгенерированный код не может именовать провайдера, контракт сервиса или зависимость провайдера из-за объявленной доступности или file-local содержащего типа. Используйте публичный тип либо тип, доступный сборке.
+
+### DM0023: Generic `InitializeAsync` methods are not supported
+
+Возникает, когда параметрический метод `InitializeAsync` объявляет собственные параметры типа. Уберите параметры типа у метода или выразите инициализацию через не-generic метод.
+
+### DM0024: Open generic dependencies are not supported
+
+Возникает, когда провайдер или consumer использует несобранный generic-тип, например `typeof(IContract<>)`. Используйте конкретизированный тип зависимости.
+
+### DM0025: Generated consumer property name already exists
+
+Возникает, когда генерируемое свойство зависимости конфликтует с членом, уже объявленным в consumer или унаследованным от базового типа. Переименуйте свойство зависимости или удалите конфликтующий член; генератор пропустит конфликтующее свойство.
+
+### DM0026: A containing consumer type must be partial
+
+Возникает, когда вложенный consumer имеет содержащий тип, который нельзя переоткрыть. Объявите все содержащие типы как `partial`.
+
+### DM0027: Generated source requires C# 9 or later
+
+Возникает, когда версия языка компиляции ниже C# 9. Повысьте версию языка проекта или используйте совместимый target framework.
+
+### DM0028: File-scoped consumers require C# 10 or later
+
+Возникает, когда consumer в file-scoped namespace компилируется с версией языка ниже C# 10. Повысьте версию языка или используйте блочный namespace.
+
+### DM0029: File-local consumer is not supported
+
+Возникает, когда consumer объявлен с модификатором доступа `file`. Сгенерированный код не может переоткрыть file-local тип, поэтому consumer partial не создаётся. Объявите consumer с доступностью `internal` или `public`.
+
+### DM0030: Aliased service type is not supported
+
+Возникает, когда `ServiceType` провайдера или зависимость consumer указывает тип через `extern alias`. Сгенерированный код не может воспроизвести alias, потому что подключённая provider-сборка не содержит объявлений alias из проекта consumer. Укажите тип по его глобальному имени.
+
+### DM0031: Consumer type parameter attributes are not supported
+
+Возникает, когда consumer объявляет атрибуты на своих параметрах типа. Сгенерированный код переоткрывает объявление consumer без этих целей атрибутов, что привело бы к ошибке компилятора. Перенесите атрибут на использование параметра типа или удалите его.
+
+### DM0032: Provider required members are not supported
+
+Возникает, когда у провайдера есть required-члены, а его публичный параметрический конструктор не объявляет `[SetsRequiredMembers]`. Сгенерированное создание объекта не может удовлетворить эти члены. Пометьте конструктор `[SetsRequiredMembers]` или уберите `required` у членов провайдера.
+
+### DM0033: Nullable initializer return type is not supported
+
+Возникает, когда метод `InitializeAsync` провайдера возвращает `Task?` или `ValueTask?`. Генерируемая регистрация требует non-nullable task, поскольку `null` нарушил бы порядок инициализации. Возвращайте non-nullable `Task` или `ValueTask`.
 
 ## Ограничения
 

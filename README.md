@@ -448,6 +448,11 @@ The generator reports errors at compile time:
 | **DM0026** | Error | A containing consumer type must be partial |
 | **DM0027** | Error | Generated source requires C# 9 or later |
 | **DM0028** | Error | File-scoped consumers require C# 10 or later |
+| **DM0029** | Error | File-local consumer is not supported |
+| **DM0030** | Error | Aliased service type is not supported |
+| **DM0031** | Error | Consumer type parameter attributes are not supported |
+| **DM0032** | Error | Provider required members are not supported |
+| **DM0033** | Error | Nullable initializer return type is not supported |
 
 Cross-project service and provider identities include the containing assembly. Repeated references to the same assembly are deduplicated, while equal type names from different assemblies remain distinct. `DM0019` is also emitted for conflicting local `ServiceType` mappings, not only in a composition root, and reports all conflicting provider identities. It also reports ambiguity when the same fully qualified name is associated with multiple identities, for example a local `App.Service` and a referenced `App.Service`; the diagnostic keeps their assembly identities separate.
 
@@ -664,6 +669,26 @@ Occurs when the compilation language version is below C# 9. Upgrade the project 
 ### DM0028: File-scoped consumers require C# 10 or later
 
 Occurs when a file-scoped consumer declaration is compiled below C# 10. Upgrade the language version or use a block-scoped namespace.
+
+### DM0029: File-local consumer is not supported
+
+Occurs when a consumer is declared with the `file` accessibility modifier. Generated code cannot reopen a file-local type, so no consumer partial is emitted. Declare the consumer with `internal` or `public` accessibility.
+
+### DM0030: Aliased service type is not supported
+
+Occurs when a provider `ServiceType` or a consumer dependency names a type through an `extern alias`. Generated code cannot reproduce the alias, because a referenced provider assembly does not carry the consumer's alias declarations. Reference the type by its global name instead.
+
+### DM0031: Consumer type parameter attributes are not supported
+
+Occurs when a consumer declares attributes on its type parameters. Generated code reopens the consumer declaration without those attribute targets, which would produce a compiler error. Move the attribute to the type parameter usage or remove it.
+
+### DM0032: Provider required members are not supported
+
+Occurs when a provider has required members and its public parameterless constructor does not declare `[SetsRequiredMembers]`. Generated construction cannot satisfy the members. Mark the constructor with `[SetsRequiredMembers]` or remove `required` from the provider members.
+
+### DM0033: Nullable initializer return type is not supported
+
+Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`. The generated registration requires a non-nullable task, because a `null` return would break initialization ordering. Return a non-nullable `Task` or `ValueTask`.
 
 ## Limitations
 

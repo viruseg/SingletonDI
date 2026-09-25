@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace SingletonDI.Tests;
@@ -42,6 +44,35 @@ public sealed class DocumentationConsistencyTests
                 "Microsoft.CodeAnalysis.Testing",
                 agents,
                 StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void EveryGeneratorDiagnosticIsDocumented()
+    {
+        var root = FindRepositoryRoot();
+        var descriptorFile = Path.Combine(
+            root,
+            "src",
+            "SingletonDI.Generator",
+            "DiagnosticDescriptors.cs");
+        var declaredIds = Regex.Matches(
+                File.ReadAllText(descriptorFile),
+                "\"(DM\\d{4})\"")
+            .Select(match => match.Groups[1].Value)
+            .ToImmutableHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(declaredIds);
+        foreach (var documentation in new[] { "README.md", "README.RU.md" })
+        {
+            var text = File.ReadAllText(Path.Combine(root, documentation));
+            var missing = declaredIds
+                .Where(id => !text.Contains(id, StringComparison.Ordinal))
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToArray();
+            Assert.True(
+                missing.Length == 0,
+                $"{documentation} does not document: {string.Join(", ", missing)}.");
         }
     }
 
