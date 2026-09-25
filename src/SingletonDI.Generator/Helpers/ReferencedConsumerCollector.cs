@@ -24,30 +24,37 @@ internal static class ReferencedConsumerCollector
             Compilation compilation,
             CancellationToken cancellationToken)
     {
+        var referencedTypes = ProviderSymbolCollector.GetReferencedTypes(
+            compilation,
+            cancellationToken);
+        return CollectReferencedConsumerDependencyIdentities(
+            referencedTypes,
+            cancellationToken);
+    }
+
+    internal static ImmutableArray<ImmutableArray<ServiceTypeIdentity>>
+        CollectReferencedConsumerDependencyIdentities(
+            ImmutableArray<ProviderSymbolCollector.ReferencedTypeData> referencedTypes,
+            CancellationToken cancellationToken)
+    {
         var dependencies = new List<ImmutableArray<ServiceTypeIdentity>>();
-        foreach (var assembly in ProviderSymbolCollector.GetReferencedAssemblies(
-                     compilation,
-                     cancellationToken))
+        foreach (var referencedType in referencedTypes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var type in ProviderSymbolCollector.EnumerateTypes(assembly.GlobalNamespace))
+            foreach (var attribute in referencedType.Type.GetAttributes())
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                foreach (var attribute in type.GetAttributes())
+                if (!ProviderSymbolCollector.IsAttribute(attribute, ConsumeAttributeName))
                 {
-                    if (!ProviderSymbolCollector.IsAttribute(attribute, ConsumeAttributeName))
-                    {
-                        continue;
-                    }
-
-                    var keys = ReadDependencyIdentities(attribute)
-                        .Distinct()
-                        .OrderBy(dependency => dependency.FullyQualifiedName, StringComparer.Ordinal)
-                        .ThenBy(dependency => dependency.AssemblyIdentity, StringComparer.Ordinal)
-                        .ThenBy(dependency => dependency.CanonicalIdentity, StringComparer.Ordinal)
-                        .ToImmutableArray();
-                    dependencies.Add(keys);
+                    continue;
                 }
+
+                var keys = ReadDependencyIdentities(attribute)
+                    .Distinct()
+                    .OrderBy(dependency => dependency.FullyQualifiedName, StringComparer.Ordinal)
+                    .ThenBy(dependency => dependency.AssemblyIdentity, StringComparer.Ordinal)
+                    .ThenBy(dependency => dependency.CanonicalIdentity, StringComparer.Ordinal)
+                    .ToImmutableArray();
+                dependencies.Add(keys);
             }
         }
 

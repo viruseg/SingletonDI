@@ -1,6 +1,8 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using SingletonDI.Generator;
+using SingletonDI.Generator.Helpers;
+using SingletonDI.Generator.Models;
 using Xunit;
 
 namespace SingletonDI.Tests;
@@ -135,18 +137,101 @@ public sealed class GeneratorIncrementalTests
             output => output.Reason == IncrementalStepRunReason.Cached);
     }
 
+    [Fact]
+    public void ReferencedCompositionSnapshotCachesReferenceOnlyCompilation()
+    {
+        var parseOptions = new CSharpParseOptions(
+            LanguageVersion.Latest,
+            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        var firstSource = "public class First { public int Value => 1; }";
+        var secondSource = "public class First { public int Value => 2; }";
+        var references = CreateMetadataReferences();
+        var firstCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(firstSource, parseOptions)],
+            parseOptions,
+            references);
+        var secondCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(secondSource, parseOptions)],
+            parseOptions,
+            references);
+        var changedOptionsCompilation = secondCompilation.WithOptions(
+            secondCompilation.Options.WithOutputKind(OutputKind.ConsoleApplication));
+        var changedReferencesCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(secondSource, parseOptions)],
+            parseOptions,
+            references.Append(MetadataReference.CreateFromFile(typeof(Uri).Assembly.Location)));
+        var collector = new CountingReferencedCompositionCollector();
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SnapshotTrackingGenerator(collector).AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(firstCompilation);
+        driver = driver.RunGenerators(secondCompilation);
+        Assert.Equal(1, collector.CallCount);
+
+        driver = driver.RunGenerators(changedOptionsCompilation);
+        Assert.Equal(2, collector.CallCount);
+
+        driver = driver.RunGenerators(changedReferencesCompilation);
+        Assert.Equal(3, collector.CallCount);
+    }
+
+    private sealed class SnapshotTrackingGenerator : IIncrementalGenerator
+    {
+        private readonly IReferencedCompositionCollector _collector;
+
+        public SnapshotTrackingGenerator(IReferencedCompositionCollector collector)
+        {
+            _collector = collector;
+        }
+
+        public void Initialize(IncrementalGeneratorInitializationContext context)
+        {
+            var snapshots = ReferencedCompositionCollector.CreateProvider(
+                context.CompilationProvider,
+                _collector);
+            context.RegisterSourceOutput(snapshots, static (_, _) => { });
+        }
+    }
+
+    private sealed class CountingReferencedCompositionCollector : IReferencedCompositionCollector
+    {
+        public int CallCount { get; private set; }
+
+        public ReferencedCompositionSnapshot Collect(
+            Compilation compilation,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return ReferencedCompositionSnapshot.Empty;
+        }
+    }
+
     private static CSharpCompilation CreateCompilation(
         IEnumerable<SyntaxTree> syntaxTrees,
-        CSharpParseOptions parseOptions)
+        CSharpParseOptions parseOptions,
+        IEnumerable<MetadataReference>? references = null)
     {
         return CSharpCompilation.Create(
             "GeneratorIncrementalTests",
             syntaxTrees,
-            [
-                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(SingletonDI.Attributes.SingletonDIProvideAttribute).Assembly.Location)
-            ],
+            references ?? CreateMetadataReferences(),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
+
+    private static MetadataReference[] CreateMetadataReferences()
+    {
+        return
+        [
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(SingletonDI.Attributes.SingletonDIProvideAttribute).Assembly.Location)
+        ];
     }
 }

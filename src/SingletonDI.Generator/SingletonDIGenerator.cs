@@ -25,6 +25,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .Select(static (optionsProvider, _) => ReadGeneratorOptions(optionsProvider));
         var languageSupport = context.CompilationProvider
             .Select(static (compilation, _) => GetLanguageSupport(compilation));
+        var referencedComposition = ReferencedCompositionCollector
+            .CreateProvider(context.CompilationProvider, ReferencedCompositionCollector.Instance)
+            .WithTrackingName("ReferencedCompositionSnapshot");
 
         context.RegisterSourceOutput(
             context.CompilationProvider,
@@ -135,20 +138,25 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .Collect()
             .Combine(consumerDeclarations.Collect())
             .Combine(context.CompilationProvider)
+            .Combine(referencedComposition)
             .Combine(generatorOptions)
             .WithTrackingName("CompositionRootOutput");
         context.RegisterSourceOutput(compositionInputs, (sourceProductionContext, input) =>
         {
-            var (((candidates, consumerDeclarationsForRoot), compilation), options) = input;
+            var (compositionData, options) = input;
+            var ((candidatesAndConsumers, compilation), snapshot) = compositionData;
+            var (candidates, consumerDeclarationsForRoot) = candidatesAndConsumers;
             if (!CanEmitGeneratedSource(compilation) || !options.IsCompositionRoot)
             {
                 return;
             }
 
+            ReportSnapshotDiagnostics(snapshot, sourceProductionContext.ReportDiagnostic);
             EmitCompositionRoot(
                 candidates,
                 consumerDeclarationsForRoot,
                 compilation,
+                snapshot,
                 sourceProductionContext);
         });
 
@@ -177,22 +185,22 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         var referencedValidationInputs = providerCandidates
             .Collect()
-            .Combine(context.CompilationProvider)
+            .Combine(referencedComposition)
+            .Combine(languageSupport)
             .Combine(generatorOptions)
             .WithTrackingName("ReferencedConsumerValidation");
         context.RegisterSourceOutput(referencedValidationInputs, (sourceProductionContext, input) =>
         {
-            var ((providerCandidatesForValidation, compilation), options) = input;
-            if (!CanEmitGeneratedSource(compilation) ||
-                options.IsCompositionRoot ||
-                !IsExecutable(options, compilation))
+            var (((providerCandidatesForValidation, snapshot), language), options) = input;
+            if (!language.CanEmit || options.IsCompositionRoot || !IsExecutable(options))
             {
                 return;
             }
 
+            ReportSnapshotDiagnostics(snapshot, sourceProductionContext.ReportDiagnostic);
             EmitReferencedConsumerValidation(
                 providerCandidatesForValidation,
-                compilation,
+                snapshot,
                 sourceProductionContext);
         });
     }
@@ -247,18 +255,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         ImmutableArray<ProviderCandidate> candidates,
         ImmutableArray<TypeDeclarationSyntax> consumerDeclarations,
         Compilation compilation,
+        ReferencedCompositionSnapshot referencedComposition,
         SourceProductionContext sourceProductionContext)
     {
         var localProviders = GetProviderModels(candidates);
-        var externalProviders = ProviderSymbolCollector.CollectReferencedProviders(
-            compilation,
-            sourceProductionContext.CancellationToken,
-            sourceProductionContext.ReportDiagnostic,
-            out var externalProviderAssemblies);
-        var referencedConsumerDependencies =
-            ReferencedConsumerCollector.CollectReferencedConsumerDependencyIdentities(
-                compilation,
-                sourceProductionContext.CancellationToken);
+        var externalProviders = referencedComposition.Providers;
+        var externalProviderAssemblies = referencedComposition.ProviderAssemblies;
+        var referencedConsumerDependencies = referencedComposition.ConsumerDependencySets;
         var allProviders = localProviders
             .Concat(externalProviders)
             .OrderBy(provider => provider.FullyQualifiedName, StringComparer.Ordinal)
@@ -528,26 +531,17 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
     private static void EmitReferencedConsumerValidation(
         ImmutableArray<ProviderCandidate> providerCandidates,
-        Compilation compilation,
+        ReferencedCompositionSnapshot referencedComposition,
         SourceProductionContext sourceProductionContext)
     {
         var localProviders = GetProviderModels(providerCandidates);
-        var externalProviders = ProviderSymbolCollector.CollectReferencedProviders(
-            compilation,
-            sourceProductionContext.CancellationToken,
-            sourceProductionContext.ReportDiagnostic,
-            out _);
         var allProviders = localProviders
-            .Concat(externalProviders)
+            .Concat(referencedComposition.Providers)
             .ToImmutableArray();
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(allProviders);
-        var referencedConsumerDependencies =
-            ReferencedConsumerCollector.CollectReferencedConsumerDependencyIdentities(
-                compilation,
-                sourceProductionContext.CancellationToken);
         var missingDependencies = new HashSet<ServiceTypeIdentity>();
 
-        foreach (var dependencySet in referencedConsumerDependencies)
+        foreach (var dependencySet in referencedComposition.ConsumerDependencySets)
         {
             foreach (var dependency in dependencySet)
             {
@@ -581,6 +575,16 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .Where(candidate => candidate.TypeIdentity.HasValue)
             .Select(candidate => candidate.TypeIdentity!.Value)
             .ToImmutableHashSet();
+    }
+
+    private static void ReportSnapshotDiagnostics(
+        ReferencedCompositionSnapshot snapshot,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        foreach (var diagnostic in snapshot.Diagnostics)
+        {
+            reportDiagnostic(diagnostic);
+        }
     }
 
     private static void ReportProviderCandidateDiagnostics(

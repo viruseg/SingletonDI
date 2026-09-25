@@ -40,33 +40,43 @@ internal static class ProviderSymbolCollector
             throw new ArgumentNullException(nameof(reportDiagnostic));
         }
 
-        var referencedAssemblies = ProviderSymbolCollector
-            .GetReferencedAssemblies(compilation, cancellationToken)
-            .ToList();
+        var referencedTypes = GetReferencedTypes(compilation, cancellationToken);
+        return BuildReferencedProviders(
+            compilation,
+            referencedTypes,
+            cancellationToken,
+            reportDiagnostic,
+            out providerAssemblies);
+    }
+
+    internal static ImmutableArray<ProviderModel> BuildReferencedProviders(
+        Compilation compilation,
+        ImmutableArray<ReferencedTypeData> referencedTypes,
+        CancellationToken cancellationToken,
+        Action<Diagnostic> reportDiagnostic,
+        out ImmutableArray<ProviderAssemblyModel> providerAssemblies)
+    {
         var candidates = new List<ReferencedProviderCandidate>();
         var visitedCandidates = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var assembly in referencedAssemblies)
+        foreach (var referencedType in referencedTypes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var type in EnumerateTypes(assembly.GlobalNamespace))
+            var type = referencedType.Type;
+            if (!IsAccessiblePublic(type) || !HasAttribute(type, ProvideAttributeName))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!IsAccessiblePublic(type) || !HasAttribute(type, ProvideAttributeName))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var fullyQualifiedName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                var assemblyIdentity = type.ContainingAssembly.Identity.ToString();
-                var candidateKey = CreateProviderKey(assemblyIdentity, fullyQualifiedName);
-                if (visitedCandidates.Add(candidateKey))
-                {
-                    candidates.Add(new ReferencedProviderCandidate(
-                        type,
-                        assemblyIdentity,
-                        fullyQualifiedName));
-                }
+            var fullyQualifiedName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var assemblyIdentity = type.ContainingAssembly.Identity.ToString();
+            var candidateKey = CreateProviderKey(assemblyIdentity, fullyQualifiedName);
+            if (visitedCandidates.Add(candidateKey))
+            {
+                candidates.Add(new ReferencedProviderCandidate(
+                    type,
+                    assemblyIdentity,
+                    fullyQualifiedName));
             }
         }
 
@@ -77,6 +87,22 @@ internal static class ProviderSymbolCollector
         var candidateAssemblies = candidates
             .GroupBy(candidate => candidate.AssemblyIdentity, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+        var bootstrapTypes = referencedTypes
+            .Where(referencedType => string.Equals(
+                referencedType.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                GeneratedBootstrapTypeName,
+                StringComparison.Ordinal))
+            .GroupBy(
+                referencedType => referencedType.Assembly.Identity.ToString(),
+                StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(referencedType => referencedType.Type).FirstOrDefault(),
+                StringComparer.Ordinal);
+        var referencedAssemblies = referencedTypes
+            .GroupBy(referencedType => referencedType.Assembly.Identity.ToString(), StringComparer.Ordinal)
+            .Select(group => group.First().Assembly)
+            .ToList();
 
         foreach (var candidate in candidates
                      .OrderBy(candidate => candidate.AssemblyIdentity, StringComparer.Ordinal)
@@ -107,11 +133,7 @@ internal static class ProviderSymbolCollector
                 continue;
             }
 
-            var bootstrapType = EnumerateTypes(assembly.GlobalNamespace)
-                .FirstOrDefault(type => string.Equals(
-                    type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    GeneratedBootstrapTypeName,
-                    StringComparison.Ordinal));
+            bootstrapTypes.TryGetValue(assemblyIdentity, out var bootstrapType);
             var bootstrapTypeName = bootstrapType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var hasModuleMarker = assembly.GetAttributes().Any(attribute =>
                 IsAttribute(attribute, ProviderModuleMarkerName));
@@ -200,6 +222,27 @@ internal static class ProviderSymbolCollector
         }
     }
 
+    internal static ImmutableArray<ReferencedTypeData> GetReferencedTypes(
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        var types = new List<ReferencedTypeData>();
+        foreach (var assembly in GetReferencedAssemblies(compilation, cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var type in EnumerateTypes(assembly.GlobalNamespace))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                types.Add(new ReferencedTypeData(assembly, type));
+            }
+        }
+
+        return types
+            .OrderBy(type => type.Assembly.Identity.ToString(), StringComparer.Ordinal)
+            .ThenBy(type => type.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
+            .ToImmutableArray();
+    }
+
     internal static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceOrTypeSymbol symbol)
     {
         if (symbol is INamespaceSymbol namespaceSymbol)
@@ -268,6 +311,10 @@ internal static class ProviderSymbolCollector
     {
         return assemblyIdentity + "\u001f" + fullyQualifiedName;
     }
+
+    internal readonly record struct ReferencedTypeData(
+        IAssemblySymbol Assembly,
+        INamedTypeSymbol Type);
 
     private sealed record ReferencedProviderCandidate(
         INamedTypeSymbol Type,
