@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using SingletonDI.Generator;
-using Microsoft.CodeAnalysis;
 using System.Text.RegularExpressions;
 using Xunit;
 

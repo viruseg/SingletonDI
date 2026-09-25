@@ -39,6 +39,8 @@ public sealed class PackageContentTests
     [Fact]
     public async Task PackUsesArtifactsPathForAnalyzerAssets()
     {
+        // Packs the same project as PackageSmokeTests, and the two share one obj/ directory.
+        await using var packageSmokeLock = await PackageSmokeLock.AcquireAsync(null);
         var root = FindRepositoryRoot();
         var projectPath = Path.Combine(
             root,

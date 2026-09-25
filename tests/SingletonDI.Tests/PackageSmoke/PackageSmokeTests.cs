@@ -7,10 +7,6 @@ namespace SingletonDI.Tests;
 public sealed class PackageSmokeTests
 {
     private const string PackageVersion = "1.1.0";
-    private const int LockAttempts = 600;
-    private const int LockLogInterval = 100;
-    private const int LockRetryDelay = 100;
-
     private static readonly (string Directory, string Version)[] SdkDirectories =
     [
         ("Sdk10", "10.0.401"),
@@ -26,7 +22,7 @@ public sealed class PackageSmokeTests
     [Fact]
     public async Task PackedConsumerBuildsAndRunsOnSupportedSdks()
     {
-        using var packageSmokeLock = await AcquirePackageSmokeLock();
+        await using var packageSmokeLock = await PackageSmokeLock.AcquireAsync(_output);
         var repositoryRoot = FindRepositoryRoot();
         var temporaryRoot = Path.Combine(
             Path.GetTempPath(),
@@ -156,42 +152,6 @@ public sealed class PackageSmokeTests
                 Path.Combine(sourceRoot, sdkDirectory, "global.json"),
                 Path.Combine(destinationSdkDirectory, "global.json"));
         }
-    }
-
-    private async Task<FileStream> AcquirePackageSmokeLock()
-    {
-        var lockPath = Path.Combine(Path.GetTempPath(), "SingletonDI.PackageSmokeTests.lock");
-        for (var attempt = 1; attempt <= LockAttempts; attempt++)
-        {
-            try
-            {
-                return new FileStream(
-                    lockPath,
-                    FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite,
-                    FileShare.None);
-            }
-            catch (IOException)
-            {
-                // Concurrent test runs queue here. A testhost orphaned by a killed run holds the lock indefinitely instead.
-                if (attempt == LockAttempts)
-                {
-                    break;
-                }
-
-                if (attempt % LockLogInterval == 0)
-                {
-                    _output.WriteLine(
-                        $"Waiting for the package smoke lock at {lockPath}, attempt {attempt}/{LockAttempts}.");
-                }
-
-                await Task.Delay(LockRetryDelay);
-            }
-        }
-
-        throw new TimeoutException(
-            $"Timed out after {LockAttempts * LockRetryDelay} ms waiting for the package smoke " +
-            $"lock at {lockPath}. Another test run is still active; close it or delete the lock file.");
     }
 
     private static async Task<ProcessResult> RunDotnetAsync(
