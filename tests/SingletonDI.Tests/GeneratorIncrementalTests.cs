@@ -297,6 +297,52 @@ public sealed class GeneratorIncrementalTests
         Assert.Equal(0, collector.CallCount);
     }
 
+    [Fact]
+    public void ProviderServiceTypeAssemblyChangePreservesCompositionValidation()
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide(ServiceType = typeof(Shared.IContract))]
+                public sealed class Provider : Shared.IContract
+                {
+                }
+            }
+            """;
+        var firstContract = CreateContractReference("Shared.Contracts.First");
+        var secondContract = CreateContractReference("Shared.Contracts.Second");
+        var firstConsumer = CreateConsumerReference("External.Consumer.First", firstContract);
+        var secondConsumer = CreateConsumerReference("External.Consumer.Second", secondContract);
+        var firstCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(source, parseOptions)],
+            parseOptions,
+            CreateMetadataReferences().Append(firstContract).Append(firstConsumer));
+        var secondCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(source, parseOptions)],
+            parseOptions,
+            CreateMetadataReferences().Append(secondContract).Append(secondConsumer));
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: new GeneratorTestAnalyzerConfigOptionsProvider(
+                new GeneratorTestOptions(true, OutputKind.DynamicallyLinkedLibrary)),
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(firstCompilation);
+        driver = driver.RunGenerators(secondCompilation);
+
+        Assert.DoesNotContain(
+            driver.GetRunResult().Diagnostics,
+            diagnostic => diagnostic.Id == "DM0018");
+    }
+
     private sealed class SnapshotTrackingGenerator : IIncrementalGenerator
     {
         private readonly IReferencedCompositionCollector _collector;
@@ -337,6 +383,42 @@ public sealed class GeneratorIncrementalTests
         }
     }
 
+    private static MetadataReference CreateContractReference(string assemblyName)
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var compilation = CSharpCompilation.Create(
+            assemblyName,
+            [CSharpSyntaxTree.ParseText(
+                "namespace Shared { public interface IContract { } }",
+                parseOptions)],
+            CreateMetadataReferences(),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var stream = new MemoryStream();
+        var emitResult = compilation.Emit(stream);
+        Assert.True(emitResult.Success);
+        return MetadataReference.CreateFromImage(stream.ToArray());
+    }
+
+    private static MetadataReference CreateConsumerReference(
+        string assemblyName,
+        MetadataReference contractReference)
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var compilation = CSharpCompilation.Create(
+            assemblyName,
+            [CSharpSyntaxTree.ParseText(
+                "using SingletonDI.Attributes; [SingletonDIConsume(typeof(Shared.IContract))] public class ExternalConsumer { }",
+                parseOptions)],
+            CreateMetadataReferences().Append(contractReference),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var stream = new MemoryStream();
+        var emitResult = compilation.Emit(stream);
+        Assert.True(
+            emitResult.Success,
+            string.Join(Environment.NewLine, emitResult.Diagnostics));
+        return MetadataReference.CreateFromImage(stream.ToArray());
+    }
+
     private static CSharpCompilation CreateCompilation(
         IEnumerable<SyntaxTree> syntaxTrees,
         CSharpParseOptions parseOptions,
@@ -351,11 +433,18 @@ public sealed class GeneratorIncrementalTests
 
     private static MetadataReference[] CreateMetadataReferences()
     {
-        return
-        [
+        var references = new List<MetadataReference>
+        {
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(Task).Assembly.Location),
-            MetadataReference.CreateFromFile(typeof(SingletonDI.Attributes.SingletonDIProvideAttribute).Assembly.Location)
-        ];
+            MetadataReference.CreateFromFile(typeof(SingletonDI.Attributes.SingletonDIProvideAttribute).Assembly.Location),
+        };
+        var runtimePath = Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "System.Runtime.dll");
+        if (File.Exists(runtimePath))
+        {
+            references.Add(MetadataReference.CreateFromFile(runtimePath));
+        }
+
+        return references.ToArray();
     }
 }

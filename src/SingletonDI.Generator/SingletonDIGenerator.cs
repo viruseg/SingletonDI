@@ -957,6 +957,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             key.Append('\u001f').Append(provider.ServiceTypeFullyQualifiedName);
             key.Append('\u001f').Append(provider.ServiceTypeShortName);
             key.Append('\u001f').Append(provider.ServiceTypeNamespace);
+            key.Append('\u001f').Append(provider.ServiceTypeIdentity?.CanonicalIdentity);
             key.Append('\u001f').Append(provider.PropertyName);
             if (!provider.Dependencies.IsDefault)
             {
