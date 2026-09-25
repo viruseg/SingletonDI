@@ -232,15 +232,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             return;
         }
 
-        var sortResult = TopologicalSorter.SortByLevels(
+        var cycle = TopologicalSorter.TryFindCycle(
             providerModels.ToImmutableArray(),
             serviceTypeMapResult.IdentityMap);
-        if (sortResult.HasCycle)
+        if (!cycle.IsEmpty)
         {
             sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.CircularDependency,
                 Location.None,
-                string.Join(" -> ", sortResult.Cycle)));
+                string.Join(" -> ", cycle.Select(identity => identity.FullyQualifiedName))));
             return;
         }
 
@@ -422,18 +422,16 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         if (allProviders.Count > 0)
         {
-            var sortResult = TopologicalSorter.SortByLevels(
+            var cycle = TopologicalSorter.TryFindCycle(
                 allProviders.ToImmutableArray(),
                 serviceTypeMapResult.IdentityMap);
-            if (sortResult.HasCycle)
+            if (!cycle.IsEmpty)
             {
                 hasInvalidGraph = true;
                 sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.CircularDependency,
                     Location.None,
-                    sortResult.CycleIdentities.IsEmpty
-                        ? FormatCycle(sortResult.Cycle, allProviders)
-                        : FormatCycle(sortResult.CycleIdentities)));
+                    FormatCycle(cycle)));
             }
         }
 

@@ -25,6 +25,55 @@ internal static class TopologicalSorter
         return SortGraph(BuildGraph(providers, static dependencyKey => dependencyKey));
     }
 
+    public static ImmutableArray<ServiceTypeIdentity> TryFindCycle(
+        ImmutableArray<ProviderModel> providers,
+        IReadOnlyDictionary<ServiceTypeIdentity, ServiceTypeIdentity> serviceTypeToProvider)
+    {
+        if (serviceTypeToProvider == null)
+        {
+            throw new ArgumentNullException(nameof(serviceTypeToProvider));
+        }
+
+        if (providers.IsDefault || providers.IsEmpty)
+        {
+            return ImmutableArray<ServiceTypeIdentity>.Empty;
+        }
+
+        var graph = BuildIdentityGraph(
+            providers,
+            dependency => serviceTypeToProvider.TryGetValue(dependency, out var provider)
+                ? provider
+                : null);
+        var inDegree = new Dictionary<string, int>(graph.InDegree, StringComparer.Ordinal);
+        var queue = new Queue<string>(graph.Providers
+            .Where(provider => inDegree[GetNodeKey(provider)] == 0)
+            .Select(GetNodeKey));
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            foreach (var dependent in graph.Adjacency[current])
+            {
+                inDegree[dependent]--;
+                if (inDegree[dependent] == 0)
+                {
+                    queue.Enqueue(dependent);
+                }
+            }
+        }
+
+        var remaining = graph.Providers
+            .Where(provider => inDegree[GetNodeKey(provider)] > 0)
+            .Select(GetNodeKey)
+            .ToImmutableArray();
+        if (remaining.IsEmpty)
+        {
+            return ImmutableArray<ServiceTypeIdentity>.Empty;
+        }
+
+        return ToProviderIdentities(FindCycleDeterministically(graph, remaining), graph);
+    }
+
     public readonly struct LevelSortResult(List<List<ProviderModel>> levels, ImmutableArray<string> cycle)
     {
         public List<List<ProviderModel>> Levels { get; } = levels;
@@ -445,6 +494,92 @@ internal static class TopologicalSorter
     private static string GetNodeKey(ServiceTypeIdentity identity)
     {
         return identity.AssemblyIdentity + "\u001f" + identity.FullyQualifiedName;
+    }
+
+    private static ImmutableArray<string> FindCycleDeterministically(
+        GraphData graph,
+        IEnumerable<string> startNodes)
+    {
+        var states = new Dictionary<string, CycleVisitState>(StringComparer.Ordinal);
+        var path = new List<string>();
+        var pathIndices = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var startNode in startNodes)
+        {
+            if (states.ContainsKey(startNode))
+            {
+                continue;
+            }
+
+            if (TryFindCycleDFS(
+                    graph.Adjacency,
+                    startNode,
+                    states,
+                    path,
+                    pathIndices,
+                    out var cycle))
+            {
+                return cycle;
+            }
+        }
+
+        return ImmutableArray<string>.Empty;
+    }
+
+    private static bool TryFindCycleDFS(
+        Dictionary<string, List<string>> adjacency,
+        string node,
+        Dictionary<string, CycleVisitState> states,
+        List<string> path,
+        Dictionary<string, int> pathIndices,
+        out ImmutableArray<string> cycle)
+    {
+        states[node] = CycleVisitState.Visiting;
+        pathIndices[node] = path.Count;
+        path.Add(node);
+
+        if (adjacency.TryGetValue(node, out var neighbors))
+        {
+            foreach (var neighbor in neighbors)
+            {
+                if (states.TryGetValue(neighbor, out var state))
+                {
+                    if (state == CycleVisitState.Visited)
+                    {
+                        continue;
+                    }
+
+                    var cycleStart = pathIndices[neighbor];
+                    cycle = path
+                        .Skip(cycleStart)
+                        .Append(neighbor)
+                        .ToImmutableArray();
+                    return true;
+                }
+
+                if (TryFindCycleDFS(
+                        adjacency,
+                        neighbor,
+                        states,
+                        path,
+                        pathIndices,
+                        out cycle))
+                {
+                    return true;
+                }
+            }
+        }
+
+        path.RemoveAt(path.Count - 1);
+        pathIndices.Remove(node);
+        states[node] = CycleVisitState.Visited;
+        cycle = ImmutableArray<string>.Empty;
+        return false;
+    }
+
+    private enum CycleVisitState : byte
+    {
+        Visiting,
+        Visited
     }
 
     private static ImmutableArray<string> FindCycle(
