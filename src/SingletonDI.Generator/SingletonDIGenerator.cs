@@ -1284,6 +1284,27 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             propertyNameToProvider[provider.PropertyName] = provider;
         }
 
+        // Index the names that providers without an explicit name will generate, so a custom name is
+        // looked up once instead of compared against every other provider. The nested loop built a
+        // fresh list of two interpolated strings per pair, which is quadratic in the provider count
+        // on a path that runs on every keystroke.
+        var generatedNameToProvider = new Dictionary<string, ProviderModel>(StringComparer.Ordinal);
+        foreach (var provider in providers)
+        {
+            if (provider.PropertyName is not null)
+            {
+                continue;
+            }
+
+            foreach (var possibleName in PropertyNameResolver.GetAllPossibleGeneratedNames(provider))
+            {
+                if (!generatedNameToProvider.ContainsKey(possibleName))
+                {
+                    generatedNameToProvider[possibleName] = provider;
+                }
+            }
+        }
+
         foreach (var provider in providers)
         {
             if (provider.PropertyName is null)
@@ -1291,40 +1312,41 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 continue;
             }
 
-            foreach (var otherProvider in providers)
+            // A provider that carries its own name never generates the candidate names, so only a
+            // provider without one can collide. Comparing the provider against its own candidates
+            // separately is what keeps "a custom name that matches one of its own generated names"
+            // an error.
+            if (!generatedNameToProvider.TryGetValue(provider.PropertyName, out var conflictingProvider))
             {
-                // GetAllPossibleGeneratedNames lists the names a provider would get if it had none.
-                // Another provider that carries its own name never generates any of them, so
-                // comparing against it reported a conflict between names that can never both be
-                // emitted. The provider itself is still compared, because a custom name that
-                // matches one of its own generated names is a real conflict.
-                if (otherProvider.PropertyName is not null && !IsSameProvider(provider, otherProvider))
+                conflictingProvider = provider;
+                var selfConflict = false;
+                foreach (var possibleName in PropertyNameResolver.GetAllPossibleGeneratedNames(provider))
+                {
+                    if (!string.Equals(possibleName, provider.PropertyName, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    selfConflict = true;
+                    break;
+                }
+
+                if (!selfConflict)
                 {
                     continue;
                 }
-
-                if (PropertyNameResolver.GetAllPossibleGeneratedNames(otherProvider)
-                    .Any(possibleName => string.Equals(
-                        possibleName,
-                        provider.PropertyName,
-                        StringComparison.Ordinal)))
-                {
-                    reportDiagnostic(Diagnostic.Create(
-                        DiagnosticDescriptors.PropertyNameConflictsWithGenerated,
-                        provider.PropertyNameLocation ?? provider.Location,
-                        provider.PropertyName,
-                        FormatProviderName(otherProvider)));
-                    return false;
-                }
             }
+
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.PropertyNameConflictsWithGenerated,
+                provider.PropertyNameLocation ?? provider.Location,
+                provider.PropertyName,
+                FormatProviderName(conflictingProvider)));
+            return false;
         }
 
         return true;
     }
-
-    private static bool IsSameProvider(ProviderModel left, ProviderModel right) =>
-        string.Equals(left.FullyQualifiedName, right.FullyQualifiedName, StringComparison.Ordinal) &&
-        string.Equals(left.AssemblyIdentity, right.AssemblyIdentity, StringComparison.Ordinal);
 
     private readonly record struct GeneratorOptions(bool IsCompositionRoot, string? OutputType);
 
