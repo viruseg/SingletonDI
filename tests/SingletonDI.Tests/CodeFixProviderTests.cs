@@ -604,6 +604,70 @@ public class CodeFixProviderTests
         await VerifyConsumerCodeFixAsync(test, expected, "DM0010");
     }
 
+    [Fact]
+    public async Task DM0010_KeepsAttributeAndItsDocumentation()
+    {
+        var test = """
+                   using System;
+                   using SingletonDI.Attributes;
+
+                   /// <summary>
+                   /// Сервис-контракт.
+                   /// </summary>
+                   public interface IService
+                   {
+                   }
+
+                   /// <summary>
+                   /// Провайдер сервиса.
+                   /// </summary>
+                   [SingletonDIProvide(ServiceType = typeof(IService))]
+                   public class Service : IService
+                   {
+                   }
+
+                   /// <summary>
+                   /// Консьюмер с дубликатом в отдельном списке атрибутов.
+                   /// </summary>
+                   [Obsolete("legacy")]
+                   [SingletonDIConsume(typeof(IService), typeof(IService))]
+                   public partial class MyClass
+                   {
+                   }
+                   """;
+
+        var expected = """
+                       using System;
+                       using SingletonDI.Attributes;
+
+                       /// <summary>
+                       /// Сервис-контракт.
+                       /// </summary>
+                       public interface IService
+                       {
+                       }
+
+                       /// <summary>
+                       /// Провайдер сервиса.
+                       /// </summary>
+                       [SingletonDIProvide(ServiceType = typeof(IService))]
+                       public class Service : IService
+                       {
+                       }
+
+                       /// <summary>
+                       /// Консьюмер с дубликатом в отдельном списке атрибутов.
+                       /// </summary>
+                       [Obsolete("legacy")]
+                       [SingletonDIConsume(typeof(IService))]
+                       public partial class MyClass
+                       {
+                       }
+                       """;
+
+        await VerifyConsumerCodeFixAsync(test, expected, "DM0010");
+    }
+
     #endregion
 
     #region SingletonDIPartialCodeFixProvider Tests
