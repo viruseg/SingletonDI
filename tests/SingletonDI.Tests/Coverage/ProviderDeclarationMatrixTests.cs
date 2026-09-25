@@ -394,7 +394,7 @@ public sealed partial class ProviderDeclarationMatrixTests
         new(
             "PROV-NST-09",
             "PROVIDER_NESTING",
-            "public class nested in a public generic class",
+            "non-generic class nested in a generic class, rejected",
             """
             using SingletonDI.Attributes;
 
@@ -409,8 +409,8 @@ public sealed partial class ProviderDeclarationMatrixTests
                 }
             }
             """,
-            new SupportedExpectation(),
-            [NestedRegistration],
-            []),
+            new RejectedExpectation(["DM0015"]),
+            [],
+            ["global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::App.Outer<T>.Service, global::App.Outer<T>.Service>("]),
     ];
 }
