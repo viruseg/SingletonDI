@@ -1,6 +1,4 @@
 using System.Collections.Immutable;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using SingletonDI.Attributes;
@@ -28,9 +26,13 @@ internal sealed record MatrixRunResult(
     ImmutableArray<string> GeneratorErrorIds,
     ImmutableArray<Diagnostic> CompilerErrors,
     string GeneratedSource,
-    bool EmitSucceeded,
-    ImmutableArray<Diagnostic> GeneratorDiagnostics,
-    CSharpCompilation OutputCompilation);
+    bool EmitSucceeded)
+{
+    internal ImmutableArray<Diagnostic> GeneratorDiagnostics { get; init; } =
+        ImmutableArray<Diagnostic>.Empty;
+
+    internal CSharpCompilation OutputCompilation { get; init; } = null!;
+}
 
 internal static class DeclarationMatrixHarness
 {
@@ -107,9 +109,11 @@ internal static class DeclarationMatrixHarness
             generatorErrorIds,
             compilerErrors,
             generatedSource,
-            emitResult.Success,
-            generatorDiagnostics,
-            output);
+            emitResult.Success)
+        {
+            GeneratorDiagnostics = generatorDiagnostics,
+            OutputCompilation = output,
+        };
     }
 
     internal static CSharpCompilation Compile(string source, MatrixRunOptions options)

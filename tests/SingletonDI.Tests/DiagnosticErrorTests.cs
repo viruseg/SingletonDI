@@ -1,10 +1,7 @@
 ﻿using System.Collections.Immutable;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
-using SingletonDI.Attributes;
 using SingletonDI.Generator;
 using SingletonDI.Tests.Coverage;
 using Xunit;
