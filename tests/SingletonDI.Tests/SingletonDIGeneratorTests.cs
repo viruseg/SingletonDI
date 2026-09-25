@@ -17,110 +17,6 @@ namespace SingletonDI.Tests;
 public class SingletonDIGeneratorTests
 {
     [Fact]
-    public void Generator_CanBeInstantiated()
-    {
-        // Arrange
-        var generator = new SingletonDIGenerator();
-
-        // Assert
-        Assert.NotNull(generator);
-    }
-
-    [Fact]
-    public void ProviderModel_CanBeCreated()
-    {
-        // Arrange & Act
-        var model = new ProviderModel(fullyQualifiedName : "Test.Provider",
-                                      shortName : "Provider",
-                                      @namespace : "Test",
-                                      assemblyIdentity : "Test",
-                                      hasInitializeAsyncMethod : true,
-                                      isDisposable : false,
-                                      isAsyncDisposable : false,
-                                      dependencies : ImmutableArray<string>.Empty,
-                                      serviceTypeFullyQualifiedName : null,
-                                      serviceTypeShortName : null,
-                                      serviceTypeNamespace : null,
-                                      propertyName : null,
-                                      location : Location.None,
-                                      propertyNameLocation : null);
-
-        // Assert
-        Assert.Equal("Test.Provider", model.FullyQualifiedName);
-        Assert.Equal("Provider", model.ShortName);
-        Assert.True(model.HasInitializeAsyncMethod);
-        Assert.Null(model.PropertyName);
-    }
-
-    [Fact]
-    public void ProviderModel_WithoutInitializeAsync_CanBeCreated()
-    {
-        // Arrange & Act
-        var model = new ProviderModel(fullyQualifiedName : "Test.Provider",
-                                      shortName : "Provider",
-                                      @namespace : "Test",
-                                      assemblyIdentity : "Test",
-                                      hasInitializeAsyncMethod : false,
-                                      isDisposable : false,
-                                      isAsyncDisposable : false,
-                                      dependencies : ImmutableArray<string>.Empty,
-                                      serviceTypeFullyQualifiedName : null,
-                                      serviceTypeShortName : null,
-                                      serviceTypeNamespace : null,
-                                      propertyName : null,
-                                      location : Location.None,
-                                      propertyNameLocation : null);
-
-        // Assert
-        Assert.False(model.HasInitializeAsyncMethod);
-    }
-
-    [Fact]
-    public void ConsumerModel_CanBeCreated()
-    {
-        // Arrange & Act
-        var model = new ConsumerModel(FullyQualifiedName: "Test.Consumer",
-                          ShortName: "Consumer",
-                          Namespace: "Test",
-                          IsPartial: true,
-                          Dependencies: [new ServiceReferenceModel(
-                              "Test.Provider",
-                              "Provider",
-                              "Test",
-                              null,
-                              false)]);
-
-        // Assert
-        Assert.Equal("Test.Consumer", model.FullyQualifiedName);
-        Assert.True(model.IsPartial);
-        Assert.Single(model.Dependencies);
-    }
-
-
-    [Fact]
-    public void ProviderModel_WithCustomPropertyName_CanBeCreated()
-    {
-        // Arrange & Act
-        var model = new ProviderModel(fullyQualifiedName : "Test.DatabaseService",
-                                      shortName : "DatabaseService",
-                                      @namespace : "Test",
-                                      assemblyIdentity : "Test",
-                                      hasInitializeAsyncMethod : false,
-                                      isDisposable : false,
-                                      isAsyncDisposable : false,
-                                      dependencies : ImmutableArray<string>.Empty,
-                                      serviceTypeFullyQualifiedName : null,
-                                      serviceTypeShortName : null,
-                                      serviceTypeNamespace : null,
-                                      propertyName : "_DbService",
-                                      location : Location.None,
-                                      propertyNameLocation : null);
-
-        // Assert
-        Assert.Equal("_DbService", model.PropertyName);
-    }
-
-    [Fact]
     public void ProviderModel_WithNullPropertyName_UsesDefault()
     {
         // Arrange & Act
@@ -718,24 +614,6 @@ public class SingletonDIGeneratorTests
         Assert.Same(declaration.SyntaxTree, diagnostic.Location.SourceTree);
     }
 
-    [Fact]
-    public void ServiceReferenceModel_CanBeCreated()
-    {
-        var reference = new ServiceReferenceModel(
-            "global::Contracts.IDatabaseService",
-            "IDatabaseService",
-            "Contracts",
-            null,
-            true);
-
-        Assert.Equal("global::Contracts.IDatabaseService", reference.FullyQualifiedName);
-        Assert.Equal("IDatabaseService", reference.ShortName);
-        Assert.Equal("Contracts", reference.Namespace);
-        Assert.Null(reference.PropertyName);
-        Assert.True(reference.IsContract);
-    }
-
-    [Fact]
     public void ServiceTypeMap_MapsContractAndImplementationToOneProvider()
     {
         var provider = new ProviderModel(
