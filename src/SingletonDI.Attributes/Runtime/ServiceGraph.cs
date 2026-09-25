@@ -89,7 +89,7 @@ internal sealed class ServiceGraph
                 throw new InvalidOperationException("The singleton service graph has been disposed.");
             }
 
-            if (!_instances.TryGetValue(registration.ImplementationType, out var instance))
+            if (!TryGetInstance(registration.ImplementationType, out var instance))
             {
                 throw new InvalidOperationException(
                     $"Provider '{GetTypeName(registration.ImplementationType)}' has not been created.");
@@ -128,7 +128,7 @@ internal sealed class ServiceGraph
                 var disposals = new List<Task>();
                 foreach (var registration in _levels[levelIndex])
                 {
-                    if (!_instances.TryGetValue(registration.ImplementationType, out var instance))
+                    if (!TryGetInstance(registration.ImplementationType, out var instance))
                     {
                         continue;
                     }
@@ -193,7 +193,7 @@ internal sealed class ServiceGraph
         {
             foreach (var registration in level)
             {
-                if (_instances.ContainsKey(registration.ImplementationType))
+                if (IsCreated(registration.ImplementationType))
                 {
                     continue;
                 }
@@ -201,8 +201,32 @@ internal sealed class ServiceGraph
                 var instance = registration.Factory()
                     ?? throw new InvalidOperationException(
                         $"Factory for '{GetTypeName(registration.ImplementationType)}' returned null.");
-                _instances.Add(registration.ImplementationType, instance);
+                AddInstance(registration.ImplementationType, instance);
             }
+        }
+    }
+
+    private bool IsCreated(Type implementationType)
+    {
+        lock (_sync)
+        {
+            return _instances.ContainsKey(implementationType);
+        }
+    }
+
+    private void AddInstance(Type implementationType, object instance)
+    {
+        lock (_sync)
+        {
+            _instances[implementationType] = instance;
+        }
+    }
+
+    private bool TryGetInstance(Type implementationType, out object instance)
+    {
+        lock (_sync)
+        {
+            return _instances.TryGetValue(implementationType, out instance!);
         }
     }
 
