@@ -1290,6 +1290,16 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
             foreach (var otherProvider in providers)
             {
+                // GetAllPossibleGeneratedNames lists the names a provider would get if it had none.
+                // Another provider that carries its own name never generates any of them, so
+                // comparing against it reported a conflict between names that can never both be
+                // emitted. The provider itself is still compared, because a custom name that
+                // matches one of its own generated names is a real conflict.
+                if (otherProvider.PropertyName is not null && !IsSameProvider(provider, otherProvider))
+                {
+                    continue;
+                }
+
                 if (PropertyNameResolver.GetAllPossibleGeneratedNames(otherProvider)
                     .Any(possibleName => string.Equals(
                         possibleName,
@@ -1308,6 +1318,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         return true;
     }
+
+    private static bool IsSameProvider(ProviderModel left, ProviderModel right) =>
+        string.Equals(left.FullyQualifiedName, right.FullyQualifiedName, StringComparison.Ordinal) &&
+        string.Equals(left.AssemblyIdentity, right.AssemblyIdentity, StringComparison.Ordinal);
 
     private readonly record struct GeneratorOptions(bool IsCompositionRoot, string? OutputType);
 

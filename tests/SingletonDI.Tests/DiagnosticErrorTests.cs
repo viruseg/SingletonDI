@@ -373,6 +373,56 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0003_NotReportedWhenCustomNamesCannotCollide()
+    {
+        // Neither provider can ever generate a name: both carry an explicit one, so
+        // 'FooInstance' is not a name 'Foo' will ever emit.
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp
+            {
+                [SingletonDIProvide("FooInstance")]
+                public class Alpha { }
+
+                [SingletonDIProvide("BarInstance")]
+                public class Foo { }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(SOURCE);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0003");
+        Assert.Empty(result.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        Assert.Contains("global::MyApp.Alpha", result.GeneratedSource);
+        Assert.Contains("global::MyApp.Foo", result.GeneratedSource);
+    }
+
+    [Fact]
+    public void DM0003_ReportedWhenCustomNameMatchesAnotherProvidersGeneratedName()
+    {
+        const string SOURCE = """
+            using SingletonDI.Attributes;
+
+            namespace MyApp
+            {
+                [SingletonDIProvide("FooInstance")]
+                public class Alpha { }
+
+                [SingletonDIProvide]
+                public class Foo { }
+            }
+            """;
+
+        var diagnostics = RunGenerator(SOURCE);
+
+        var dm0003 = Assert.Single(diagnostics.Where(diagnostic => diagnostic.Id == "DM0003"));
+        Assert.Equal(DiagnosticSeverity.Error, dm0003.Severity);
+        Assert.Contains("FooInstance", dm0003.GetMessage());
+        Assert.True(dm0003.Location.IsInSource);
+    }
+
+    [Fact]
     public void DM0004_ProvideMissingParameterlessConstructor()
     {
         // Arrange
