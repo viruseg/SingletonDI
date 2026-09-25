@@ -85,7 +85,7 @@ public sealed class PackageSmokeTests
                 Assert.True(
                     versionResult.ExitCode == 0,
                     $"{sdkDirectory} version query failed with exit code {versionResult.ExitCode}.\n{versionResult.Output}");
-                Assert.Equal(expectedSdkVersion, versionResult.Output.Trim());
+                AssertSatisfiesSdkBand(expectedSdkVersion, versionResult.Output.Trim());
 
                 var buildResult = await RunDotnetAsync(
                     sdkWorkingDirectory,
@@ -152,6 +152,28 @@ public sealed class PackageSmokeTests
                 Path.Combine(sourceRoot, sdkDirectory, "global.json"),
                 Path.Combine(destinationSdkDirectory, "global.json"));
         }
+    }
+
+    /// <summary>
+    /// Asserts the resolved SDK is in the same major.minor band the fixture pins.
+    /// </summary>
+    /// <remarks>
+    /// The fixture's global.json pins an exact version with <c>rollForward: latestPatch</c>, so any
+    /// patch update installed on the machine moves the resolved version. Comparing against the exact
+    /// string failed CI on a patch bump even though the product was unchanged. A major or minor move
+    /// is still a real change and is still rejected.
+    /// </remarks>
+    private static void AssertSatisfiesSdkBand(string expectedVersion, string actualVersion)
+    {
+        var expected = Version.Parse(expectedVersion);
+        if (!Version.TryParse(actualVersion.Split('-')[0], out var actual))
+        {
+            throw new InvalidOperationException(
+                $"Could not parse the resolved SDK version '{actualVersion}'.");
+        }
+
+        Assert.Equal(expected.Major, actual.Major);
+        Assert.Equal(expected.Minor, actual.Minor);
     }
 
     private static async Task<ProcessResult> RunDotnetAsync(
