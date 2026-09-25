@@ -87,14 +87,28 @@ internal static class DeclarationCaseVerifier
         var prefix = IdPrefix(axis);
         foreach (var declarationCase in all)
         {
-            Assert.Equal(axis, declarationCase.Axis);
-            Assert.False(string.IsNullOrWhiteSpace(declarationCase.Variant));
-            Assert.False(string.IsNullOrWhiteSpace(declarationCase.Source));
-            Assert.StartsWith(prefix + "-", declarationCase.Id, StringComparison.Ordinal);
-            Assert.Equal(prefix.Length + 4, declarationCase.Id.Length);
+            Assert.True(
+                string.Equals(axis, declarationCase.Axis, StringComparison.Ordinal),
+                $"{declarationCase.Id}: the axis must be {axis}, actual {declarationCase.Axis}.");
+            Assert.False(
+                string.IsNullOrWhiteSpace(declarationCase.Variant),
+                $"{declarationCase.Id}: the variant must not be blank.");
+            Assert.False(
+                string.IsNullOrWhiteSpace(declarationCase.Source),
+                $"{declarationCase.Id}: the source must not be blank.");
+            Assert.True(
+                declarationCase.Id.StartsWith(prefix + "-", StringComparison.Ordinal),
+                $"{declarationCase.Id}: the id must start with {prefix}-.");
+            Assert.True(
+                declarationCase.Id.Length == prefix.Length + 3,
+                $"{declarationCase.Id}: the id must be {prefix}- plus two digits, " +
+                $"expected length {prefix.Length + 3}, actual {declarationCase.Id.Length}.");
             Assert.All(
                 declarationCase.Id[(prefix.Length + 1)..],
-                character => Assert.True(character is >= '0' and <= '9'));
+                character => Assert.True(
+                    character is >= '0' and <= '9',
+                    $"{declarationCase.Id}: every character after {prefix}- must be a digit, " +
+                    $"actual '{character}'."));
 
             foreach (var fragment in declarationCase.ExpectedFragments
                          .Concat(declarationCase.AbsentFragments))
@@ -104,16 +118,29 @@ internal static class DeclarationCaseVerifier
                     $"{declarationCase.Id}: a fragment must not be blank.");
             }
 
-            Assert.Empty(
-                declarationCase.ExpectedFragments.Intersect(
-                    declarationCase.AbsentFragments,
-                    StringComparer.Ordinal));
-            Assert.Equal(
-                declarationCase.ExpectedFragments.Distinct(StringComparer.Ordinal).Count(),
-                declarationCase.ExpectedFragments.Length);
-            Assert.Equal(
-                declarationCase.AbsentFragments.Distinct(StringComparer.Ordinal).Count(),
-                declarationCase.AbsentFragments.Length);
+            var overlap = declarationCase.ExpectedFragments
+                .Intersect(declarationCase.AbsentFragments, StringComparer.Ordinal)
+                .ToImmutableArray();
+            Assert.True(
+                overlap.IsEmpty,
+                $"{declarationCase.Id}: a fragment cannot be expected and absent at once, " +
+                $"actual [{string.Join(" | ", overlap)}].");
+
+            var expectedDistinct = declarationCase.ExpectedFragments
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            Assert.True(
+                expectedDistinct == declarationCase.ExpectedFragments.Length,
+                $"{declarationCase.Id}: expected fragments must be distinct, " +
+                $"{declarationCase.ExpectedFragments.Length} given, {expectedDistinct} distinct.");
+
+            var absentDistinct = declarationCase.AbsentFragments
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            Assert.True(
+                absentDistinct == declarationCase.AbsentFragments.Length,
+                $"{declarationCase.Id}: absent fragments must be distinct, " +
+                $"{declarationCase.AbsentFragments.Length} given, {absentDistinct} distinct.");
 
             switch (declarationCase.Expectation)
             {
@@ -138,9 +165,16 @@ internal static class DeclarationCaseVerifier
             }
         }
 
-        Assert.Equal(
-            all.Select(declarationCase => declarationCase.Id).Distinct(StringComparer.Ordinal).Count(),
-            all.Length);
+        var duplicates = all
+            .GroupBy(declarationCase => declarationCase.Id, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToImmutableArray();
+        Assert.True(
+            duplicates.IsEmpty,
+            $"Axis {axis}: every matrix id must be unique, " +
+            $"actual duplicates [{string.Join(", ", duplicates)}].");
     }
 
     internal static string IdPrefix(string axis) => axis switch
