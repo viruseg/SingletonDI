@@ -29,6 +29,9 @@ public static class SingletonDIInitializer
     /// A request queued behind an active disposal fails with <see cref="InvalidOperationException"/>
     /// when a later disposal request supersedes it.
     /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The method is called reentrantly from a provider factory, initializer, or disposer.
+    /// </exception>
     public static Task InitializeAsync(bool registerShutdownHandlers = true)
     {
         Task initializationTask;
@@ -102,6 +105,9 @@ public static class SingletonDIInitializer
     /// Repeated and concurrent calls are idempotent. Await this task when cleanup must complete
     /// before process exit; process-exit handling alone is best-effort.
     /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// The method is called reentrantly from a provider factory, initializer, or disposer.
+    /// </exception>
     public static ValueTask DisposeAsync()
     {
         TaskCompletionSource<object?> completion;

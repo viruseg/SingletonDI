@@ -8,6 +8,7 @@ internal sealed class ServiceRegistry
 {
     private readonly object _sync = new();
     private readonly AsyncLocal<bool> _initializationContext = new();
+    private readonly AsyncLocal<ProviderCallbackScope?> _providerCallbackContext = new();
     private readonly Dictionary<Type, ProviderRegistration> _registrations = new();
     private readonly List<ProviderRegistration> _orderedRegistrations = new();
     private Task? _initializationTask;
@@ -81,6 +82,7 @@ internal sealed class ServiceRegistry
 
         lock (_sync)
         {
+            ThrowIfProviderCallbackIsActive();
             switch (_state)
             {
                 case LifecycleState.Initialized:
@@ -163,6 +165,7 @@ internal sealed class ServiceRegistry
 
         lock (_sync)
         {
+            ThrowIfProviderCallbackIsActive();
             if (_state == LifecycleState.Disposing)
             {
                 return new ValueTask(_disposeTask!);
@@ -188,6 +191,8 @@ internal sealed class ServiceRegistry
         ServiceGraph graph,
         TaskCompletionSource<object?> completion)
     {
+        var callbackScope = new ProviderCallbackScope();
+        _providerCallbackContext.Value = callbackScope;
         _initializationContext.Value = true;
         try
         {
@@ -220,6 +225,8 @@ internal sealed class ServiceRegistry
         }
         finally
         {
+            callbackScope.IsActive = false;
+            _providerCallbackContext.Value = null;
             _initializationContext.Value = false;
         }
     }
@@ -244,6 +251,8 @@ internal sealed class ServiceRegistry
         Task? initializationTask,
         TaskCompletionSource<object?> completion)
     {
+        var callbackScope = new ProviderCallbackScope();
+        _providerCallbackContext.Value = callbackScope;
         try
         {
             if (initializationTask is not null)
@@ -291,6 +300,20 @@ internal sealed class ServiceRegistry
 
             completion.TrySetException(exception);
         }
+        finally
+        {
+            callbackScope.IsActive = false;
+            _providerCallbackContext.Value = null;
+        }
+    }
+
+    private void ThrowIfProviderCallbackIsActive()
+    {
+        if (_providerCallbackContext.Value?.IsActive == true)
+        {
+            throw new InvalidOperationException(
+                "Lifecycle operations cannot be called from provider callbacks.");
+        }
     }
 
     private static InvalidOperationException DuplicateKeyException(
@@ -305,6 +328,11 @@ internal sealed class ServiceRegistry
     private static string GetTypeName(Type type)
     {
         return type.FullName ?? type.Name;
+    }
+
+    private sealed class ProviderCallbackScope
+    {
+        internal bool IsActive { get; set; } = true;
     }
 
     private enum LifecycleState

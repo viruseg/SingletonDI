@@ -371,6 +371,106 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
+    public async Task InitializeAsync_RejectsDisposeFromProviderInitializer()
+    {
+        await TestGate.WaitAsync();
+        var rejected = false;
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.RegisterProvider<IReentrantInitializerService, ReentrantInitializerService>(
+                static () => new ReentrantInitializerService(),
+                Array.Empty<Type>(),
+                async _ =>
+                {
+                    try
+                    {
+                        var disposal = SingletonDIInitializer.DisposeAsync().AsTask();
+                        if (await Task.WhenAny(disposal, Task.Delay(TimeSpan.FromMilliseconds(250))) == disposal)
+                        {
+                            await disposal;
+                        }
+                    }
+                    catch (InvalidOperationException exception)
+                        when (exception.Message == "Lifecycle operations cannot be called from provider callbacks.")
+                    {
+                        rejected = true;
+                    }
+                },
+                null,
+                null);
+
+            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+
+            Assert.True(rejected);
+        }
+        finally
+        {
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RejectsInitializeFromProviderInitializer()
+    {
+        await TestGate.WaitAsync();
+        var rejected = false;
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.RegisterProvider<IReentrantInitializeService, ReentrantInitializeService>(
+                static () => new ReentrantInitializeService(),
+                Array.Empty<Type>(),
+                async _ =>
+                {
+                    try
+                    {
+                        var initialization = SingletonDIInitializer.InitializeAsync(
+                            registerShutdownHandlers: false);
+                        if (await Task.WhenAny(initialization, Task.Delay(TimeSpan.FromMilliseconds(250))) ==
+                            initialization)
+                        {
+                            await initialization;
+                        }
+                    }
+                    catch (InvalidOperationException exception)
+                        when (exception.Message == "Lifecycle operations cannot be called from provider callbacks.")
+                    {
+                        rejected = true;
+                    }
+                },
+                null,
+                null);
+
+            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+
+            Assert.True(rejected);
+        }
+        finally
+        {
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
     public async Task InitializeAsync_FailedInitializationCanRetry()
     {
         await TestGate.WaitAsync();
@@ -452,6 +552,22 @@ public sealed class SingletonDIInitializerTests
     }
 
     private sealed class ReplacementSupersededService : IReplacementSupersededService
+    {
+    }
+
+    private interface IReentrantInitializerService
+    {
+    }
+
+    private sealed class ReentrantInitializerService : IReentrantInitializerService
+    {
+    }
+
+    private interface IReentrantInitializeService
+    {
+    }
+
+    private sealed class ReentrantInitializeService : IReentrantInitializeService
     {
     }
 
