@@ -111,7 +111,7 @@ internal static class ProviderModuleEmitter
         return source.ToString();
     }
 
-    private static string GetProviderModuleTypeName(string assemblyIdentity)
+    internal static string GetProviderModuleTypeName(string assemblyIdentity)
     {
         using var sha256 = SHA256.Create();
         var hash = BitConverter.ToString(sha256.ComputeHash(Encoding.UTF8.GetBytes(assemblyIdentity)))
