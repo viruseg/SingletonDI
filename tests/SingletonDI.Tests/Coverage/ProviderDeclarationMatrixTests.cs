@@ -884,4 +884,372 @@ public sealed partial class ProviderDeclarationMatrixTests
             [],
             [ServiceFactory]),
     ];
+
+    public static IEnumerable<object[]> InitializerCases =>
+        InitializerRows.Select(row => new object[] { row.Id });
+
+    [Theory]
+    [MemberData(nameof(InitializerCases))]
+    public void Initializer(string id)
+    {
+        DeclarationCaseVerifier.Verify(InitializerRows.Single(row => row.Id == id));
+    }
+
+    private const string InitializerCall = "static value => ToTask(value.InitializeAsync()),";
+
+    internal static readonly DeclarationCase[] InitializerRows =
+    [
+        new(
+            "PROV-INI-01",
+            "PROVIDER_INITIALIZER",
+            "no initializer",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-02",
+            "PROVIDER_INITIALIZER",
+            "public Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [InitializerCall],
+            []),
+        new(
+            "PROV-INI-03",
+            "PROVIDER_INITIALIZER",
+            "public ValueTask initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public ValueTask InitializeAsync() => default;
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [InitializerCall],
+            []),
+        new(
+            "PROV-INI-04",
+            "PROVIDER_INITIALIZER",
+            "internal Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    internal Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [InitializerCall],
+            []),
+        new(
+            "PROV-INI-05",
+            "PROVIDER_INITIALIZER",
+            "protected internal Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    protected internal Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [InitializerCall],
+            []),
+        new(
+            "PROV-INI-06",
+            "PROVIDER_INITIALIZER",
+            "private Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    private Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0005"]),
+            [],
+            []),
+        new(
+            "PROV-INI-07",
+            "PROVIDER_INITIALIZER",
+            "protected Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    protected Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0005"]),
+            [],
+            []),
+        new(
+            "PROV-INI-08",
+            "PROVIDER_INITIALIZER",
+            "private protected Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    private protected Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0005"]),
+            [],
+            []),
+        new(
+            "PROV-INI-09",
+            "PROVIDER_INITIALIZER",
+            "static Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public static Task InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0012"]),
+            [],
+            []),
+        new(
+            "PROV-INI-10",
+            "PROVIDER_INITIALIZER",
+            "generic Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public Task InitializeAsync<T>() => Task.CompletedTask;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0023"]),
+            [],
+            []),
+        new(
+            "PROV-INI-11",
+            "PROVIDER_INITIALIZER",
+            "nullable Task initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public Task? InitializeAsync() => null;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0033"]),
+            [],
+            []),
+        new(
+            "PROV-INI-12",
+            "PROVIDER_INITIALIZER",
+            "nullable ValueTask initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public ValueTask? InitializeAsync() => null;
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0033"]),
+            [],
+            []),
+        new(
+            "PROV-INI-13",
+            "PROVIDER_INITIALIZER",
+            "async void initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public async void InitializeAsync()
+                    {
+                        await Task.Yield();
+                    }
+                }
+            }
+            """,
+            new SilentlyIgnoredExpectation(),
+            [],
+            [InitializerCall]),
+        new(
+            "PROV-INI-14",
+            "PROVIDER_INITIALIZER",
+            "Task-of-T initializer",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public Task<int> InitializeAsync() => Task.FromResult(0);
+                }
+            }
+            """,
+            new SilentlyIgnoredExpectation(),
+            [],
+            [InitializerCall]),
+        new(
+            "PROV-INI-15",
+            "PROVIDER_INITIALIZER",
+            "initializer inherited from the base type",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public Task InitializeAsync() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                }
+            }
+            """,
+            new SilentlyIgnoredExpectation(),
+            [],
+            [InitializerCall]),
+        new(
+            "PROV-INI-16",
+            "PROVIDER_INITIALIZER",
+            "initializer as an explicit interface implementation",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public interface IInitializable
+                {
+                    Task InitializeAsync();
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : IInitializable
+                {
+                    Task IInitializable.InitializeAsync() => Task.CompletedTask;
+                }
+            }
+            """,
+            new SilentlyIgnoredExpectation(),
+            [],
+            [InitializerCall]),
+        new(
+            "PROV-INI-17",
+            "PROVIDER_INITIALIZER",
+            "parameterless initializer alongside an overload that takes an argument",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                    public Task InitializeAsync() => Task.CompletedTask;
+
+                    public Task InitializeAsync(int value) => Task.CompletedTask;
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [InitializerCall],
+            []),
+    ];
 }
