@@ -1165,6 +1165,75 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void ReferencedScan_SkipsAssembliesThatCannotCarrySingletonDIAttributes()
+    {
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+            }
+            """;
+        const string consumerSource = """
+            using SingletonDI.Attributes;
+
+            namespace Consumer
+            {
+                [SingletonDIConsume(typeof(Provider.Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+
+        var contractsCompilation = CreateCompilation(
+            "Shared.Contracts",
+            ContractsSource,
+            [],
+            OutputKind.DynamicallyLinkedLibrary);
+        var contractsReference = MetadataReference.CreateFromImage(EmitImage(contractsCompilation));
+        var providerCompilation = CreateCompilation(
+            "ProviderLibrary",
+            providerSource,
+            [contractsReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var providerReference = MetadataReference.CreateFromImage(
+            EmitImage(RunGenerator(providerCompilation, compositionRoot: false).OutputCompilation));
+        var consumerCompilation = CreateCompilation(
+            "ConsumerLibrary",
+            consumerSource,
+            [contractsReference, providerReference],
+            OutputKind.DynamicallyLinkedLibrary);
+        var consumerReference = MetadataReference.CreateFromImage(
+            EmitImage(RunGenerator(consumerCompilation, compositionRoot: false).OutputCompilation));
+        var rootCompilation = CreateCompilation(
+            "RootApp",
+            "namespace App { public sealed class AppMarker { } }",
+            [contractsReference, providerReference, consumerReference],
+            OutputKind.ConsoleApplication);
+
+        var candidates = ProviderSymbolCollector.GetCandidateAssemblies(rootCompilation, default);
+
+        Assert.Contains(candidates, assembly => assembly.Identity.Name == "ProviderLibrary");
+        Assert.Contains(candidates, assembly => assembly.Identity.Name == "ConsumerLibrary");
+        Assert.DoesNotContain(candidates, assembly => assembly.Identity.Name == "System.Runtime");
+        Assert.DoesNotContain(candidates, assembly => assembly.Identity.Name == "Shared.Contracts");
+        var referencedTypes = ProviderSymbolCollector.GetReferencedTypes(rootCompilation, default);
+        Assert.Contains(
+            referencedTypes,
+            referencedType => referencedType.Assembly.Identity.Name == "ProviderLibrary" &&
+                              referencedType.Type.Name == "Service");
+        Assert.Contains(
+            referencedTypes,
+            referencedType => referencedType.Assembly.Identity.Name == "ConsumerLibrary" &&
+                              referencedType.Type.Name == "Consumer");
+    }
+
+    [Fact]
     public void DM0021_ReportsMarkedProviderAssemblyWithoutBootstrap()
     {
         const string providerSource = """

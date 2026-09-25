@@ -13,6 +13,7 @@ internal static class ProviderSymbolCollector
     private const string ProviderModuleMarkerName =
         "SingletonDI.Attributes.SingletonDIProviderModuleAttribute";
     private const string GeneratedModuleNamespace = "SingletonDI.Generated.";
+    private const string AttributesAssemblyName = "SingletonDI.Attributes";
     private const string LegacyGeneratedBootstrapTypeName =
         GeneratedModuleNamespace + "__SingletonDIProviderModule__";
 
@@ -249,7 +250,7 @@ internal static class ProviderSymbolCollector
         CancellationToken cancellationToken)
     {
         var types = new List<ReferencedTypeData>();
-        foreach (var assembly in GetReferencedAssemblies(compilation, cancellationToken))
+        foreach (var assembly in GetCandidateAssemblies(compilation, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var type in EnumerateTypes(assembly.GlobalNamespace))
@@ -269,6 +270,39 @@ internal static class ProviderSymbolCollector
             .OrderBy(type => type.Assembly.Identity.ToString(), StringComparer.Ordinal)
             .ThenBy(type => type.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
             .ToImmutableArray();
+    }
+
+    internal static ImmutableArray<IAssemblySymbol> GetCandidateAssemblies(
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        return GetReferencedAssemblies(compilation, cancellationToken)
+            .Where(ReferencesAttributesAssembly)
+            .ToImmutableArray();
+    }
+
+    /// <summary>
+    /// Reports whether an assembly can carry a SingletonDI attribute. A type can only be
+    /// annotated with an attribute it references, so assemblies that never reference the
+    /// attribute assembly are skipped before their metadata is enumerated.
+    /// </summary>
+    private static bool ReferencesAttributesAssembly(IAssemblySymbol assembly)
+    {
+        foreach (var module in assembly.Modules)
+        {
+            foreach (var referencedAssembly in module.ReferencedAssemblySymbols)
+            {
+                if (string.Equals(
+                        referencedAssembly.Identity.Name,
+                        AttributesAssemblyName,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     internal static IEnumerable<INamedTypeSymbol> EnumerateTypes(INamespaceOrTypeSymbol symbol)
