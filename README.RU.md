@@ -631,35 +631,35 @@ public sealed class DatabaseService { }
 
 Возникает, когда подключённая публичная provider-сборка не содержит сгенерированный assembly marker `SingletonDIProviderModuleAttribute`. Provider-пакет или проект должен быть собран совместимыми generator/runtime-протоколом SingletonDI до того, как composition root сможет его загрузить.
 
-### DM0021: Provider module bootstrap method is missing
+### DM0021: Provider module bootstrap is missing
 
 Возникает, когда помеченная provider-сборка не предоставляет публичный статический параметрический метод `Bootstrap()`. Пересоберите провайдера совместимым генератором SingletonDI.
 
-### DM0022: Provider or service type is not accessible from generated code
+### DM0022: Provider type is not accessible
 
 Возникает, когда сгенерированный код не может именовать провайдера, контракт сервиса или зависимость провайдера из-за объявленной доступности или file-local содержащего типа. Используйте публичный тип либо тип, доступный сборке.
 
-### DM0023: Generic `InitializeAsync` methods are not supported
+### DM0023: Generic InitializeAsync is not supported
 
 Возникает, когда параметрический метод `InitializeAsync` объявляет собственные параметры типа. Уберите параметры типа у метода или выразите инициализацию через не-generic метод.
 
-### DM0024: Open generic dependencies are not supported
+### DM0024: Open generic dependency is not supported
 
 Возникает, когда провайдер или consumer использует несобранный generic-тип, например `typeof(IContract<>)`. Используйте конкретизированный тип зависимости.
 
-### DM0025: Generated consumer property name already exists
+### DM0025: Consumer property name already exists
 
 Возникает, когда генерируемое свойство зависимости конфликтует с членом, уже объявленным в consumer или унаследованным от базового типа. Переименуйте свойство зависимости или удалите конфликтующий член; генератор пропустит конфликтующее свойство.
 
-### DM0026: A containing consumer type must be partial
+### DM0026: Consumer containing type is not partial
 
 Возникает, когда вложенный consumer имеет содержащий тип, который нельзя переоткрыть. Объявите все содержащие типы как `partial`.
 
-### DM0027: Generated source requires C# 9 or later
+### DM0027: Generated code requires C# 9 or newer
 
 Возникает, когда версия языка компиляции ниже C# 9. Повысьте версию языка проекта или используйте совместимый target framework.
 
-### DM0028: File-scoped consumers require C# 10 or later
+### DM0028: File-scoped consumers require C# 10
 
 Возникает, когда consumer в file-scoped namespace компилируется с версией языка ниже C# 10. Повысьте версию языка или используйте блочный namespace.
 

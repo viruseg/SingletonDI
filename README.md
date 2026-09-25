@@ -622,7 +622,7 @@ public interface ICacheService { }
 public sealed class DatabaseService { }
 ```
 
-### DM0017: Executable has an unmapped consumer dependency
+### DM0017: Composition root is required for an unmapped consumer dependency
 
 Occurs when an executable project without `SingletonDICompositionRoot=true` has a consumer dependency that is not mapped by its local provider map. This includes an interface or abstract contract declared in the current assembly, a contract supplied by another assembly, and a concrete provider from another assembly. Library consumer projects do not receive `DM0017`; their dependencies are validated by the executable composition root.
 
@@ -638,35 +638,35 @@ Occurs when multiple providers map to the same concrete or contract service key.
 
 Occurs when a referenced public provider assembly does not contain the generated `SingletonDIProviderModuleAttribute` assembly marker. The provider package or project must be built with a compatible SingletonDI generator/runtime protocol before a composition root can bootstrap it.
 
-### DM0021: Provider module bootstrap method is missing
+### DM0021: Provider module bootstrap is missing
 
 Occurs when a marked provider assembly does not expose a public static parameterless `Bootstrap()` method. Rebuild the provider with a compatible SingletonDI generator.
 
-### DM0022: Provider or service type is not accessible
+### DM0022: Provider type is not accessible
 
 Occurs when generated code cannot name a provider, service contract, or provider dependency because of its declared accessibility or a file-local containing type. Use a public or assembly-accessible type.
 
-### DM0023: Generic `InitializeAsync` methods are not supported
+### DM0023: Generic InitializeAsync is not supported
 
 Occurs when a parameterless `InitializeAsync` method declares its own type parameters. Remove the method type parameters or expose initialization through a non-generic method.
 
-### DM0024: Open generic dependencies are not supported
+### DM0024: Open generic dependency is not supported
 
 Occurs when a provider or consumer uses an unbound generic type such as `typeof(IContract<>)`. Use a constructed dependency type instead.
 
-### DM0025: Generated consumer property name already exists
+### DM0025: Consumer property name already exists
 
 Occurs when a generated dependency property would collide with a member already declared by the consumer or an inherited type. Rename the dependency property or remove the conflicting member; the generator omits the colliding property.
 
-### DM0026: A containing consumer type must be partial
+### DM0026: Consumer containing type is not partial
 
 Occurs when a nested consumer has a containing type that cannot be reopened. Declare every containing type as `partial`.
 
-### DM0027: Generated source requires C# 9 or later
+### DM0027: Generated code requires C# 9 or newer
 
 Occurs when the compilation language version is below C# 9. Upgrade the project language version or use a compatible target framework.
 
-### DM0028: File-scoped consumers require C# 10 or later
+### DM0028: File-scoped consumers require C# 10
 
 Occurs when a file-scoped consumer declaration is compiled below C# 10. Upgrade the language version or use a block-scoped namespace.
 
