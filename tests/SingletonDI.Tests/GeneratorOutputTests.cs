@@ -114,6 +114,7 @@ public sealed class GeneratorOutputTests
             compilation,
             out var outputCompilation,
             out var diagnostics);
+        var generated = GetGeneratedSource(driver.GetRunResult());
 
         Assert.DoesNotContain(
             diagnostics,
@@ -121,6 +122,11 @@ public sealed class GeneratorOutputTests
         Assert.DoesNotContain(
             outputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains("partial class Consumer<T>", generated);
+        Assert.Contains("where T : global::System.Exception,global::System.Collections.Generic.IEnumerable<T>", generated);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIHost__.Resolve<global::App.Service>()",
+            generated);
     }
 
     [Fact]
@@ -360,6 +366,7 @@ public sealed class GeneratorOutputTests
                     LanguageVersion.Latest,
                     preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"])));
         var outputCompilation = compilation.AddSyntaxTrees(generatedTrees);
+        var generated = GetGeneratedSource(runResult);
 
         Assert.DoesNotContain(
             runResult.Diagnostics,
@@ -367,6 +374,14 @@ public sealed class GeneratorOutputTests
         Assert.DoesNotContain(
             outputCompilation.GetDiagnostics(),
             diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.Contains(
+            "global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::App.Service, global::App.Service>",
+            generated);
+        Assert.Contains("static value => ToTask(value.InitializeAsync()),", generated);
+        Assert.Contains(
+            "static value => ((global::System.IAsyncDisposable)value).DisposeAsync().AsTask());",
+            generated);
+        Assert.DoesNotContain("((global::System.IDisposable)value).Dispose()", generated);
     }
 
     [Fact]
