@@ -7,6 +7,7 @@ namespace SingletonDI.Generated;
 
 internal sealed class ShutdownManager : IDisposable
 {
+    private static readonly TimeSpan DefaultShutdownTimeout = TimeSpan.FromSeconds(30);
     private static readonly (PosixSignal Signal, int ExitCode)[] PosixSignals =
     [
         (PosixSignal.SIGINT, 130),
@@ -17,15 +18,18 @@ internal sealed class ShutdownManager : IDisposable
     private readonly Func<ValueTask> _dispose;
     private readonly Action<int> _terminateProcess;
     private readonly IShutdownSignalSource _signalSource;
+    private readonly TimeSpan _shutdownTimeout;
     private readonly object _sync = new();
     private IDisposable[]? _registrations;
     private Task? _disposeTask;
     private Task? _shutdownTask;
+    private int _shutdownExitCode;
+    private int _terminationRequested;
     private bool _registered;
     private bool _disposed;
 
     internal ShutdownManager(Func<ValueTask> dispose, Action<int> terminateProcess)
-        : this(dispose, terminateProcess, PlatformShutdownSignalSource.Instance)
+        : this(dispose, terminateProcess, PlatformShutdownSignalSource.Instance, DefaultShutdownTimeout)
     {
     }
 
@@ -33,10 +37,25 @@ internal sealed class ShutdownManager : IDisposable
         Func<ValueTask> dispose,
         Action<int> terminateProcess,
         IShutdownSignalSource signalSource)
+        : this(dispose, terminateProcess, signalSource, DefaultShutdownTimeout)
+    {
+    }
+
+    internal ShutdownManager(
+        Func<ValueTask> dispose,
+        Action<int> terminateProcess,
+        IShutdownSignalSource signalSource,
+        TimeSpan shutdownTimeout)
     {
         _dispose = dispose ?? throw new ArgumentNullException(nameof(dispose));
         _terminateProcess = terminateProcess ?? throw new ArgumentNullException(nameof(terminateProcess));
         _signalSource = signalSource ?? throw new ArgumentNullException(nameof(signalSource));
+        if (shutdownTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(shutdownTimeout));
+        }
+
+        _shutdownTimeout = shutdownTimeout;
     }
 
     internal void Register()
@@ -180,20 +199,34 @@ internal sealed class ShutdownManager : IDisposable
 
     private Task BeginSignalShutdown(int exitCode)
     {
-        TaskCompletionSource<bool> completion;
+        TaskCompletionSource<bool>? completion = null;
+        Task shutdownTask;
+        var terminateImmediately = false;
         lock (_sync)
         {
             if (_shutdownTask is not null)
             {
-                return _shutdownTask;
+                shutdownTask = _shutdownTask;
+                exitCode = _shutdownExitCode;
+                terminateImmediately = true;
             }
-
-            completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _shutdownTask = completion.Task;
+            else
+            {
+                _shutdownExitCode = exitCode;
+                completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _shutdownTask = completion.Task;
+                shutdownTask = completion.Task;
+            }
         }
 
-        _ = CompleteSignalShutdownAsync(exitCode, completion);
-        return completion.Task;
+        if (terminateImmediately)
+        {
+            RequestTermination(exitCode);
+            return shutdownTask;
+        }
+
+        _ = CompleteSignalShutdownAsync(exitCode, completion!);
+        return shutdownTask;
     }
 
     private async Task CompleteSignalShutdownAsync(
@@ -202,13 +235,29 @@ internal sealed class ShutdownManager : IDisposable
     {
         try
         {
-            await GetDisposeTask().ConfigureAwait(false);
-            _terminateProcess(exitCode);
+            var disposeTask = GetDisposeTask();
+            var completedTask = await Task.WhenAny(
+                disposeTask,
+                Task.Delay(_shutdownTimeout)).ConfigureAwait(false);
+            if (completedTask == disposeTask)
+            {
+                await disposeTask.ConfigureAwait(false);
+            }
+
+            RequestTermination(exitCode);
             completion.TrySetResult(true);
         }
         catch (Exception exception)
         {
             completion.TrySetException(exception);
+        }
+    }
+
+    private void RequestTermination(int exitCode)
+    {
+        if (Interlocked.CompareExchange(ref _terminationRequested, 1, 0) == 0)
+        {
+            _terminateProcess(exitCode);
         }
     }
 

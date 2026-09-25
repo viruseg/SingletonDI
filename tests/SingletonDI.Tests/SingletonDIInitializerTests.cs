@@ -114,6 +114,71 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
+    public async Task ShutdownManager_TerminatesWhenDisposalExceedsTimeout()
+    {
+        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var termination = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var terminateCount = 0;
+        var manager = new ShutdownManager(
+            async () =>
+            {
+                disposalStarted.TrySetResult(true);
+                await releaseDisposal.Task;
+            },
+            code =>
+            {
+                Interlocked.Increment(ref terminateCount);
+                termination.TrySetResult(code);
+            },
+            new FailingShutdownSignalSource(null),
+            TimeSpan.FromMilliseconds(50));
+
+        var shutdown = manager.HandlePosixSignalForTesting(
+            static () => { },
+            143);
+
+        await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(143, await termination.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        await shutdown;
+
+        releaseDisposal.TrySetResult(true);
+        Assert.Equal(1, Volatile.Read(ref terminateCount));
+    }
+
+    [Fact]
+    public async Task ShutdownManager_SecondSignalTerminatesImmediatelyAndOnlyOnce()
+    {
+        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var termination = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var terminateCount = 0;
+        var manager = new ShutdownManager(
+            async () =>
+            {
+                disposalStarted.TrySetResult(true);
+                await releaseDisposal.Task;
+            },
+            code =>
+            {
+                Interlocked.Increment(ref terminateCount);
+                termination.TrySetResult(code);
+            },
+            new FailingShutdownSignalSource(null),
+            TimeSpan.FromSeconds(5));
+
+        var firstShutdown = manager.HandlePosixSignalForTesting(static () => { }, 130);
+        await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondShutdown = manager.HandlePosixSignalForTesting(static () => { }, 143);
+
+        Assert.Equal(130, await termination.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        releaseDisposal.TrySetResult(true);
+        await Task.WhenAll(firstShutdown, secondShutdown);
+
+        Assert.Equal(1, Volatile.Read(ref terminateCount));
+    }
+
+    [Fact]
     public async Task InitializeAsync_ConcurrentTrueRequestRegistersShutdownHandlers()
     {
         await TestGate.WaitAsync();

@@ -20,8 +20,9 @@ public static class SingletonDIInitializer
     /// </summary>
     /// <param name="registerShutdownHandlers">
     /// Whether process-exit, console-cancel, and supported POSIX signal handlers should be registered.
-    /// When enabled, handled signals cancel default termination, await one disposal operation, and
-    /// terminate with exit code 130 for SIGINT, 143 for SIGTERM, or 131 for SIGQUIT.
+    /// When enabled, handled signals cancel default termination, wait for one bounded disposal operation,
+    /// and terminate with exit code 130 for SIGINT, 143 for SIGTERM, or 131 for SIGQUIT. A second handled
+    /// signal terminates immediately using the first signal's exit code.
     /// </param>
     /// <returns>
     /// A task that completes after every provider instance has been created and every
