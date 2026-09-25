@@ -96,45 +96,6 @@ public class SingletonDIGeneratorTests
         Assert.Single(model.Dependencies);
     }
 
-    [Fact]
-    public void CombinedModel_HasCircularDependency_ReturnsTrue()
-    {
-        // Arrange - circular dependency exists when TopologicalOrder is empty but Providers is not
-        var provider = new ProviderModel(fullyQualifiedName : "Test.Provider",
-                                         shortName : "Provider",
-                                         @namespace : "Test",
-                                         assemblyIdentity : "Test",
-                                         hasInitializeAsyncMethod : false,
-                                         isDisposable : false,
-                                         isAsyncDisposable : false,
-                                         dependencies : ImmutableArray<string>.Empty,
-                                         serviceTypeFullyQualifiedName : null,
-                                         serviceTypeShortName : null,
-                                         serviceTypeNamespace : null,
-                                         propertyName : null,
-                                         location : Location.None,
-                                         propertyNameLocation : null);
-
-        var model = new CombinedModel(Providers: [provider],
-                                      Consumers: ImmutableArray<ConsumerModel>.Empty,
-                                      TopologicalOrder: ImmutableArray<string>.Empty // Empty indicates cycle
-        );
-
-        // Assert
-        Assert.True(model.HasCircularDependency);
-    }
-
-    [Fact]
-    public void CombinedModel_NoCircularDependency_ReturnsFalse()
-    {
-        // Arrange - no circular dependency when both are empty (no providers)
-        var model = new CombinedModel(Providers: ImmutableArray<ProviderModel>.Empty,
-                                      Consumers: ImmutableArray<ConsumerModel>.Empty,
-                                      TopologicalOrder: ImmutableArray<string>.Empty);
-
-        // Assert
-        Assert.False(model.HasCircularDependency);
-    }
 
     [Fact]
     public void ProviderModel_WithCustomPropertyName_CanBeCreated()

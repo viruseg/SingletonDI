@@ -8,17 +8,6 @@ internal static class ReferencedConsumerCollector
 {
     private const string ConsumeAttributeName = ProviderSymbolCollector.ConsumeAttributeName;
 
-    internal static ImmutableArray<ImmutableArray<string>> CollectReferencedConsumerDependencies(
-        Compilation compilation,
-        CancellationToken cancellationToken)
-    {
-        return CollectReferencedConsumerDependencyIdentities(compilation, cancellationToken)
-            .Select(dependencies => dependencies
-                .Select(dependency => dependency.FullyQualifiedName)
-                .ToImmutableArray())
-            .ToImmutableArray();
-    }
-
     internal static ImmutableArray<ImmutableArray<ServiceTypeIdentity>>
         CollectReferencedConsumerDependencyIdentities(
             Compilation compilation,
