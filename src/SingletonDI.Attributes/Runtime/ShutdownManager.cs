@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -6,19 +7,36 @@ namespace SingletonDI.Generated;
 
 internal sealed class ShutdownManager : IDisposable
 {
+    private static readonly (PosixSignal Signal, int ExitCode)[] PosixSignals =
+    [
+        (PosixSignal.SIGINT, 130),
+        (PosixSignal.SIGTERM, 143),
+        (PosixSignal.SIGQUIT, 131),
+    ];
+
     private readonly Func<ValueTask> _dispose;
     private readonly Action<int> _terminateProcess;
+    private readonly IShutdownSignalSource _signalSource;
     private readonly object _sync = new();
-    private IDisposable[]? _posixRegistrations;
+    private IDisposable[]? _registrations;
     private Task? _disposeTask;
     private Task? _shutdownTask;
     private bool _registered;
     private bool _disposed;
 
     internal ShutdownManager(Func<ValueTask> dispose, Action<int> terminateProcess)
+        : this(dispose, terminateProcess, PlatformShutdownSignalSource.Instance)
+    {
+    }
+
+    internal ShutdownManager(
+        Func<ValueTask> dispose,
+        Action<int> terminateProcess,
+        IShutdownSignalSource signalSource)
     {
         _dispose = dispose ?? throw new ArgumentNullException(nameof(dispose));
         _terminateProcess = terminateProcess ?? throw new ArgumentNullException(nameof(terminateProcess));
+        _signalSource = signalSource ?? throw new ArgumentNullException(nameof(signalSource));
     }
 
     internal void Register()
@@ -35,19 +53,28 @@ internal sealed class ShutdownManager : IDisposable
                 return;
             }
 
-            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-            Console.CancelKeyPress += OnCancelKeyPress;
-            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            var registrations = new List<IDisposable>(5);
+            try
             {
-                RegisterPosixSignals();
+                registrations.Add(_signalSource.RegisterProcessExit(
+                    () => OnProcessExit(null, EventArgs.Empty)));
+                registrations.Add(_signalSource.RegisterCancelKeyPress(
+                    args => OnCancelKeyPress(null, args)));
+                RegisterPosixSignals(registrations);
+                _registrations = registrations.ToArray();
+                _registered = true;
             }
-            _registered = true;
+            catch
+            {
+                DisposeRegistrations(registrations);
+                throw;
+            }
         }
     }
 
     public void Dispose()
     {
-        IDisposable[]? posixRegistrations;
+        IDisposable[]? registrations;
         lock (_sync)
         {
             if (_disposed)
@@ -56,31 +83,13 @@ internal sealed class ShutdownManager : IDisposable
             }
 
             _disposed = true;
-            if (!_registered)
-            {
-                return;
-            }
-
-            AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
-            Console.CancelKeyPress -= OnCancelKeyPress;
-            posixRegistrations = _posixRegistrations;
-            _posixRegistrations = null;
+            registrations = _registrations;
+            _registrations = null;
         }
 
-        if (posixRegistrations is null)
+        if (registrations is not null)
         {
-            return;
-        }
-
-        foreach (var registration in posixRegistrations)
-        {
-            try
-            {
-                registration.Dispose();
-            }
-            catch
-            {
-            }
+            DisposeRegistrations(registrations);
         }
     }
 
@@ -111,26 +120,44 @@ internal sealed class ShutdownManager : IDisposable
         return BeginSignalShutdown(130);
     }
 
-    private void RegisterPosixSignals()
+    private void RegisterPosixSignals(List<IDisposable> registrations)
     {
+        if (!_signalSource.SupportsPosixSignals)
+        {
+            return;
+        }
+
+        var posixRegistrationStart = registrations.Count;
         try
         {
-            _posixRegistrations = new IDisposable[]
+            foreach (var (signal, exitCode) in PosixSignals)
             {
-                PosixSignalRegistration.Create(
-                    PosixSignal.SIGINT,
-                    context => HandlePosixSignal(context, 130)),
-                PosixSignalRegistration.Create(
-                    PosixSignal.SIGTERM,
-                    context => HandlePosixSignal(context, 143)),
-                PosixSignalRegistration.Create(
-                    PosixSignal.SIGQUIT,
-                    context => HandlePosixSignal(context, 131))
-            };
+                registrations.Add(_signalSource.RegisterPosixSignal(
+                    signal,
+                    context => HandlePosixSignal(context, exitCode)));
+            }
         }
         catch (PlatformNotSupportedException)
         {
-            _posixRegistrations = null;
+            var partialPosixRegistrations = registrations.GetRange(
+                posixRegistrationStart,
+                registrations.Count - posixRegistrationStart);
+            registrations.RemoveRange(posixRegistrationStart, partialPosixRegistrations.Count);
+            DisposeRegistrations(partialPosixRegistrations);
+        }
+    }
+
+    private static void DisposeRegistrations(IEnumerable<IDisposable> registrations)
+    {
+        foreach (var registration in registrations.Reverse())
+        {
+            try
+            {
+                registration.Dispose();
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -213,6 +240,58 @@ internal sealed class ShutdownManager : IDisposable
         catch
         {
             completion.TrySetResult(false);
+        }
+    }
+}
+
+internal interface IShutdownSignalSource
+{
+    bool SupportsPosixSignals { get; }
+
+    IDisposable RegisterProcessExit(Action handler);
+
+    IDisposable RegisterCancelKeyPress(Action<ConsoleCancelEventArgs> handler);
+
+    IDisposable RegisterPosixSignal(PosixSignal signal, Action<PosixSignalContext> handler);
+}
+
+internal sealed class PlatformShutdownSignalSource : IShutdownSignalSource
+{
+    internal static PlatformShutdownSignalSource Instance { get; } = new();
+
+    public bool SupportsPosixSignals => OperatingSystem.IsLinux() || OperatingSystem.IsMacOS();
+
+    public IDisposable RegisterProcessExit(Action handler)
+    {
+        EventHandler eventHandler = (_, _) => handler();
+        AppDomain.CurrentDomain.ProcessExit += eventHandler;
+        return new ShutdownEventRegistration(() => AppDomain.CurrentDomain.ProcessExit -= eventHandler);
+    }
+
+    public IDisposable RegisterCancelKeyPress(Action<ConsoleCancelEventArgs> handler)
+    {
+        ConsoleCancelEventHandler eventHandler = (_, args) => handler(args);
+        Console.CancelKeyPress += eventHandler;
+        return new ShutdownEventRegistration(() => Console.CancelKeyPress -= eventHandler);
+    }
+
+    public IDisposable RegisterPosixSignal(PosixSignal signal, Action<PosixSignalContext> handler)
+    {
+        return PosixSignalRegistration.Create(signal, handler);
+    }
+
+    private sealed class ShutdownEventRegistration : IDisposable
+    {
+        private Action? _unsubscribe;
+
+        internal ShutdownEventRegistration(Action unsubscribe)
+        {
+            _unsubscribe = unsubscribe;
+        }
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _unsubscribe, null)?.Invoke();
         }
     }
 }

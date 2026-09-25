@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using SingletonDI.Generated;
 using Xunit;
 
@@ -88,6 +89,28 @@ public sealed class SingletonDIInitializerTests
 
         Assert.Equal(1, Volatile.Read(ref disposeCount));
         Assert.Equal(1, Volatile.Read(ref terminateCount));
+    }
+
+    [Fact]
+    public void ShutdownManager_Register_RollsBackEveryHandlerAfterPartialFailure()
+    {
+        var signalSource = new FailingShutdownSignalSource(PosixSignal.SIGTERM);
+        var manager = new ShutdownManager(
+            static () => ValueTask.CompletedTask,
+            static _ => { },
+            signalSource);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => manager.Register());
+
+        Assert.Equal("POSIX registration failed", exception.Message);
+        Assert.Equal(0, signalSource.ActiveRegistrations);
+
+        signalSource.FailOnSignal = null;
+        manager.Register();
+        Assert.Equal(5, signalSource.ActiveRegistrations);
+
+        manager.Dispose();
+        Assert.Equal(0, signalSource.ActiveRegistrations);
     }
 
     [Fact]
@@ -512,6 +535,63 @@ public sealed class SingletonDIInitializerTests
             }
 
             TestGate.Release();
+        }
+    }
+
+    private sealed class FailingShutdownSignalSource : IShutdownSignalSource
+    {
+        private int _activeRegistrations;
+
+        internal FailingShutdownSignalSource(PosixSignal? failOnSignal)
+        {
+            FailOnSignal = failOnSignal;
+        }
+
+        internal PosixSignal? FailOnSignal { get; set; }
+
+        internal int ActiveRegistrations => Volatile.Read(ref _activeRegistrations);
+
+        public bool SupportsPosixSignals => true;
+
+        public IDisposable RegisterProcessExit(Action handler)
+        {
+            return Register();
+        }
+
+        public IDisposable RegisterCancelKeyPress(Action<ConsoleCancelEventArgs> handler)
+        {
+            return Register();
+        }
+
+        public IDisposable RegisterPosixSignal(PosixSignal signal, Action<PosixSignalContext> handler)
+        {
+            if (signal == FailOnSignal)
+            {
+                throw new InvalidOperationException("POSIX registration failed");
+            }
+
+            return Register();
+        }
+
+        private IDisposable Register()
+        {
+            Interlocked.Increment(ref _activeRegistrations);
+            return new CallbackRegistration(() => Interlocked.Decrement(ref _activeRegistrations));
+        }
+
+        private sealed class CallbackRegistration : IDisposable
+        {
+            private Action? _dispose;
+
+            internal CallbackRegistration(Action dispose)
+            {
+                _dispose = dispose;
+            }
+
+            public void Dispose()
+            {
+                Interlocked.Exchange(ref _dispose, null)?.Invoke();
+            }
         }
     }
 
