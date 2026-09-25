@@ -1477,7 +1477,7 @@ public sealed class GeneratorCompositionTests
 
     private static CSharpParseOptions ParseOptions { get; } = new(
         LanguageVersion.Latest,
-        preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
 
     private sealed record CompositionRunResult(
         ImmutableArray<Diagnostic> Diagnostics,

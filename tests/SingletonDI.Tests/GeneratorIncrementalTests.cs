@@ -14,7 +14,7 @@ public sealed class GeneratorIncrementalTests
     {
         var parseOptions = new CSharpParseOptions(
             LanguageVersion.Latest,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
         var source = """
             using SingletonDI.Attributes;
 
@@ -68,7 +68,7 @@ public sealed class GeneratorIncrementalTests
     {
         var parseOptions = new CSharpParseOptions(
             LanguageVersion.Latest,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
         var providerSource = """
             using SingletonDI.Attributes;
 
@@ -142,7 +142,7 @@ public sealed class GeneratorIncrementalTests
     {
         var parseOptions = new CSharpParseOptions(
             LanguageVersion.Latest,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
         var firstSource = "public class First { public int Value => 1; }";
         var secondSource = "public class First { public int Value => 2; }";
         var references = CreateMetadataReferences();

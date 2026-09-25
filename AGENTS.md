@@ -32,15 +32,15 @@ SingletonDI/
 `--blame-hang` is mandatory, not optional: without it a stuck `testhost` never exits and the agent session has to be
 unblocked by hand. When it fires, the output names the test that hung and a dump is written under
 `tests/SingletonDI.Tests/TestResults`. Raise `--blame-hang-timeout` only after checking how long a legitimate cold
-run takes; three target frameworks are tested per invocation.
+run takes; one target framework is tested per invocation.
 
-The test suite takes several minutes because it packs the runtime and builds it against SDK 8, 9, and 10. Give the
+The test suite takes several minutes because it packs the runtime and builds it against SDK 10. Give the
 command a tool timeout well above that instead of raising the blame timeout.
 
 ## Important characteristics
 
 - The source generator runs at compile time; generated source requires C# 9 or later, and file-scoped consumer declarations require C# 10 or later.
-- The package targets the Roslyn 4.8 API baseline and is verified with SDK 8, 9, and 10.
+- The package targets the Roslyn 4.8 API baseline and is verified with SDK 10.
 - Runtime APIs and generated provider modules use the `SingletonDI.Generated` namespace.
 - A cross-project executable opts in with `SingletonDICompositionRoot=true` and exposes the property through `CompilerVisibleProperty`.
 - Consumers are partial top-level or nested classes, structs, records, or record structs. The consume attribute is inherited, so derived types receive the same dependencies.
@@ -60,4 +60,4 @@ command a tool timeout well above that instead of raising the blame timeout.
 - Use `CodeFixTestHarness` and `RefactoringTestHarness` for real code-action and refactoring pipelines.
 - Start child `dotnet` processes only through `DotnetProcessRunner` so a stuck build cannot hang the test run.
 - Assert exact diagnostic IDs, severity, locations, messages, and generated compilation results.
-- Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 8, 9, and 10.
+- Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 10.

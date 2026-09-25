@@ -22,6 +22,9 @@ public sealed class PackageMetadataTests
         Assert.Equal("true", ReadProperty(document, "IncludeSymbols"));
         Assert.Equal("snupkg", ReadProperty(document, "SymbolPackageFormat"));
 
+        Assert.Equal("net10.0", ReadProperty(document, "TargetFramework"));
+        Assert.Empty(ReadProperty(document, "TargetFrameworks"));
+
         var compatibilityReferences = document
             .Descendants("PackageReference")
             .Where(reference =>
@@ -32,16 +35,9 @@ public sealed class PackageMetadataTests
                 string.Equals(
                     reference.Attribute("Include")?.Value,
                     "Microsoft.Bcl.AsyncInterfaces",
-                    StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+                    StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(2, compatibilityReferences.Length);
-        Assert.All(compatibilityReferences, reference =>
-        {
-            var condition = reference.Attribute("Condition")?.Value;
-            Assert.NotNull(condition);
-            Assert.Contains("netstandard2.0", condition, StringComparison.OrdinalIgnoreCase);
-        });
+        Assert.Empty(compatibilityReferences);
     }
 
     private static string ReadProperty(XDocument document, string name)

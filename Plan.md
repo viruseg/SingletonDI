@@ -406,7 +406,7 @@ Generator больше не создаёт per-assembly `__SingletonDIContainer_
 - Обычный доступ к `Resolve<T>` до успешной инициализации и вне активного initialization context выбрасывает `InvalidOperationException` с указанием initializer. В активном context provider factory/constructor может разрешать уже созданные зависимости; SampleApp использует этот путь в конструкторах provider-ов.
 - `DisposeAsync` ожидает незавершённую инициализацию, освобождает уровни в обратном порядке и выполняется не более одного раза для одновременных вызовов.
 - При реализации обоих disposal-интерфейсов выбирается `DisposeAsync`.
-- `registerShutdownHandlers` сохраняет регистрацию `ProcessExit`, `Console.CancelKeyPress` и POSIX signal handlers на `net8.0`; fallback для `netstandard2.0` не меняет публичный API.
+- `registerShutdownHandlers` регистрирует `ProcessExit`, `Console.CancelKeyPress` и POSIX signal handlers на `net10.0`.
 - После успешного `DisposeAsync` процессный registry можно инициализировать повторно теми же зарегистрированными provider-ами.
 
 Независимые composition roots в одном процессе не поддерживаются, потому что runtime registry не разделён по root.
@@ -443,17 +443,13 @@ Generator больше не создаёт per-assembly `__SingletonDIContainer_
 
 ## 11. Структура решения и target frameworks
 
-- `SingletonDI.Attributes` targets `netstandard2.0;net8.0` и сохраняет package ID `SingletonDI`.
-- `SingletonDI.Generator` targets `netstandard2.0` и использует Roslyn Incremental API.
-- `SingletonDI.Refactoring` остаётся analyzer/code-fix проектом.
-- `SingletonDI.Tests` targets `net8.0;net9.0;net10.0`.
-- Inter-project fixture targets `net8.0` и проверяет реальные `ProjectReference` boundaries.
-- Public lifecycle API не зависит от версии host executable framework.
+- `SingletonDI.Attributes` targets only `net10.0` и сохраняет package ID `SingletonDI`.
+- `SingletonDI.Generator` и `SingletonDI.Refactoring` target `netstandard2.0` для совместимости с хостами Roslyn 4.8.
+- `SingletonDI.Tests` targets only `net10.0`.
+- Inter-project fixtures target `net10.0` и проверяют реальные `ProjectReference` boundaries.
+- Public runtime доступен только в приложениях на .NET 10.
 
-Runtime dependencies assembly:
-
-- `System.Threading.Tasks.Extensions` 4.6.0;
-- `Microsoft.Bcl.AsyncInterfaces` 9.0.0.
+Runtime не имеет внешних package dependencies и использует встроенные типы .NET 10.
 
 Производительность сохраняется за счёт `IIncrementalGenerator`, immutable/record models, отдельных provider/root/consumer stages, дедупликации по assembly identity и отсутствия runtime reflection.
 
@@ -524,5 +520,5 @@ Composition root регистрирует реализацию, bootstrap-ит �
 - Reverse-level disposal, async disposal preference и idempotent `DisposeAsync`.
 - Failed initialization оставляет возможность retry.
 - Single-project compatibility без composition-root property.
-- `netstandard2.0;net8.0` runtime assets и test matrix `net8.0;net9.0;net10.0`.
+- Runtime assets и test matrix только для `net10.0`.
 - Generic providers и несколько contract types на provider не поддерживаются.

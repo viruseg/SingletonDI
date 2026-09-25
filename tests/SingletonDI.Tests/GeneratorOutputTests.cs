@@ -163,7 +163,7 @@ public sealed class GeneratorOutputTests
     {
         var parseOptions = new CSharpParseOptions(
             LanguageVersion.CSharp7_3,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
         var compilation = CreateCompilation(
             """
             using SingletonDI.Attributes;
@@ -198,7 +198,7 @@ public sealed class GeneratorOutputTests
     {
         var parseOptions = new CSharpParseOptions(
             LanguageVersion.CSharp9,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
         var compilation = CreateCompilation(
             """
             using SingletonDI.Attributes;
@@ -358,7 +358,7 @@ public sealed class GeneratorOutputTests
                 generated.SourceText.ToString(),
                 new CSharpParseOptions(
                     LanguageVersion.Latest,
-                    preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"])));
+                    preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"])));
         var outputCompilation = compilation.AddSyntaxTrees(generatedTrees);
 
         Assert.DoesNotContain(
@@ -487,7 +487,7 @@ public sealed class GeneratorOutputTests
 
         var parseOptions = new CSharpParseOptions(
             LanguageVersion.Latest,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
             additionalTexts: Array.Empty<AdditionalText>(),
@@ -817,7 +817,7 @@ public sealed class GeneratorOutputTests
     {
         return new CSharpParseOptions(
             LanguageVersion.Latest,
-            preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
     }
 
     private static List<MetadataReference> CreateReferences()

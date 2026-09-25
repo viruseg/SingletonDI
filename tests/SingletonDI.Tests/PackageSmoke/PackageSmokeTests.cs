@@ -11,8 +11,6 @@ public sealed class PackageSmokeTests
 
     private static readonly (string Directory, string Version)[] SdkDirectories =
     [
-        ("Sdk8", "8.0.131"),
-        ("Sdk9", "9.0.121"),
         ("Sdk10", "10.0.401"),
     ];
 
@@ -166,8 +164,7 @@ public sealed class PackageSmokeTests
             }
             catch (IOException)
             {
-                // dotnet test runs the target frameworks concurrently, so up to one testhost per framework
-                // queues here. A testhost orphaned by a killed run holds the lock indefinitely instead.
+                // Concurrent test runs queue here. A testhost orphaned by a killed run holds the lock indefinitely instead.
                 if (attempt == LockAttempts)
                 {
                     break;

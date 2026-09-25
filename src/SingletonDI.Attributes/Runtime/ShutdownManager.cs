@@ -1,8 +1,6 @@
 using System;
-using System.Threading.Tasks;
-#if NET8_0_OR_GREATER
 using System.Runtime.InteropServices;
-#endif
+using System.Threading.Tasks;
 
 namespace SingletonDI.Generated;
 
@@ -39,12 +37,10 @@ internal sealed class ShutdownManager : IDisposable
 
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
             Console.CancelKeyPress += OnCancelKeyPress;
-#if NET8_0_OR_GREATER
             if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
                 RegisterPosixSignals();
             }
-#endif
             _registered = true;
         }
     }
@@ -115,7 +111,6 @@ internal sealed class ShutdownManager : IDisposable
         return BeginSignalShutdown(130);
     }
 
-#if NET8_0_OR_GREATER
     private void RegisterPosixSignals()
     {
         try
@@ -144,7 +139,6 @@ internal sealed class ShutdownManager : IDisposable
         context.Cancel = true;
         _ = BeginSignalShutdown(exitCode);
     }
-#endif
 
     internal Task HandlePosixSignalForTesting(Action cancel, int exitCode)
     {

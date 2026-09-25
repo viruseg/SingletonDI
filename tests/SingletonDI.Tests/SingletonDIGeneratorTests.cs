@@ -1247,7 +1247,7 @@ public class SingletonDIGeneratorTests
             source,
             new CSharpParseOptions(
                 LanguageVersion.Latest,
-                preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]));
+                preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]));
         var compilation = CSharpCompilation.Create(
             "SingletonDIGeneratorTests",
             [syntaxTree],

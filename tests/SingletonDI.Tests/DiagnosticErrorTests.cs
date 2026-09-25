@@ -1580,7 +1580,7 @@ public class DiagnosticErrorTests
             additionalTexts: Array.Empty<AdditionalText>(),
             parseOptions: new CSharpParseOptions(
                 LanguageVersion.Latest,
-                preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]),
+                preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]),
             optionsProvider: new GeneratorTestAnalyzerConfigOptionsProvider(
                 new GeneratorTestOptions(compositionRoot, outputKind)),
             driverOptions: new GeneratorDriverOptions(
@@ -1641,7 +1641,7 @@ public class DiagnosticErrorTests
                 source,
                 new CSharpParseOptions(
                     LanguageVersion.Latest,
-                    preprocessorSymbols: ["NET8_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
+                    preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]))],
             references,
             new CSharpCompilationOptions(outputKind));
     }
