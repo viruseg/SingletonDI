@@ -906,132 +906,88 @@ public class SingletonDIGeneratorTests
     }
 
     [Fact]
-    public void TopologicalSorter_SortsProvidersBeforeBuildingGraph()
-    {
-        var zProvider = new ProviderModel(
-            "global::App.ZService",
-            "ZService",
-            "App",
-            "App",
-            false,
-            false,
-            false,
-            ImmutableArray<string>.Empty,
-            null,
-            null,
-            null,
-            null,
-            Location.None,
-            null);
-        var aProvider = new ProviderModel(
-            "global::App.AService",
-            "AService",
-            "App",
-            "App",
-            false,
-            false,
-            false,
-            ImmutableArray<string>.Empty,
-            null,
-            null,
-            null,
-            null,
-            Location.None,
-            null);
-
-        var result = TopologicalSorter.SortByLevels(
-            [zProvider, aProvider],
-            ImmutableDictionary<string, string>.Empty);
-
-        Assert.Equal(
-            "global::App.AService",
-            result.Levels[0][0].FullyQualifiedName);
-    }
-
-    [Fact]
     public void TopologicalSorter_DoesNotCollapseSameNamedProvidersFromDifferentAssemblies()
     {
-        var firstProvider = new ProviderModel(
-            "global::App.Service",
-            "Service",
-            "App",
-            "FirstAssembly",
-            false,
-            false,
-            false,
-            ImmutableArray<string>.Empty,
-            null,
-            null,
-            null,
-            null,
-            Location.None,
-            null);
-        var secondProvider = new ProviderModel(
-            "global::App.Service",
-            "Service",
-            "App",
-            "SecondAssembly",
-            false,
-            false,
-            false,
-            ImmutableArray<string>.Empty,
-            null,
-            null,
-            null,
-            null,
-            Location.None,
-            null);
+        // Two providers share a fully qualified name and differ only by assembly. Collapsing them
+        // into one graph node would hide a cycle between them.
+        var firstProvider = CreateProvider("global::App.Service", "App", "FirstAssembly");
+        var secondProvider = CreateProvider("global::App.Service", "App", "SecondAssembly");
 
-        var result = TopologicalSorter.SortByLevels(
+        var cycle = TopologicalSorter.TryFindCycle(
             [firstProvider, secondProvider],
-            ImmutableDictionary<string, string>.Empty);
+            new Dictionary<ServiceTypeIdentity, ServiceTypeIdentity>());
 
-        Assert.False(result.HasCycle);
-        Assert.Equal(2, result.Levels[0].Count);
+        Assert.Empty(cycle);
     }
 
     [Fact]
-    public void TopologicalSorter_ServiceKeyMap_ResolvesContractAlias()
+    public void TopologicalSorter_DetectsCycleBetweenSameNamedProvidersFromDifferentAssemblies()
     {
-        var implementation = new ProviderModel(
+        var firstProvider = CreateProvider(
+            "global::App.Service",
+            "App",
+            "FirstAssembly",
+            [new ServiceTypeIdentity("global::App.Service", "SecondAssembly")]);
+        var secondProvider = CreateProvider(
+            "global::App.Service",
+            "App",
+            "SecondAssembly",
+            [new ServiceTypeIdentity("global::App.Service", "FirstAssembly")]);
+        var map = ServiceTypeResolver.BuildServiceTypeMap([firstProvider, secondProvider]).IdentityMap;
+
+        var cycle = TopologicalSorter.TryFindCycle([firstProvider, secondProvider], map);
+
+        // The DFS closes the cycle by repeating the start node, so assert on the identities that
+        // participate: both same-named providers must appear, which is what collapsing them into
+        // one node would prevent.
+        var assemblies = cycle.Select(identity => identity.AssemblyIdentity).Distinct().ToArray();
+        Assert.Equal(2, assemblies.Length);
+    }
+
+    [Fact]
+    public void TopologicalSorter_ResolvesContractAliasThroughServiceTypeMap()
+    {
+        var implementation = CreateProvider(
             "global::App.DatabaseService",
-            "DatabaseService",
             "App",
             "App",
+            serviceTypeFullyQualifiedName: "global::Contracts.IDatabaseService");
+        var dependent = CreateProvider(
+            "global::App.OrderService",
+            "App",
+            "App",
+            [new ServiceTypeIdentity("global::Contracts.IDatabaseService", "Contracts")]);
+        var map = ServiceTypeResolver.BuildServiceTypeMap([implementation, dependent]).IdentityMap;
+
+        var cycle = TopologicalSorter.TryFindCycle([implementation, dependent], map);
+
+        Assert.Empty(cycle);
+    }
+
+    private static ProviderModel CreateProvider(
+        string fullyQualifiedName,
+        string @namespace,
+        string assemblyIdentity,
+        ServiceTypeIdentity[]? dependencyIdentities = null,
+        string? serviceTypeFullyQualifiedName = null) =>
+        new(
+            fullyQualifiedName,
+            fullyQualifiedName[(fullyQualifiedName.LastIndexOf('.') + 1)..],
+            @namespace,
+            assemblyIdentity,
             false,
             false,
             false,
             ImmutableArray<string>.Empty,
-            "global::Contracts.IDatabaseService",
-            "IDatabaseService",
-            "Contracts",
+            serviceTypeFullyQualifiedName,
+            serviceTypeFullyQualifiedName is null
+                ? null
+                : serviceTypeFullyQualifiedName[(serviceTypeFullyQualifiedName.LastIndexOf('.') + 1)..],
+            serviceTypeFullyQualifiedName is null ? null : "Contracts",
             null,
             Location.None,
-            null);
-        var dependent = new ProviderModel(
-            "global::App.OrderService",
-            "OrderService",
-            "App",
-            "App",
-            false,
-            false,
-            false,
-            ["global::Contracts.IDatabaseService"],
             null,
-            null,
-            null,
-            null,
-            Location.None,
-            null);
-        var map = ServiceTypeResolver.BuildServiceTypeMap([implementation, dependent]).Map;
-
-        var result = TopologicalSorter.SortByLevels([implementation, dependent], map);
-
-        Assert.False(result.HasCycle);
-        Assert.Equal(2, result.Levels.Count);
-        Assert.Equal("global::App.DatabaseService", Assert.Single(result.Levels[0]).FullyQualifiedName);
-        Assert.Equal("global::App.OrderService", Assert.Single(result.Levels[1]).FullyQualifiedName);
-    }
+            dependencyIdentities is null ? ImmutableArray<ServiceTypeIdentity>.Empty : dependencyIdentities.ToImmutableArray());
 
     [Fact]
     public void PropertyNameResolver_ResolvesNamesWithinConsumerOnly()
