@@ -86,6 +86,56 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_EmitsSameNullableContextForBothConsumerShapes()
+    {
+        // The file-scoped shape used to skip the directive, so identical consumer source produced a
+        // different nullable context per shape and any annotation the emitter adds later would fail
+        // with CS8632 on one of them.
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+        var generated = new List<string>();
+
+        foreach (var source in new[]
+                 {
+                     """
+                     using SingletonDI.Attributes;
+
+                     namespace App;
+
+                     [SingletonDIProvide]
+                     public sealed class Service { }
+
+                     [SingletonDIConsume(typeof(Service))]
+                     public partial class FileScopedConsumer
+                     {
+                     }
+                     """,
+                     """
+                     using SingletonDI.Attributes;
+
+                     namespace App
+                     {
+                         [SingletonDIProvide]
+                         public sealed class Service { }
+
+                         [SingletonDIConsume(typeof(Service))]
+                         public partial class BlockScopedConsumer
+                         {
+                         }
+                     }
+                     """
+                 })
+        {
+            driver = driver.RunGenerators(CreateCompilation(source));
+            generated.Add(GetGeneratedSource(driver.GetRunResult()));
+        }
+
+        Assert.All(generated, source => Assert.Contains("#nullable enable", source));
+        Assert.Equal(
+            generated[0].Split('\n').Count(line => line.Trim() == "#nullable enable"),
+            generated[1].Split('\n').Count(line => line.Trim() == "#nullable enable"));
+    }
+
+    [Fact]
     public void Generator_PreservesGenericConsumerConstraintSymbols()
     {
         var compilation = CreateCompilation(

@@ -95,6 +95,13 @@ internal static class ConsumerEmitter
 
         var indentLevel = 0;
         var hasNamespace = !string.IsNullOrEmpty(shape.Namespace);
+
+        // Both declaration shapes get the same nullable context. Without it the file-scoped path
+        // analysed the generated members with nullable annotations disabled while the block-scoped
+        // path enabled them, so the same consumer source produced a different result per shape and
+        // any nullable annotation the emitter adds later would fail with CS8632 on one of them.
+        source.AppendLine("#nullable enable");
+        source.AppendLine();
         if (shape.IsFileScoped)
         {
             if (hasNamespace)
@@ -104,16 +111,11 @@ internal static class ConsumerEmitter
 
             source.AppendLine();
         }
-        else
+        else if (hasNamespace)
         {
-            source.AppendLine("#nullable enable");
-            source.AppendLine();
-            if (hasNamespace)
-            {
-                source.AppendLine($"namespace {shape.Namespace}");
-                source.AppendLine("{");
-                indentLevel++;
-            }
+            source.AppendLine($"namespace {shape.Namespace}");
+            source.AppendLine("{");
+            indentLevel++;
         }
 
         foreach (var containingType in shape.ContainingTypes)
