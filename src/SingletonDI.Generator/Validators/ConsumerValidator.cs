@@ -432,6 +432,21 @@ internal static class ConsumerValidator
         ITypeSymbol typeSymbol,
         IAssemblySymbol consumerAssembly)
     {
+        if (typeSymbol is ITypeParameterSymbol)
+        {
+            return true;
+        }
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            return CanUseProtectedProperty(arrayType.ElementType, consumerAssembly);
+        }
+
+        if (typeSymbol is IPointerTypeSymbol pointerType)
+        {
+            return CanUseProtectedProperty(pointerType.PointedAtType, consumerAssembly);
+        }
+
         if (typeSymbol is not INamedTypeSymbol namedType)
         {
             return false;
@@ -458,6 +473,14 @@ internal static class ConsumerValidator
             }
 
             return false;
+        }
+
+        foreach (var typeArgument in namedType.TypeArguments)
+        {
+            if (!CanUseProtectedProperty(typeArgument, consumerAssembly))
+            {
+                return false;
+            }
         }
 
         return true;

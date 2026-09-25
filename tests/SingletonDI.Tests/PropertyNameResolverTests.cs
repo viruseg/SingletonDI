@@ -986,6 +986,24 @@ public class PropertyNameResolverTests
             using SingletonDI.Attributes;
             namespace App
             {
+                internal sealed class InternalArgument { }
+
+                public interface IBox<T> { }
+
+                [SingletonDIProvide(ServiceType = typeof(IBox<InternalArgument>))]
+                public sealed class BoxProvider : IBox<InternalArgument> { }
+
+                [SingletonDIConsume(typeof(IBox<InternalArgument>))]
+                public partial class AccessibilityConsumer
+                {
+                    private IBox<InternalArgument>? Get() => IBoxInstance;
+                }
+            }
+            """,
+            """
+            using SingletonDI.Attributes;
+            namespace App
+            {
                 [SingletonDIProvide] public sealed class Service { }
                 [SingletonDIConsume(typeof(Service))] public partial record Consumer
                 {
