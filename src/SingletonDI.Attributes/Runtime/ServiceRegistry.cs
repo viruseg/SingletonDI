@@ -7,7 +7,7 @@ namespace SingletonDI.Generated;
 internal sealed class ServiceRegistry
 {
     private readonly object _sync = new();
-    private readonly AsyncLocal<bool> _initializationContext = new();
+    private readonly AsyncLocal<ProviderCallbackScope?> _initializationContext = new();
     private readonly AsyncLocal<ProviderCallbackScope?> _providerCallbackContext = new();
     private readonly Dictionary<Type, ProviderRegistration> _registrations = new();
     private readonly List<ProviderRegistration> _orderedRegistrations = new();
@@ -141,7 +141,10 @@ internal sealed class ServiceRegistry
     {
         lock (_sync)
         {
-            if (_graph is null || (!_state.Equals(LifecycleState.Initialized) && !_initializationContext.Value))
+            var initializationScope = _initializationContext.Value;
+            var canResolveDuringInitialization = initializationScope?.IsActive == true &&
+                                                  ReferenceEquals(initializationScope.Graph, _graph);
+            if (_graph is null || (!_state.Equals(LifecycleState.Initialized) && !canResolveDuringInitialization))
             {
                 throw new InvalidOperationException(
                     "Singleton container has not been initialized. " +
@@ -191,9 +194,9 @@ internal sealed class ServiceRegistry
         ServiceGraph graph,
         TaskCompletionSource<object?> completion)
     {
-        var callbackScope = new ProviderCallbackScope();
+        var callbackScope = new ProviderCallbackScope(graph);
         _providerCallbackContext.Value = callbackScope;
-        _initializationContext.Value = true;
+        _initializationContext.Value = callbackScope;
         try
         {
             await graph.InitializeAsync().ConfigureAwait(false);
@@ -227,7 +230,7 @@ internal sealed class ServiceRegistry
         {
             callbackScope.IsActive = false;
             _providerCallbackContext.Value = null;
-            _initializationContext.Value = false;
+            _initializationContext.Value = null;
         }
     }
 
@@ -332,6 +335,13 @@ internal sealed class ServiceRegistry
 
     private sealed class ProviderCallbackScope
     {
+        internal ProviderCallbackScope(ServiceGraph? graph = null)
+        {
+            Graph = graph;
+        }
+
+        internal ServiceGraph? Graph { get; }
+
         internal bool IsActive { get; set; } = true;
     }
 

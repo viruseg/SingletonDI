@@ -89,6 +89,77 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public async Task Registry_RejectsResolveFromPreviousInitializationGeneration()
+    {
+        var releaseStaleResolve = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var staleResolveSucceeded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var currentInitializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCurrentInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var spawnerInitializationCount = 0;
+        var blockerInitializationCount = 0;
+        Task? staleResolveTask = null;
+        var registry = new ServiceRegistry();
+
+        registry.RegisterProvider<IStaleContextSpawner, StaleContextSpawner>(
+            static () => new StaleContextSpawner(),
+            Array.Empty<Type>(),
+            async _ =>
+            {
+                if (Interlocked.Increment(ref spawnerInitializationCount) == 1)
+                {
+                    staleResolveTask = Task.Run(
+                        async () =>
+                        {
+                            await releaseStaleResolve.Task;
+                            try
+                            {
+                                registry.Resolve<IStaleContextTarget>();
+                                staleResolveSucceeded.TrySetResult(true);
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                staleResolveSucceeded.TrySetResult(false);
+                            }
+                        });
+                }
+            },
+            null,
+            null);
+        registry.RegisterProvider<IStaleContextTarget, StaleContextTarget>(
+            static () => new StaleContextTarget(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+        registry.RegisterProvider<ICurrentGenerationBlocker, CurrentGenerationBlocker>(
+            static () => new CurrentGenerationBlocker(),
+            Array.Empty<Type>(),
+            async _ =>
+            {
+                if (Interlocked.Increment(ref blockerInitializationCount) == 2)
+                {
+                    currentInitializerStarted.TrySetResult(true);
+                    await releaseCurrentInitializer.Task;
+                }
+            },
+            null,
+            null);
+
+        await registry.InitializeAsync();
+        await registry.DisposeAsync();
+        var currentInitialization = registry.InitializeAsync();
+        await currentInitializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        releaseStaleResolve.TrySetResult(true);
+        Assert.False(await staleResolveSucceeded.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.NotNull(staleResolveTask);
+
+        releaseCurrentInitializer.TrySetResult(true);
+        await currentInitialization;
+        await registry.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Registry_AllowsFactoryToResolveDependencyDuringInitialization()
     {
         var events = new List<string>();
@@ -658,6 +729,30 @@ public sealed class RuntimeRegistryTests
 
         Assert.Equal(2, createCount);
         await registry.DisposeAsync();
+    }
+
+    private interface IStaleContextSpawner
+    {
+    }
+
+    private sealed class StaleContextSpawner : IStaleContextSpawner
+    {
+    }
+
+    private interface IStaleContextTarget
+    {
+    }
+
+    private sealed class StaleContextTarget : IStaleContextTarget
+    {
+    }
+
+    private interface ICurrentGenerationBlocker
+    {
+    }
+
+    private sealed class CurrentGenerationBlocker : ICurrentGenerationBlocker
+    {
     }
 
     private interface ICleanupLevelOne
