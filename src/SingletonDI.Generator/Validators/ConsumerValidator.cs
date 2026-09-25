@@ -17,46 +17,53 @@ internal static class ConsumerValidator
     internal static ConsumerModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
-        Action<Diagnostic> reportDiagnostic)
+        Action<Diagnostic> reportDiagnostic,
+        SemanticModel? semanticModel = null)
     {
         return Validate(
             typeDecl,
             typeSymbol,
             ImmutableHashSet<ServiceTypeIdentity>.Empty,
-            reportDiagnostic);
+            reportDiagnostic,
+            semanticModel);
     }
 
     internal static ConsumerModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
         ImmutableHashSet<string> knownProviderFullyQualifiedNames,
-        Action<Diagnostic> reportDiagnostic)
+        Action<Diagnostic> reportDiagnostic,
+        SemanticModel? semanticModel = null)
     {
         return Validate(
             typeDecl,
             typeSymbol,
             (identity, fullyQualifiedName) => knownProviderFullyQualifiedNames.Contains(fullyQualifiedName),
-            reportDiagnostic);
+            reportDiagnostic,
+            semanticModel);
     }
 
     internal static ConsumerModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
         ImmutableHashSet<ServiceTypeIdentity> knownProviderIdentities,
-        Action<Diagnostic> reportDiagnostic)
+        Action<Diagnostic> reportDiagnostic,
+        SemanticModel? semanticModel = null)
     {
         return Validate(
             typeDecl,
             typeSymbol,
             (identity, fullyQualifiedName) => knownProviderIdentities.Contains(identity),
-            reportDiagnostic);
+            reportDiagnostic,
+            semanticModel);
     }
 
     private static ConsumerModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
         Func<ServiceTypeIdentity, string, bool> isKnownProvider,
-        Action<Diagnostic> reportDiagnostic)
+        Action<Diagnostic> reportDiagnostic,
+        SemanticModel? semanticModel)
     {
         var fullyQualifiedName = GetFullyQualifiedName(typeSymbol);
         var consumerIdentity = CreateIdentity(typeSymbol);
@@ -184,19 +191,20 @@ internal static class ConsumerValidator
             Namespace: typeSymbol.ContainingNamespace.ToDisplayString(),
             IsPartial: true,
             Dependencies: dependencies.ToImmutable(),
-            DeclarationShape: CreateShape(typeDecl, typeSymbol));
+            DeclarationShape: CreateShape(typeDecl, typeSymbol, semanticModel));
     }
 
     private static ConsumerDeclarationShape CreateShape(
         TypeDeclarationSyntax typeDeclaration,
-        INamedTypeSymbol typeSymbol)
+        INamedTypeSymbol typeSymbol,
+        SemanticModel? semanticModel)
     {
         var typeParameters = GetTypeParameters(typeDeclaration);
         var containingTypes = typeDeclaration
             .Ancestors()
             .OfType<TypeDeclarationSyntax>()
             .Reverse()
-            .Select(CreateContainingTypeShape)
+            .Select(containingType => CreateContainingTypeShape(containingType, semanticModel))
             .ToImmutableArray();
         var namespaceDeclaration = typeDeclaration
             .Ancestors()
@@ -210,7 +218,7 @@ internal static class ConsumerValidator
             typeParameters.Length,
             typeParameters,
             typeDeclaration.TypeParameterList?.ToString() ?? string.Empty,
-            GetConstraintClauses(typeDeclaration),
+            GetConstraintClauses(typeDeclaration, semanticModel),
             true,
             typeSymbol.IsSealed,
             containingTypes,
@@ -218,7 +226,8 @@ internal static class ConsumerValidator
     }
 
     private static ConsumerContainingTypeShape CreateContainingTypeShape(
-        TypeDeclarationSyntax typeDeclaration)
+        TypeDeclarationSyntax typeDeclaration,
+        SemanticModel? semanticModel)
     {
         var typeParameters = GetTypeParameters(typeDeclaration);
         return new ConsumerContainingTypeShape(
@@ -227,7 +236,7 @@ internal static class ConsumerValidator
             typeParameters.Length,
             typeParameters,
             typeDeclaration.TypeParameterList?.ToString() ?? string.Empty,
-            GetConstraintClauses(typeDeclaration),
+            GetConstraintClauses(typeDeclaration, semanticModel),
             typeDeclaration.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
     }
 
@@ -238,11 +247,38 @@ internal static class ConsumerValidator
             .ToImmutableArray() ?? ImmutableArray<string>.Empty;
     }
 
-    private static string GetConstraintClauses(TypeDeclarationSyntax typeDeclaration)
+    private static string GetConstraintClauses(
+        TypeDeclarationSyntax typeDeclaration,
+        SemanticModel? semanticModel)
     {
         return string.Join(
             Environment.NewLine,
-            typeDeclaration.ConstraintClauses.Select(constraint => constraint.ToString()));
+            typeDeclaration.ConstraintClauses.Select(constraint =>
+            {
+                if (semanticModel is null)
+                {
+                    return constraint.ToString();
+                }
+
+                var constraints = constraint.Constraints
+                    .Select(limitation => limitation is TypeConstraintSyntax typeConstraint
+                        ? typeConstraint.WithType(
+                            GetQualifiedTypeSyntax(typeConstraint.Type, semanticModel))
+                        : limitation)
+                    .ToArray();
+                return constraint.WithConstraints(SyntaxFactory.SeparatedList(constraints)).ToString();
+            }));
+    }
+
+    private static TypeSyntax GetQualifiedTypeSyntax(
+        TypeSyntax typeSyntax,
+        SemanticModel semanticModel)
+    {
+        var type = semanticModel.GetTypeInfo(typeSyntax).Type;
+        return type is null
+            ? typeSyntax
+            : SyntaxFactory.ParseTypeName(
+                type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
     }
 
     private static ConsumerDeclarationKind GetDeclarationKind(TypeDeclarationSyntax typeDeclaration)

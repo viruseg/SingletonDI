@@ -410,6 +410,106 @@ public class SingletonDIGeneratorTests
     }
 
     [Fact]
+    public void ProviderValidator_IgnoresUserDefinedTaskInitializer()
+    {
+        var (compilation, declaration) = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            public sealed class Task
+            {
+            }
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                    public Task InitializeAsync() => new Task();
+                }
+            }
+            """,
+            "App.Service");
+        var provider = compilation.GetTypeByMetadataName("App.Service")!;
+        var diagnostics = new List<Diagnostic>();
+
+        var model = ProviderValidator.Validate(
+            provider,
+            compilation,
+            declaration.GetLocation(),
+            ImmutableHashSet<string>.Empty,
+            diagnostics.Add);
+
+        Assert.NotNull(model);
+        Assert.False(model!.Value.HasInitializeAsyncMethod);
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void ProviderValidator_RejectsInaccessibleConsumeDependency()
+    {
+        var (compilation, declaration) = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            file sealed class FileService
+            {
+            }
+
+            [SingletonDIProvide]
+            [SingletonDIConsume(typeof(FileService))]
+            public sealed class Service
+            {
+            }
+            """,
+            "Service");
+        var provider = compilation.GetTypeByMetadataName("Service")!;
+        var diagnostics = new List<Diagnostic>();
+
+        var model = ProviderValidator.Validate(
+            provider,
+            compilation,
+            declaration.GetLocation(),
+            ImmutableHashSet<string>.Empty,
+            diagnostics.Add);
+
+        Assert.Null(model);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "DM0022");
+    }
+
+    [Fact]
+    public void ProviderValidator_RejectsOpenGenericConsumeDependency()
+    {
+        var (compilation, declaration) = CreateCompilation(
+            """
+            using SingletonDI.Attributes;
+
+            public interface IContract<T>
+            {
+            }
+
+            [SingletonDIProvide]
+            [SingletonDIConsume(typeof(IContract<>))]
+            public sealed class Service
+            {
+            }
+            """,
+            "Service");
+        var provider = compilation.GetTypeByMetadataName("Service")!;
+        var diagnostics = new List<Diagnostic>();
+
+        var model = ProviderValidator.Validate(
+            provider,
+            compilation,
+            declaration.GetLocation(),
+            ImmutableHashSet<string>.Empty,
+            diagnostics.Add);
+
+        Assert.Null(model);
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "DM0024");
+    }
+
+    [Fact]
     public void ProviderValidator_RejectsServiceTypeThatProviderDoesNotImplement()
     {
         var (compilation, declaration) = CreateCompilation("""

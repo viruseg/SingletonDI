@@ -60,6 +60,17 @@ public static class SingletonDIInitializer
             _ = CompleteQueuedInitializationAsync(pendingDisposal!, queuedCompletion);
         }
 
+        if (registerShutdownHandlers && pendingDisposal is null)
+        {
+            lock (Sync)
+            {
+                if (lifecycleVersion == _lifecycleVersion)
+                {
+                    RegisterShutdownHandlers();
+                }
+            }
+        }
+
         if (!registerShutdownHandlers)
         {
             return initializationTask;
@@ -166,7 +177,23 @@ public static class SingletonDIInitializer
         Task initializationTask,
         long lifecycleVersion)
     {
-        await initializationTask.ConfigureAwait(false);
+        try
+        {
+            await initializationTask.ConfigureAwait(false);
+        }
+        catch
+        {
+            lock (Sync)
+            {
+                if (lifecycleVersion == _lifecycleVersion)
+                {
+                    _shutdownManager?.Dispose();
+                    _shutdownManager = null;
+                }
+            }
+
+            throw;
+        }
 
         lock (Sync)
         {

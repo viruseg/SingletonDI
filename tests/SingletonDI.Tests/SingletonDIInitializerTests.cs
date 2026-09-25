@@ -139,6 +139,53 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
+    public async Task InitializeAsync_RegistersShutdownHandlersBeforeInitializationCompletes()
+    {
+        await TestGate.WaitAsync();
+        var releaseInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            var initializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            __SingletonDIHost__.RegisterProvider<IInitializationHandlerService, InitializationHandlerService>(
+                static () => new InitializationHandlerService(),
+                Array.Empty<Type>(),
+                async _ =>
+                {
+                    initializerStarted.TrySetResult(true);
+                    await releaseInitializer.Task;
+                },
+                null,
+                null);
+
+            var initialization = SingletonDIInitializer.InitializeAsync();
+            await initializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var shutdownManagerField = typeof(SingletonDIInitializer).GetField(
+                "_shutdownManager",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.NotNull(shutdownManagerField);
+            Assert.NotNull(shutdownManagerField!.GetValue(null));
+            releaseInitializer.TrySetResult(true);
+            await initialization;
+        }
+        finally
+        {
+            releaseInitializer.TrySetResult(true);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
     public async Task InitializeAsync_QueuesReinitializationUntilDisposalCompletes()
     {
         await TestGate.WaitAsync();
@@ -246,6 +293,14 @@ public sealed class SingletonDIInitializerTests
 
             TestGate.Release();
         }
+    }
+
+    private interface IInitializationHandlerService
+    {
+    }
+
+    private sealed class InitializationHandlerService : IInitializationHandlerService
+    {
     }
 
     private interface IInitializerService

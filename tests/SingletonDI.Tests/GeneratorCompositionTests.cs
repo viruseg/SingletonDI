@@ -1070,6 +1070,44 @@ public sealed class GeneratorCompositionTests
     }
 
     [Fact]
+    public void DM0021_RejectsGenericBootstrapOnlyModule()
+    {
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            [assembly: SingletonDIProviderModule]
+            namespace SingletonDI.Generated
+            {
+                public static class __SingletonDIProviderModule__
+                {
+                    public static void Bootstrap<T>()
+                    {
+                    }
+                }
+            }
+
+            namespace Provider
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            "namespace App { public sealed class AppMarker { } }",
+            compositionRoot: true,
+            generateProviderModule: false);
+
+        Assert.Contains(result.Diagnostics, item => item.Id == "DM0021");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void DM0020_ReportsReferencedProviderAssemblyWithoutMarker()
     {
         const string providerSource = """

@@ -26,7 +26,11 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         var languageSupport = context.CompilationProvider
             .Select(static (compilation, _) => GetLanguageSupport(compilation));
         var referencedComposition = ReferencedCompositionCollector
-            .CreateProvider(context.CompilationProvider, ReferencedCompositionCollector.Instance)
+            .CreateProvider(
+                context.CompilationProvider,
+                generatorOptions,
+                ReferencedCompositionCollector.Instance,
+                ShouldCollectReferencedComposition)
             .WithTrackingName("ReferencedCompositionSnapshot");
 
         context.RegisterSourceOutput(
@@ -47,7 +51,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         return new ProviderCandidate(
                             null,
                             ImmutableArray<Diagnostic>.Empty,
-                            null);
+                            null,
+                            string.Empty);
                     }
 
                     var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
@@ -57,10 +62,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         context.SemanticModel.Compilation,
                         ImmutableHashSet<string>.Empty,
                         diagnostics.Add);
+                    var typeIdentity = ServiceTypeIdentity.FromSymbol(typeSymbol);
                     return new ProviderCandidate(
                         model,
                         diagnostics.ToImmutable(),
-                        ServiceTypeIdentity.FromSymbol(typeSymbol));
+                        typeIdentity,
+                        CreateProviderCandidateKey(
+                            model,
+                            diagnostics.ToImmutable(),
+                            typeIdentity));
                 });
 
         var consumerDeclarations = context.SyntaxProvider
@@ -98,7 +108,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     var model = ConsumerValidator.Validate(
                         typeDeclaration,
                         typeSymbol,
-                        diagnostics.Add);
+                        diagnostics.Add,
+                        context.SemanticModel);
                     var existingMemberLocations = GetExistingMemberLocations(
                         typeSymbol,
                         model.HasValue
@@ -345,7 +356,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 consumerDeclaration,
                 consumerSymbol,
                 localProviderIdentities,
-                static _ => { });
+                static _ => { },
+                semanticModel);
             if (!consumerModel.HasValue)
             {
                 continue;
@@ -737,6 +749,23 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         return false;
     }
 
+    private static bool ShouldCollectReferencedComposition(
+        Compilation compilation,
+        GeneratorOptions options)
+    {
+        if (options.IsCompositionRoot)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.OutputType))
+        {
+            return IsExecutable(options);
+        }
+
+        return compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication;
+    }
+
     private static bool IsExecutable(GeneratorOptions options)
     {
         return !string.IsNullOrWhiteSpace(options.OutputType) &&
@@ -901,6 +930,61 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             SourceText.From(moduleSource, Encoding.UTF8));
     }
 
+    private static string CreateProviderCandidateKey(
+        ProviderModel? model,
+        ImmutableArray<Diagnostic> diagnostics,
+        ServiceTypeIdentity? typeIdentity)
+    {
+        var key = new StringBuilder();
+        key.Append(model.HasValue ? "model" : "none");
+        if (model is { } provider)
+        {
+            key.Append('\u001f').Append(provider.FullyQualifiedName);
+            key.Append('\u001f').Append(provider.ShortName);
+            key.Append('\u001f').Append(provider.Namespace);
+            key.Append('\u001f').Append(provider.AssemblyIdentity);
+            key.Append('\u001f').Append(provider.HasInitializeAsyncMethod);
+            key.Append('\u001f').Append(provider.IsDisposable);
+            key.Append('\u001f').Append(provider.IsAsyncDisposable);
+            key.Append('\u001f').Append(provider.ServiceTypeFullyQualifiedName);
+            key.Append('\u001f').Append(provider.ServiceTypeShortName);
+            key.Append('\u001f').Append(provider.ServiceTypeNamespace);
+            key.Append('\u001f').Append(provider.PropertyName);
+            if (!provider.Dependencies.IsDefault)
+            {
+                foreach (var dependency in provider.Dependencies)
+                {
+                    key.Append('\u001f').Append("dependency").Append('\u001f').Append(dependency);
+                }
+            }
+
+            foreach (var dependency in provider.DependencyIdentities)
+            {
+                key.Append('\u001f').Append("identity").Append('\u001f').Append(dependency.CanonicalIdentity);
+            }
+
+            AppendLocationKey(key, provider.Location);
+            if (provider.PropertyNameLocation is { } propertyNameLocation)
+            {
+                AppendLocationKey(key, propertyNameLocation);
+            }
+        }
+
+        foreach (var diagnostic in diagnostics)
+        {
+            key.Append('\u001f').Append("diagnostic");
+            key.Append('\u001f').Append(diagnostic.Id);
+            key.Append('\u001f').Append(diagnostic.Severity);
+            key.Append('\u001f').Append(diagnostic.Descriptor.Title);
+            key.Append('\u001f').Append(diagnostic.GetMessage());
+            AppendLocationKey(key, diagnostic.Location);
+        }
+
+        key.Append('\u001f').Append("identity");
+        key.Append('\u001f').Append(typeIdentity?.CanonicalIdentity);
+        return key.ToString();
+    }
+
     private static ConsumerCandidate CreateConsumerCandidate(
         ConsumerModel? model,
         ImmutableArray<Diagnostic> diagnostics,
@@ -1004,7 +1088,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         key.Append('\u001f').Append(location.IsInSource ? "source" : "none");
         if (location.IsInSource)
         {
-            key.Append(location.SourceSpan.Start)
+            key.Append(location.SourceTree?.FilePath ?? string.Empty)
+                .Append(':')
+                .Append(location.SourceSpan.Start)
                 .Append(':')
                 .Append(location.SourceSpan.End);
         }
@@ -1216,8 +1302,41 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
     private readonly record struct GeneratorOptions(bool IsCompositionRoot, string? OutputType);
 
-    private readonly record struct ProviderCandidate(
-        ProviderModel? Model,
-        ImmutableArray<Diagnostic> Diagnostics,
-        ServiceTypeIdentity? TypeIdentity);
+    private readonly struct ProviderCandidate : IEquatable<ProviderCandidate>
+    {
+        public ProviderCandidate(
+            ProviderModel? model,
+            ImmutableArray<Diagnostic> diagnostics,
+            ServiceTypeIdentity? typeIdentity,
+            string cacheKey)
+        {
+            Model = model;
+            Diagnostics = diagnostics;
+            TypeIdentity = typeIdentity;
+            CacheKey = cacheKey;
+        }
+
+        public ProviderModel? Model { get; }
+
+        public ImmutableArray<Diagnostic> Diagnostics { get; }
+
+        public ServiceTypeIdentity? TypeIdentity { get; }
+
+        public string CacheKey { get; }
+
+        public bool Equals(ProviderCandidate other)
+        {
+            return string.Equals(CacheKey, other.CacheKey, StringComparison.Ordinal);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is ProviderCandidate other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return CacheKey is null ? 0 : StringComparer.Ordinal.GetHashCode(CacheKey);
+        }
+    }
 }

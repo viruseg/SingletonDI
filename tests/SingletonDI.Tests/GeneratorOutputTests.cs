@@ -86,6 +86,44 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_PreservesGenericConsumerConstraintSymbols()
+    {
+        var compilation = CreateCompilation(
+            """
+            using System;
+            using System.Collections.Generic;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer<T>
+                    where T : Exception, IEnumerable<T>
+                {
+                }
+            }
+            """);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGeneratorsAndUpdateCompilation(
+            compilation,
+            out var outputCompilation,
+            out var diagnostics);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        Assert.DoesNotContain(
+            outputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void Generator_OmitsConsumerPropertyWhenMemberAlreadyExists()
     {
         var compilation = CreateCompilation(
@@ -260,7 +298,7 @@ public sealed class GeneratorOutputTests
                 [SingletonDIProvide(ServiceType = typeof(IService))]
                 public class Service : IService
                 {
-                    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+                    public System.Threading.Tasks.ValueTask InitializeAsync() => System.Threading.Tasks.ValueTask.CompletedTask;
                 }
 
                 [SingletonDIConsume(typeof(IService))]

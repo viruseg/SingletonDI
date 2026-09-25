@@ -182,20 +182,144 @@ public sealed class GeneratorIncrementalTests
         Assert.Equal(3, collector.CallCount);
     }
 
+    [Fact]
+    public void ProviderBodyEditCachesProviderModuleOutput()
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var firstSource = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public int Value => 1;
+            }
+            """;
+        var secondSource = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public int Value => 2;
+            }
+            """;
+        var firstCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(firstSource, parseOptions)],
+            parseOptions);
+        var secondCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(secondSource, parseOptions)],
+            parseOptions);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(firstCompilation);
+        driver = driver.RunGenerators(secondCompilation);
+        var providerSteps = driver.GetRunResult().Results
+            .SelectMany(result => result.TrackedSteps)
+            .Where(pair => pair.Key == "ProviderModuleOutput")
+            .SelectMany(pair => pair.Value)
+            .ToList();
+        var providerStep = Assert.Single(providerSteps);
+
+        Assert.Contains(
+            providerStep.Outputs,
+            output => output.Reason == IncrementalStepRunReason.Cached);
+    }
+
+    [Fact]
+    public void ConsumerDiagnosticCacheKeyIncludesSourceTreeIdentity()
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIConsume]
+            public class Consumer
+            {
+            }
+            """;
+        var references = CreateMetadataReferences();
+        var firstCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(source, parseOptions, path: "First.cs")],
+            parseOptions,
+            references);
+        var secondCompilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText(source, parseOptions, path: "Second.cs")],
+            parseOptions,
+            references);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(firstCompilation);
+        driver = driver.RunGenerators(secondCompilation);
+        var diagnostic = Assert.Single(
+            driver.GetRunResult().Diagnostics,
+            item => item.Id == "DM0007");
+
+        Assert.Equal("Second.cs", diagnostic.Location.SourceTree?.FilePath);
+    }
+
+    [Fact]
+    public void ReferencedCompositionCollector_SkipsFilteredCompilation()
+    {
+        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+        var compilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText("public class LibraryType { }", parseOptions)],
+            parseOptions);
+        var collector = new CountingReferencedCompositionCollector();
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SnapshotTrackingGenerator(collector, _ => false).AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(compilation);
+
+        Assert.Equal(0, collector.CallCount);
+    }
+
     private sealed class SnapshotTrackingGenerator : IIncrementalGenerator
     {
         private readonly IReferencedCompositionCollector _collector;
+        private readonly Func<Compilation, bool>? _shouldCollect;
 
-        public SnapshotTrackingGenerator(IReferencedCompositionCollector collector)
+        public SnapshotTrackingGenerator(
+            IReferencedCompositionCollector collector,
+            Func<Compilation, bool>? shouldCollect = null)
         {
             _collector = collector;
+            _shouldCollect = shouldCollect;
         }
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            var snapshots = ReferencedCompositionCollector.CreateProvider(
-                context.CompilationProvider,
-                _collector);
+            var snapshots = _shouldCollect is null
+                ? ReferencedCompositionCollector.CreateProvider(
+                    context.CompilationProvider,
+                    _collector)
+                : ReferencedCompositionCollector.CreateProvider(
+                    context.CompilationProvider,
+                    _collector,
+                    _shouldCollect);
             context.RegisterSourceOutput(snapshots, static (_, _) => { });
         }
     }

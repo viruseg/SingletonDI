@@ -42,4 +42,40 @@ internal sealed class ReferencedCompositionCollector : IReferencedCompositionCol
             .Select((compilation, cancellationToken) =>
                 collector.Collect(compilation, cancellationToken));
     }
+
+    public static IncrementalValueProvider<ReferencedCompositionSnapshot> CreateProvider(
+        IncrementalValueProvider<Compilation> compilationProvider,
+        IReferencedCompositionCollector collector,
+        Func<Compilation, bool> shouldCollect)
+    {
+        if (shouldCollect == null)
+        {
+            throw new ArgumentNullException(nameof(shouldCollect));
+        }
+
+        return compilationProvider
+            .WithComparer(ReferenceOnlyCompilationComparer.Instance)
+            .Select((compilation, cancellationToken) => shouldCollect(compilation)
+                ? collector.Collect(compilation, cancellationToken)
+                : ReferencedCompositionSnapshot.Empty);
+    }
+
+    public static IncrementalValueProvider<ReferencedCompositionSnapshot> CreateProvider<TOptions>(
+        IncrementalValueProvider<Compilation> compilationProvider,
+        IncrementalValueProvider<TOptions> optionsProvider,
+        IReferencedCompositionCollector collector,
+        Func<Compilation, TOptions, bool> shouldCollect)
+    {
+        if (shouldCollect == null)
+        {
+            throw new ArgumentNullException(nameof(shouldCollect));
+        }
+
+        return compilationProvider
+            .WithComparer(ReferenceOnlyCompilationComparer.Instance)
+            .Combine(optionsProvider)
+            .Select((pair, cancellationToken) => shouldCollect(pair.Left, pair.Right)
+                ? collector.Collect(pair.Left, cancellationToken)
+                : ReferencedCompositionSnapshot.Empty);
+    }
 }

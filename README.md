@@ -440,6 +440,14 @@ The generator reports errors at compile time:
 | **DM0018** | Error | No provider for requested service |
 | **DM0019** | Error | Multiple providers for service key |
 | **DM0020** | Error | Provider module marker is missing |
+| **DM0021** | Error | Provider module bootstrap method is missing |
+| **DM0022** | Error | Provider or service type is not accessible from generated code |
+| **DM0023** | Error | Generic `InitializeAsync` methods are not supported |
+| **DM0024** | Error | Open generic dependencies are not supported |
+| **DM0025** | Error | Generated consumer property name already exists |
+| **DM0026** | Error | A containing consumer type must be partial |
+| **DM0027** | Error | Generated source requires C# 9 or later |
+| **DM0028** | Error | File-scoped consumers require C# 10 or later |
 
 Cross-project service and provider identities include the containing assembly. Repeated references to the same assembly are deduplicated, while equal type names from different assemblies remain distinct. `DM0019` is also emitted for conflicting local `ServiceType` mappings, not only in a composition root, and reports all conflicting provider identities. It also reports ambiguity when the same fully qualified name is associated with multiple identities, for example a local `App.Service` and a referenced `App.Service`; the diagnostic keeps their assembly identities separate.
 
@@ -624,6 +632,38 @@ Occurs when multiple providers map to the same concrete or contract service key.
 ### DM0020: Provider module marker is missing
 
 Occurs when a referenced public provider assembly does not contain the generated `SingletonDIProviderModuleAttribute` assembly marker. The provider package or project must be built with a compatible SingletonDI generator/runtime protocol before a composition root can bootstrap it.
+
+### DM0021: Provider module bootstrap method is missing
+
+Occurs when a marked provider assembly does not expose a public static parameterless `Bootstrap()` method. Rebuild the provider with a compatible SingletonDI generator.
+
+### DM0022: Provider or service type is not accessible
+
+Occurs when generated code cannot name a provider, service contract, or provider dependency because of its declared accessibility or a file-local containing type. Use a public or assembly-accessible type.
+
+### DM0023: Generic `InitializeAsync` methods are not supported
+
+Occurs when a parameterless `InitializeAsync` method declares its own type parameters. Remove the method type parameters or expose initialization through a non-generic method.
+
+### DM0024: Open generic dependencies are not supported
+
+Occurs when a provider or consumer uses an unbound generic type such as `typeof(IContract<>)`. Use a constructed dependency type instead.
+
+### DM0025: Generated consumer property name already exists
+
+Occurs when a generated dependency property would collide with a member already declared by the consumer or an inherited type. Rename the dependency property or remove the conflicting member; the generator omits the colliding property.
+
+### DM0026: A containing consumer type must be partial
+
+Occurs when a nested consumer has a containing type that cannot be reopened. Declare every containing type as `partial`.
+
+### DM0027: Generated source requires C# 9 or later
+
+Occurs when the compilation language version is below C# 9. Upgrade the project language version or use a compatible target framework.
+
+### DM0028: File-scoped consumers require C# 10 or later
+
+Occurs when a file-scoped consumer declaration is compiled below C# 10. Upgrade the language version or use a block-scoped namespace.
 
 ## Limitations
 

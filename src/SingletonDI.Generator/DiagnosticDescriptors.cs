@@ -197,7 +197,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor MissingProviderBootstrap = Create(
         "DM0021",
         "Provider module bootstrap is missing",
-        "Referenced provider assembly '{0}' does not contain a public static SingletonDI.Generated.__SingletonDIProviderModule__.Bootstrap() method.",
+        "Referenced provider assembly '{0}' does not contain a public static parameterless Bootstrap() method in its generated provider module.",
         Category,
         DiagnosticSeverity.Error);
 

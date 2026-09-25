@@ -1270,6 +1270,32 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0022_ProviderDependencyMustBeAccessibleFromGeneratedCode()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            file sealed class FileService
+            {
+            }
+
+            [SingletonDIProvide]
+            [SingletonDIConsume(typeof(FileService))]
+            public sealed class Service
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0022");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Id == "CS0122");
+    }
+
+    [Fact]
     public void DM0023_GenericInitializeAsyncIsRejected()
     {
         const string source = """

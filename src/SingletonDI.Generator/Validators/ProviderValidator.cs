@@ -128,7 +128,7 @@ internal static class ProviderValidator
             return null;
         }
 
-        var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol);
+        var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol, compilation);
 
         if (initializeAsyncMethod is { Arity: > 0 })
         {
@@ -209,8 +209,17 @@ internal static class ProviderValidator
 
         var dependencyIdentities = GetDependencyIdentities(
             typeSymbol,
-            knownProviderFullyQualifiedNames);
-        var dependencies = dependencyIdentities
+            compilation,
+            knownProviderFullyQualifiedNames,
+            location,
+            reportDiagnostic);
+        if (dependencyIdentities is null)
+        {
+            return null;
+        }
+
+        var validDependencyIdentities = dependencyIdentities.Value;
+        var dependencies = validDependencyIdentities
             .Select(identity => identity.FullyQualifiedName)
             .ToImmutableArray();
 
@@ -242,11 +251,13 @@ internal static class ProviderValidator
             propertyName: propertyName,
             location: location,
             propertyNameLocation: propertyNameLocation,
-            dependencyIdentities: dependencyIdentities,
+            dependencyIdentities: validDependencyIdentities,
             serviceTypeIdentity: serviceTypeIdentity);
     }
 
-    private static IMethodSymbol? FindInitializeAsyncMethod(INamedTypeSymbol typeSymbol)
+    private static IMethodSymbol? FindInitializeAsyncMethod(
+        INamedTypeSymbol typeSymbol,
+        Compilation? compilation)
     {
         IMethodSymbol? genericMethod = null;
         foreach (var member in typeSymbol.GetMembers())
@@ -256,12 +267,7 @@ internal static class ProviderValidator
                 continue;
             }
 
-            var returnTypeName = method.ReturnType.ToDisplayString();
-            if (returnTypeName is not (
-                "System.Threading.Tasks.Task" or
-                "Task" or
-                "System.Threading.Tasks.ValueTask" or
-                "ValueTask"))
+            if (!IsSupportedInitializerReturnType(method.ReturnType, compilation))
             {
                 continue;
             }
@@ -277,9 +283,32 @@ internal static class ProviderValidator
         return genericMethod;
     }
 
-    private static ImmutableArray<ServiceTypeIdentity> GetDependencyIdentities(
+    private static bool IsSupportedInitializerReturnType(
+        ITypeSymbol returnType,
+        Compilation? compilation)
+    {
+        var definition = returnType.OriginalDefinition;
+        if (compilation is not null)
+        {
+            return SymbolEqualityComparer.Default.Equals(
+                       definition,
+                       compilation.GetTypeByMetadataName("System.Threading.Tasks.Task")) ||
+                   SymbolEqualityComparer.Default.Equals(
+                       definition,
+                       compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask"));
+        }
+
+        var assemblyName = definition.ContainingAssembly?.Identity.Name;
+        return definition.MetadataName is "Task" or "ValueTask" &&
+               assemblyName is "System.Runtime" or "System.Private.CoreLib" or "netstandard";
+    }
+
+    private static ImmutableArray<ServiceTypeIdentity>? GetDependencyIdentities(
         INamedTypeSymbol typeSymbol,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames)
+        Compilation? compilation,
+        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
+        Location location,
+        Action<Diagnostic> reportDiagnostic)
     {
         var consumeAttribute = FindAttribute(typeSymbol, ConsumeAttributeName);
         if (consumeAttribute == null)
@@ -290,13 +319,41 @@ internal static class ProviderValidator
         var consumeAttributeSyntax = GetAttributeSyntax(consumeAttribute);
         var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
         var dependencies = ImmutableArray.CreateBuilder<ServiceTypeIdentity>();
+        var hasInvalidDependency = false;
 
-        foreach (var (dependencyType, _) in GetTypeArguments(consumeAttribute, argumentLocations))
+        foreach (var (dependencyType, dependencyLocation) in GetTypeArguments(
+                     consumeAttribute,
+                     argumentLocations))
         {
+            var diagnosticLocation = dependencyLocation ??
+                                    GetAttributeLocation(consumeAttribute) ??
+                                    location;
+            if (dependencyType is INamedTypeSymbol { IsUnboundGenericType: true })
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.OpenGenericDependencyNotSupported,
+                    diagnosticLocation,
+                    GetTypeDisplayName(dependencyType, diagnosticLocation)));
+                hasInvalidDependency = true;
+                continue;
+            }
+
+            if (!IsAccessibleFromGeneratedCode(dependencyType, compilation))
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.ProviderTypeNotAccessible,
+                    diagnosticLocation,
+                    GetTypeDisplayName(dependencyType, diagnosticLocation)));
+                hasInvalidDependency = true;
+                continue;
+            }
+
             dependencies.Add(ServiceTypeIdentity.FromSymbol(dependencyType));
         }
 
-        return dependencies.ToImmutable();
+        return hasInvalidDependency
+            ? null
+            : dependencies.ToImmutable();
     }
 
     private static IEnumerable<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
