@@ -762,8 +762,12 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         GeneratorOptions options,
         Action<Diagnostic> reportDiagnostic)
     {
-        var inputLocation = FindGeneratorAttributeLocation(compilation, "SingletonDIConsume") ??
-            FindGeneratorAttributeLocation(compilation, "SingletonDIProvide");
+        // One pass for both lookups. They were previously performed four times per run - twice for
+        // the attribute location and twice for the file-scoped consumer - each a full
+        // DescendantNodes walk of every tree. That is the generator's dominant per-keystroke cost
+        // in a project that does not otherwise use SingletonDI.
+        var usage = ScanSingletonDIUsage(compilation);
+        var inputLocation = usage.ConsumeAttributeLocation ?? usage.ProvideAttributeLocation;
         if (inputLocation is null && !options.IsCompositionRoot)
         {
             return;
@@ -778,13 +782,12 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 effectiveVersion));
         }
 
-        var fileScopedLocation = FindFileScopedConsumerLocation(compilation);
-        if (fileScopedLocation is not null &&
+        if (usage.FileScopedConsumerLocation is not null &&
             effectiveVersion.CompareTo(LanguageVersion.CSharp10) < 0)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.FileScopedConsumerLanguageVersionNotSupported,
-                fileScopedLocation,
+                usage.FileScopedConsumerLocation,
                 effectiveVersion));
         }
     }
@@ -808,24 +811,47 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     {
         return new LanguageSupport(
             GetEffectiveLanguageVersion(compilation),
-            FindFileScopedConsumerLocation(compilation) is not null,
+            ScanSingletonDIUsage(compilation).FileScopedConsumerLocation is not null,
             compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication);
     }
 
     private static LanguageVersion GetEffectiveLanguageVersion(Compilation compilation)
     {
-        return compilation.SyntaxTrees
-            .Select(tree => tree.Options)
-            .OfType<CSharpParseOptions>()
-            .Select(options => LanguageVersionFacts.MapSpecifiedToEffectiveVersion(options.LanguageVersion))
-            .OrderBy(version => (int)version)
-            .FirstOrDefault();
+        var effective = LanguageVersion.Default;
+        var found = false;
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            if (tree.Options is not CSharpParseOptions parseOptions)
+            {
+                continue;
+            }
+
+            var version = LanguageVersionFacts.MapSpecifiedToEffectiveVersion(parseOptions.LanguageVersion);
+            if (!found || version.CompareTo(effective) < 0)
+            {
+                effective = version;
+                found = true;
+            }
+        }
+
+        return effective;
     }
 
-    private static Location? FindGeneratorAttributeLocation(
-        Compilation compilation,
-        string attributeName)
+    private readonly record struct SingletonDIUsage(
+        Location? ConsumeAttributeLocation,
+        Location? ProvideAttributeLocation,
+        Location? FileScopedConsumerLocation);
+
+    /// <summary>
+    /// Locates the attributes the language diagnostics anchor to in a single pass over the
+    /// compilation's syntax trees.
+    /// </summary>
+    private static SingletonDIUsage ScanSingletonDIUsage(Compilation compilation)
     {
+        Location? consumeAttributeLocation = null;
+        Location? provideAttributeLocation = null;
+        Location? fileScopedConsumerLocation = null;
+
         foreach (var tree in compilation.SyntaxTrees)
         {
             foreach (var typeDeclaration in tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
@@ -833,39 +859,49 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 foreach (var attribute in typeDeclaration.AttributeLists
                              .SelectMany(attributeList => attributeList.Attributes))
                 {
-                    if (IsAttribute(attribute, attributeName))
+                    if (consumeAttributeLocation is null && IsAttribute(attribute, "SingletonDIConsume"))
                     {
-                        return attribute.GetLocation();
+                        consumeAttributeLocation = attribute.GetLocation();
+                    }
+                    else if (provideAttributeLocation is null && IsAttribute(attribute, "SingletonDIProvide"))
+                    {
+                        provideAttributeLocation = attribute.GetLocation();
                     }
                 }
-            }
-        }
 
-        return null;
-    }
-
-    private static Location? FindFileScopedConsumerLocation(Compilation compilation)
-    {
-        foreach (var tree in compilation.SyntaxTrees)
-        {
-            foreach (var typeDeclaration in tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>())
-            {
-                if (!typeDeclaration.Ancestors().OfType<FileScopedNamespaceDeclarationSyntax>().Any() ||
-                    !typeDeclaration.AttributeLists
-                        .SelectMany(attributeList => attributeList.Attributes)
-                        .Any(attribute => IsAttribute(attribute, "SingletonDIConsume")))
+                if (fileScopedConsumerLocation is not null || !HasSingletonDIConsumeAttribute(typeDeclaration))
                 {
                     continue;
                 }
 
-                return typeDeclaration.Ancestors()
+                var fileScopedNamespace = typeDeclaration.Ancestors()
                     .OfType<FileScopedNamespaceDeclarationSyntax>()
-                    .First()
-                    .GetLocation();
+                    .FirstOrDefault();
+                if (fileScopedNamespace is not null)
+                {
+                    fileScopedConsumerLocation = fileScopedNamespace.GetLocation();
+                }
             }
         }
 
-        return null;
+        return new SingletonDIUsage(
+            consumeAttributeLocation,
+            provideAttributeLocation,
+            fileScopedConsumerLocation);
+    }
+
+    private static bool HasSingletonDIConsumeAttribute(TypeDeclarationSyntax typeDeclaration)
+    {
+        foreach (var attribute in typeDeclaration.AttributeLists
+                     .SelectMany(attributeList => attributeList.Attributes))
+        {
+            if (IsAttribute(attribute, "SingletonDIConsume"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsAttribute(AttributeSyntax attribute, string name)
