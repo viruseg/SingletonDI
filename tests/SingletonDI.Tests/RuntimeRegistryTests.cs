@@ -391,6 +391,35 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public async Task Registry_ReportsEveryFailingDisposer()
+    {
+        // Task.WhenAll surfaces one fault, so a second failing disposer in the same level used to
+        // be dropped without ever being observed.
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<ISecondFailingDisposable, SecondFailingDisposable>(
+            static () => new SecondFailingDisposable(),
+            Array.Empty<Type>(),
+            null,
+            _ => throw new InvalidOperationException("second disposal failed"),
+            null);
+        registry.RegisterProvider<IThirdFailingDisposable, ThirdFailingDisposable>(
+            static () => new ThirdFailingDisposable(),
+            Array.Empty<Type>(),
+            null,
+            _ => throw new NotSupportedException("third disposal failed"),
+            null);
+
+        await registry.InitializeAsync();
+
+        var exception = await Assert.ThrowsAsync<AggregateException>(
+            async () => await registry.DisposeAsync());
+
+        var messages = exception.InnerExceptions.Select(inner => inner.Message).ToArray();
+        Assert.Contains("second disposal failed", messages);
+        Assert.Contains("third disposal failed", messages);
+    }
+
+    [Fact]
     public async Task Registry_ResolvesConcreteOnlyRegistration()
     {
         var registry = new ServiceRegistry();
@@ -1000,6 +1029,22 @@ public sealed class RuntimeRegistryTests
     }
 
     private sealed class RetryService : IRetryService
+    {
+    }
+
+    private interface ISecondFailingDisposable
+    {
+    }
+
+    private sealed class SecondFailingDisposable : ISecondFailingDisposable
+    {
+    }
+
+    private interface IThirdFailingDisposable
+    {
+    }
+
+    private sealed class ThirdFailingDisposable : IThirdFailingDisposable
     {
     }
 }

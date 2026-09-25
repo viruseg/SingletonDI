@@ -119,7 +119,7 @@ internal sealed class ServiceGraph
 
     private async Task DisposeCoreAsync()
     {
-        Exception? firstException = null;
+        var failures = new List<Exception>();
 
         try
         {
@@ -144,7 +144,7 @@ internal sealed class ServiceGraph
                         }
                         catch (Exception exception)
                         {
-                            firstException ??= exception;
+                            failures.Add(exception);
                         }
                     }
                     else if (registration.Dispose is not null)
@@ -155,7 +155,7 @@ internal sealed class ServiceGraph
                         }
                         catch (Exception exception)
                         {
-                            firstException ??= exception;
+                            failures.Add(exception);
                         }
                     }
                 }
@@ -166,9 +166,19 @@ internal sealed class ServiceGraph
                     {
                         await Task.WhenAll(disposals).ConfigureAwait(false);
                     }
-                    catch (Exception exception)
+                    catch
                     {
-                        firstException ??= exception;
+                        // WhenAll surfaces a single fault and drops the rest, so a second failing
+                        // disposer in the same level was never observed at all. Read the faults back
+                        // off the tasks: which providers failed to release their resources is the
+                        // information needed when diagnosing a bad shutdown.
+                        foreach (var disposal in disposals)
+                        {
+                            if (disposal.IsFaulted && disposal.Exception is { } fault)
+                            {
+                                failures.AddRange(fault.InnerExceptions);
+                            }
+                        }
                     }
                 }
             }
@@ -181,9 +191,13 @@ internal sealed class ServiceGraph
             }
         }
 
-        if (firstException is not null)
+        if (failures.Count == 1)
         {
-            ExceptionDispatchInfo.Capture(firstException).Throw();
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        }
+        else if (failures.Count > 1)
+        {
+            throw new AggregateException("One or more providers failed to dispose.", failures);
         }
     }
 
