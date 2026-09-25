@@ -411,7 +411,12 @@ public sealed partial class ConsumerDeclarationMatrixTests
             }
             """,
             new SupportedExpectation(),
-            ["protected static global::App.First FirstInstance", "protected static global::App.Second SecondInstance"],
+            [
+                "partial class BaseConsumer",
+                "protected static global::App.First FirstInstance",
+                "partial class DerivedConsumer",
+                "protected static global::App.Second SecondInstance",
+            ],
             []),
         new(
             "CONS-INH-04",
@@ -704,6 +709,23 @@ public sealed partial class ConsumerDeclarationMatrixTests
                     public partial class Consumer
                     {
                     }
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0029"]),
+            [],
+            ["protected static global::App.Service ServiceInstance"]),
+        new(
+            "CONS-NST-09",
+            "CONSUMER_NESTING",
+            "file-local consumer",
+            ProviderSource + """
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Service))]
+                file partial class Consumer
+                {
                 }
             }
             """,
