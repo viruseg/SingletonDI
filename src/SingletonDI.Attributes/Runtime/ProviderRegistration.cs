@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Threading.Tasks;
 
@@ -16,13 +17,17 @@ internal class ProviderRegistration
     {
         ServiceType = serviceType ?? throw new ArgumentNullException(nameof(serviceType));
         ImplementationType = implementationType ?? throw new ArgumentNullException(nameof(implementationType));
-        DependencyTypes = dependencyTypes ?? throw new ArgumentNullException(nameof(dependencyTypes));
         Factory = factory ?? throw new ArgumentNullException(nameof(factory));
         InitializeAsync = initializeAsync;
         Dispose = dispose;
         DisposeAsync = disposeAsync;
 
-        foreach (var dependencyType in DependencyTypes)
+        if (dependencyTypes is null)
+        {
+            throw new ArgumentNullException(nameof(dependencyTypes));
+        }
+
+        foreach (var dependencyType in dependencyTypes)
         {
             if (dependencyType is null)
             {
@@ -30,14 +35,16 @@ internal class ProviderRegistration
             }
         }
 
-        DependencyTypes = (Type[])DependencyTypes.Clone();
+        // Cloned so the generated array literal cannot be aliased and mutated after registration,
+        // and exposed as a read-only view so nothing can mutate it through this instance either.
+        DependencyTypes = Array.AsReadOnly((Type[])dependencyTypes.Clone());
     }
 
     internal Type ServiceType { get; }
 
     internal Type ImplementationType { get; }
 
-    internal Type[] DependencyTypes { get; private set; }
+    internal IReadOnlyList<Type> DependencyTypes { get; }
 
     internal Func<object> Factory { get; }
 
