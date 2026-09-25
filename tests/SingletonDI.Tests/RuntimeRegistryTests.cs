@@ -751,6 +751,28 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public async Task Registry_RecordsCleanupFailureOnTheInitializationFailure()
+    {
+        // The initialization failure is what propagates, but a cleanup that also failed used to
+        // leave no trace, so a provider that failed to release its resources was undiscoverable.
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IFailingBothService, FailingBothService>(
+            static () => new FailingBothService(),
+            Array.Empty<Type>(),
+            _ => throw new InvalidOperationException("initialization failed"),
+            _ => throw new NotSupportedException("disposal failed"),
+            null);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => registry.InitializeAsync());
+
+        Assert.Equal("initialization failed", exception.InnerException?.Message);
+        var cleanupFailure = Assert.IsType<NotSupportedException>(
+            exception.Data[ServiceGraph.CleanupFailureKey]);
+        Assert.Equal("disposal failed", cleanupFailure.Message);
+    }
+
+    [Fact]
     public async Task Registry_ReinitializationWaitsForInProgressDisposal()
     {
         var disposeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1059,10 +1081,17 @@ public sealed class RuntimeRegistryTests
     {
     }
 
-    private interface IWorkingService
+    private interface IFailingBothService
     {
     }
 
+    private sealed class FailingBothService : IFailingBothService
+    {
+    }
+
+    private interface IWorkingService
+    {
+    }
     private sealed class WorkingService : IWorkingService
     {
     }

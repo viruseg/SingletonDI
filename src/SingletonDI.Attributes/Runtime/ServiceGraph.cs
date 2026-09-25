@@ -7,6 +7,12 @@ namespace SingletonDI.Generated;
 
 internal sealed class ServiceGraph
 {
+    /// <summary>
+    /// Key under which a failed cleanup is recorded on the initialization failure that triggered
+    /// it, so the original error is still what propagates but the cleanup failure is not lost.
+    /// </summary>
+    internal const string CleanupFailureKey = "SingletonDI.InitializationCleanupFailure";
+
     private readonly IReadOnlyList<IReadOnlyList<ProviderRegistration>> _levels;
     private readonly Dictionary<Type, object> _instances = new();
     private readonly object _sync = new();
@@ -56,16 +62,22 @@ internal sealed class ServiceGraph
                 }
             }
         }
-        catch
+        catch (Exception initializationFailure)
         {
             try
             {
                 await DisposeAsync().ConfigureAwait(false);
             }
-            catch
+            catch (Exception cleanupFailure)
             {
+                // The initialization failure stays the thrown exception, but record the cleanup
+                // failure alongside it: a provider that also failed to release its resources is
+                // the information needed to explain a hung or corrupted shutdown, and swallowing
+                // it here left no trace at all.
+                initializationFailure.Data[CleanupFailureKey] = cleanupFailure;
             }
 
+            ExceptionDispatchInfo.Capture(initializationFailure).Throw();
             throw;
         }
     }
