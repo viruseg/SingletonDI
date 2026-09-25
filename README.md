@@ -157,11 +157,11 @@ public sealed class DatabaseService : IDatabaseService
 }
 ```
 
-With this property set, the root recursively inspects its metadata references, imports public providers, validates the complete service graph, and loads each referenced provider registration module before `InitializeAsync()` runs. `ProjectReference` and `PackageReference` are supported identically. Non-public providers from referenced assemblies are not imported, and a provider package built without the generated `SingletonDIProviderModuleAttribute` is rejected with `DM0020`.
+With this property set, the root recursively inspects its metadata references, imports public providers, validates the complete service graph, and invokes the generated `Bootstrap()` method on each referenced provider module before `InitializeAsync()` runs. `ProjectReference` and `PackageReference` are supported identically. The generated module method is idempotent and avoids running a user provider constructor as a side effect of module loading. Non-public providers from referenced assemblies are not imported, and a provider package built without the generated `SingletonDIProviderModuleAttribute` is rejected with `DM0020`.
 
 The app registers `DatabaseService` under both its concrete type and `IDatabaseService`; both keys resolve the same object. A contract consumer's property name is derived from the contract type (`IDatabaseServiceInstance`), not from the provider's `PropertyName`, because a library that sees only the contract cannot inspect the app's provider declaration. Concrete and contract access can coexist in the app.
 
-A single-project application does not need `SingletonDICompositionRoot`.
+The runtime API is in the `SingletonDI.Generated` namespace. A cross-project executable must opt in with `SingletonDICompositionRoot=true`, expose that property to the compiler, and await `SingletonDI.Generated.SingletonDIInitializer.InitializeAsync()` after its generated composition-root module is available. A single-project application does not need `SingletonDICompositionRoot`.
 
 ## Attributes
 
@@ -200,10 +200,12 @@ public sealed class SingletonDIProvideAttribute : Attribute
 - Class must not be `abstract`
 - Not inherited (each class must be explicitly marked)
 - A provider can expose at most one `ServiceType`
+- Generated source requires C# 9 or later
 
 **Initialization:**
 - For synchronous initialization, use a parameterless constructor
-- For asynchronous initialization, implement a parameterless `Task InitializeAsync()` or `ValueTask InitializeAsync()` method
+- For asynchronous initialization, implement a public, internal, or protected internal parameterless `Task InitializeAsync()` or `ValueTask InitializeAsync()` instance method
+- Generic, static, open-generic, and inaccessible initializers are rejected during generation
 
 **Examples:**
 
@@ -315,11 +317,13 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 ```
 
 **Requirements:**
-- Class must be declared as `partial`
+- The consumer may be a top-level or nested `class`, `struct`, `record`, or `record struct`; every containing type that receives generated members must be `partial`
+- File-scoped consumer declarations require C# 10 or later; other generated source requires C# 9 or later
 - Each dependency must be a visible `[SingletonDIProvide]` type or a supported interface/abstract contract; the composition root verifies that a requested contract has exactly one provider
-- Cannot specify the class itself in the dependency list (self-reference)
+- Cannot specify the consumer type itself in the dependency list (self-reference)
 - Cannot duplicate types in the dependency list
-- Inherited (`Inherited = true`) — inheritors automatically get the same dependencies
+- The attribute is inherited (`Inherited = true`), so a derived consumer receives the same generated dependencies without repeating the attribute
+- Generated properties are `protected` for an unsealed class and `private` for a sealed class, `struct`, or `record struct`
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
@@ -350,12 +354,14 @@ Initializes all singletons in the correct order (topological sorting by dependen
 
 **Parameters:**
 - `registerShutdownHandlers` (default `true`):
-  - `true` — automatically registers shutdown handlers for correct resource disposal on application termination
-  - `false` — does not register handlers (for scenarios with manual lifetime management)
+  - `true` — registers process-exit, console cancel, and supported POSIX signal handlers for graceful disposal
+  - `false` — skips handler registration; the application owns the complete lifetime and must call `DisposeAsync`
 
-**Returns:** `Task`
+**Returns:** `Task` that completes only after provider creation and all initializers finish.
 
 Provider instances are created level by level, with dependencies before dependents, before any `InitializeAsync` methods run. Initializers for providers in the same level then run in parallel. Both `Task` and `ValueTask` initializer return types are supported. Concurrent lifecycle calls are serialized with disposal: a reinitialization requested during disposal waits for disposal to finish and receives a new task, never the previous successful task. A failed initialization disposes every created instance in reverse dependency order, continues after individual disposer failures, clears state, and preserves the original initialization exception so a later call can retry. Registering a new provider after initialization has started is rejected.
+
+When shutdown handlers are enabled, `Ctrl+C`/`SIGINT`, `SIGTERM`, and `SIGQUIT` cancel default termination, await one disposal operation, and then exit with codes `130`, `143`, and `131` respectively. Repeated signals do not start another disposal. `ProcessExit` is best-effort because the host may terminate the process before asynchronous cleanup finishes; await `SingletonDIInitializer.DisposeAsync()` explicitly when cleanup must be guaranteed.
 
 Ordinary access to a generated property or hidden host resolution before successful initialization and outside the active initialization context throws `InvalidOperationException`. During the active initialization context, a provider factory or constructor may resolve already-created dependencies; the SampleApp uses this pattern in provider constructors.
 
@@ -380,7 +386,7 @@ await SingletonDIInitializer.DisposeAsync();
 public static ValueTask DisposeAsync()
 ```
 
-Asynchronously disposes all initialized singletons implementing `IAsyncDisposable` or `IDisposable`. The method returns `ValueTask`; concurrent and repeated calls are idempotent. Cleanup continues after an individual disposer failure, and the disposal error is reported after the remaining instances have been released.
+Asynchronously disposes all initialized singletons implementing `IAsyncDisposable` or `IDisposable`. The method returns `ValueTask`; concurrent and repeated calls are idempotent. Cleanup continues after an individual disposer failure, and the disposal error is reported after the remaining instances have been released. Await the returned task in application shutdown code when disposal must complete before the process exits.
 
 **Returns:** `ValueTask`
 

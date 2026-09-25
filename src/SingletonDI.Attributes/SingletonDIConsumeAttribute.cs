@@ -1,20 +1,23 @@
 namespace SingletonDI.Attributes;
 
 /// <summary>
-/// Marks a class as a consumer of singleton providers.
+/// Marks a class, struct, record, or record struct as a consumer of singleton providers.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The marked class receives one generated property for each declared dependency. A dependency
+/// The marked type receives one generated property for each declared dependency. A dependency
 /// can be a visible concrete provider or an interface or abstract service contract. Contract
 /// dependencies are named from the contract identity and do not require a reference to the
 /// provider implementation.
 /// </para>
 /// <para>
-/// The class must be declared as <c>partial</c> to allow code generation.
+/// The type and any containing types that receive generated members must be declared as
+/// <c>partial</c>. File-scoped declarations require C# 10 or later.
 /// </para>
 /// <para>
-/// Inherited is set to <c>true</c>, meaning derived classes automatically get the same dependencies.
+/// The attribute is inherited, so derived types receive the same generated dependencies without
+/// repeating the attribute. Generated properties are protected for an unsealed class and private
+/// for a sealed class, struct, or record struct.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]

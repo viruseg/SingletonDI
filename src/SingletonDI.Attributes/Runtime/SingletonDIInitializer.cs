@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 namespace SingletonDI.Generated;
 
 /// <summary>
-/// Coordinates process-wide provider initialization and disposal.
+/// Coordinates process-wide provider initialization and disposal in the <c>SingletonDI.Generated</c> namespace.
 /// </summary>
 public static class SingletonDIInitializer
 {
@@ -19,7 +19,9 @@ public static class SingletonDIInitializer
     /// Initializes all registered providers asynchronously.
     /// </summary>
     /// <param name="registerShutdownHandlers">
-    /// Whether process and console shutdown handlers should be registered.
+    /// Whether process-exit, console-cancel, and supported POSIX signal handlers should be registered.
+    /// When enabled, handled signals cancel default termination, await one disposal operation, and
+    /// terminate with exit code 130 for SIGINT, 143 for SIGTERM, or 131 for SIGQUIT.
     /// </param>
     /// <returns>
     /// A task that completes after every provider instance has been created and every
@@ -85,7 +87,8 @@ public static class SingletonDIInitializer
     /// <returns>
     /// A <see cref="ValueTask"/> that completes when each provider has been disposed.
     /// Asynchronous disposal is preferred when both disposal interfaces are implemented.
-    /// Repeated and concurrent calls are idempotent.
+    /// Repeated and concurrent calls are idempotent. Await this task when cleanup must complete
+    /// before process exit; process-exit handling alone is best-effort.
     /// </returns>
     public static ValueTask DisposeAsync()
     {
