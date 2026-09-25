@@ -26,16 +26,29 @@ SingletonDI/
 - **Build solution:** `dotnet build SingletonDI.slnx --configuration Release`
 - **Build generator:** `dotnet build src/SingletonDI.Generator/SingletonDI.Generator.csproj`
 - **Run sample:** `dotnet run --project src/SingletonDI.SampleApp/SingletonDI.SampleApp.csproj`
-- **Test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --no-restore --nologo --logger "console;verbosity=minimal" --blame-hang --blame-hang-timeout 300s --blame-hang-dump-type mini`
-- **Focused test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --filter "FullyQualifiedName~TestClass.TestMethod" --no-restore --nologo --logger "console;verbosity=minimal" --blame-hang --blame-hang-timeout 300s --blame-hang-dump-type mini`
+- **Test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --no-restore --nologo --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 300s --blame-hang-dump-type mini`
+- **Focused test:** `dotnet test tests/SingletonDI.Tests/SingletonDI.Tests.csproj --filter "FullyQualifiedName~TestClass.TestMethod" --no-restore --nologo --logger "console;verbosity=normal" --blame-hang --blame-hang-timeout 300s --blame-hang-dump-type mini`
+- **Inner loop:** add `--filter "Category!=Packaging"` to the test command.
 
 `--blame-hang` is mandatory, not optional: without it a stuck `testhost` never exits and the agent session has to be
 unblocked by hand. When it fires, the output names the test that hung and a dump is written under
 `tests/SingletonDI.Tests/TestResults`. Raise `--blame-hang-timeout` only after checking how long a legitimate cold
 run takes; one target framework is tested per invocation.
 
-The test suite takes several minutes because it packs the runtime and builds it against SDK 10. Give the
-command a tool timeout well above that instead of raising the blame timeout.
+Use `verbosity=normal` for the documented runs. At `verbosity=minimal` the console logger prints nothing for the whole
+execution window, so a run that spends 20-30 seconds in the packaging tests looks like a hang. The suite is not slow:
+a warm full run reports about 25 seconds and exits, and the whole documented workflow from a cold tree takes under a
+minute.
+
+The two `Category=Packaging` classes dominate the runtime. `PackageSmokeTests` packs `SingletonDI.Attributes` in Release
+and builds and runs a consumer app against the produced package, and `PackageContentTests` packs again to compare the
+analyzer assembly in the package with the one MSBuild produced. Both are required before a release, so run them in the
+full command and skip them with `Category!=Packaging` while iterating.
+
+`PackageSmokeTests` serializes concurrent runs through `%TEMP%\SingletonDI.PackageSmokeTests.lock` and waits at most
+60 seconds for it. A wait is reported through `ITestOutputHelper`, so it only appears at `verbosity=normal` or in the
+run result. A testhost orphaned by a killed run keeps the lock held, and the next run then fails after that wait
+instead of waiting silently for minutes; delete the lock file after confirming no test run is active.
 
 ## Important characteristics
 

@@ -1,11 +1,13 @@
 using Xunit;
+using Xunit.Abstractions;
 
 namespace SingletonDI.Tests;
 
+[Trait("Category", "Packaging")]
 public sealed class PackageSmokeTests
 {
     private const string PackageVersion = "1.1.0";
-    private const int LockAttempts = 2400;
+    private const int LockAttempts = 600;
     private const int LockLogInterval = 100;
     private const int LockRetryDelay = 100;
 
@@ -13,6 +15,13 @@ public sealed class PackageSmokeTests
     [
         ("Sdk10", "10.0.401"),
     ];
+
+    private readonly ITestOutputHelper _output;
+
+    public PackageSmokeTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
 
     [Fact]
     public async Task PackedConsumerBuildsAndRunsOnSupportedSdks()
@@ -149,7 +158,7 @@ public sealed class PackageSmokeTests
         }
     }
 
-    private static async Task<FileStream> AcquirePackageSmokeLock()
+    private async Task<FileStream> AcquirePackageSmokeLock()
     {
         var lockPath = Path.Combine(Path.GetTempPath(), "SingletonDI.PackageSmokeTests.lock");
         for (var attempt = 1; attempt <= LockAttempts; attempt++)
@@ -172,7 +181,7 @@ public sealed class PackageSmokeTests
 
                 if (attempt % LockLogInterval == 0)
                 {
-                    Console.WriteLine(
+                    _output.WriteLine(
                         $"Waiting for the package smoke lock at {lockPath}, attempt {attempt}/{LockAttempts}.");
                 }
 

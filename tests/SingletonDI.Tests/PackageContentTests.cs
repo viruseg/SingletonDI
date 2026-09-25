@@ -4,6 +4,7 @@ using Xunit;
 
 namespace SingletonDI.Tests;
 
+[Trait("Category", "Packaging")]
 public sealed class PackageContentTests
 {
     private static readonly string[] AnalyzerAssemblyNames =
