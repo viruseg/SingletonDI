@@ -66,14 +66,12 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         ImmutableHashSet<string>.Empty,
                         diagnostics.Add);
                     var typeIdentity = ServiceTypeIdentity.FromSymbol(typeSymbol);
+                    var reported = diagnostics.ToImmutable();
                     return new ProviderCandidate(
                         model,
-                        diagnostics.ToImmutable(),
+                        reported,
                         typeIdentity,
-                        CreateProviderCandidateKey(
-                            model,
-                            diagnostics.ToImmutable(),
-                            typeIdentity));
+                        CreateProviderCandidateKey(model, reported, typeIdentity));
                 });
 
         var consumerDeclarations = context.SyntaxProvider
