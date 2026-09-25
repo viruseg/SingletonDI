@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Text;
 using SingletonDI.Generator;
 using Xunit;
@@ -50,6 +51,28 @@ internal static class CodeFixTestHarness
         operation.Apply(workspace.Workspace, CancellationToken.None);
         var changedDocument = workspace.Workspace.CurrentSolution.GetDocument(document.Id)!;
         return new CodeFixApplicationResult(changedDocument, action, registeredActions.ToImmutable());
+    }
+
+    /// <summary>
+    /// Applies the first registered code fix and then runs the workspace formatter over the
+    /// annotated ranges, the same way the IDE does when the fix is committed.
+    /// </summary>
+    /// <remarks>
+    /// Use this instead of <see cref="ApplyFirstAsync"/> when the assertion depends on
+    /// comments, documentation or formatting: <c>NormalizeWhitespace</c>-style comparison
+    /// discards all of them and passes even when a fix deleted the documentation.
+    /// </remarks>
+    internal static async Task<Document> ApplyFirstAndFormatAsync(
+        string source,
+        string diagnosticId,
+        CodeFixProvider provider,
+        string expectedTitle)
+    {
+        var result = await ApplyFirstAsync(source, diagnosticId, provider, expectedTitle);
+        var formatted = await Formatter.FormatAsync(result.Document, Formatter.Annotation)
+            .ConfigureAwait(false);
+        return formatted ?? throw new InvalidOperationException(
+            "Formatting the fixed document produced no result.");
     }
 
     /// <summary>

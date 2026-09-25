@@ -66,22 +66,34 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
         TypeDeclarationSyntax typeDeclaration,
         CancellationToken cancellationToken)
     {
-        // The 'partial' modifier must appear immediately before 'class', 'struct', 'record', or 'interface'.
-        // According to C# specification, it should be the last modifier before the type keyword.
-        // Correct order: public sealed partial class MyClass
-        // Incorrect order: public partial sealed class MyClass
         var modifiers = typeDeclaration.Modifiers;
 
-        // Insert 'partial' at the end of the modifiers list (right before the type keyword)
-        var insertIndex = modifiers.Count;
-
+        // 'partial' goes last in the modifier list so the conventional
+        // 'public sealed partial class' ordering is preserved.
         var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
             .WithTrailingTrivia(SyntaxFactory.Space);
+        var newTypeDeclaration = typeDeclaration.WithModifiers(
+            modifiers.Insert(modifiers.Count, partialToken));
 
-        var newModifiers = modifiers.Insert(insertIndex, partialToken);
+        // A declaration's leading trivia - documentation comments, #region - hangs off its first
+        // token. With no modifiers the inserted 'partial' token ends up in front of the keyword,
+        // so the trivia has to follow it; leaving it behind strands the documentation between the
+        // modifier and the keyword, detaches it from the type, and pushes a #region off the start
+        // of its line, which the workspace formatter cannot repair.
+        if (modifiers.Count == 0)
+        {
+            var keyword = newTypeDeclaration.Modifiers[0].GetNextToken();
+            var declarationTrivia = keyword.LeadingTrivia;
+            newTypeDeclaration = newTypeDeclaration.ReplaceToken(
+                keyword,
+                keyword.WithLeadingTrivia(SyntaxFactory.TriviaList()));
+            var insertedPartial = newTypeDeclaration.Modifiers[0];
+            newTypeDeclaration = newTypeDeclaration.ReplaceToken(
+                insertedPartial,
+                insertedPartial.WithLeadingTrivia(declarationTrivia));
+        }
 
-        var newTypeDeclaration = typeDeclaration.WithModifiers(newModifiers)
-            .WithAdditionalAnnotations(Formatter.Annotation);
+        newTypeDeclaration = newTypeDeclaration.WithAdditionalAnnotations(Formatter.Annotation);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null)

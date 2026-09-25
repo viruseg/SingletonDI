@@ -887,6 +887,155 @@ public class CodeFixProviderTests
         await VerifyPartialCodeFixAsync(test, expected, "DM0007");
     }
 
+    [Fact]
+    public async Task DM0007_AddPartialModifier_WithoutModifiersKeepsDocumentation()
+    {
+        // No modifiers at all, and the documentation sits between the attribute list and the
+        // keyword - the inserted 'partial' becomes the declaration's first token there, so the
+        // documentation has to move with it instead of being stranded inside the modifier list.
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   /// <summary>
+                   /// Консьюмер без модификаторов.
+                   /// </summary>
+                   class MyConsumer
+                   {
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService
+                       {
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       /// <summary>
+                       /// Консьюмер без модификаторов.
+                       /// </summary>
+                       partial class MyConsumer
+                       {
+                       }
+                       """;
+
+        await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_WithoutModifiersKeepsRegionDirective()
+    {
+        // A stranded #region follows the new modifier, which is CS1040, and the workspace
+        // formatter cannot repair it - the fix would turn a valid file into a broken one.
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   #region MyConsumer
+                   class MyConsumer
+                   {
+                   }
+                   #endregion
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService
+                       {
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       #region MyConsumer
+                       partial class MyConsumer
+                       {
+                       }
+                       #endregion
+                       """;
+
+        await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_WithoutModifiersKeepsLineComment()
+    {
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   // Обычный комментарий.
+                   class MyConsumer
+                   {
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService
+                       {
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       // Обычный комментарий.
+                       partial class MyConsumer
+                       {
+                       }
+                       """;
+
+        await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_ToRecordWithoutModifiers()
+    {
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   record MyConsumer;
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService
+                       {
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       partial record MyConsumer;
+                       """;
+
+        await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
+    }
+
     #endregion
 
     #region Helper Methods
@@ -1051,6 +1200,32 @@ public class CodeFixProviderTests
     {
         var codeFixProvider = new SingletonDIPartialCodeFixProvider();
         await VerifyCodeFixAsync(testSource, expectedSource, diagnosticId, codeFixProvider);
+    }
+
+    /// <summary>
+    /// Applies the fix, formats the result the way the IDE does, and compares the document
+    /// text verbatim. Unlike <see cref="VerifyCodeFixAsync"/> this keeps comments, documentation
+    /// and preprocessor directives, so a fix that relocates or drops them fails here.
+    /// </summary>
+    private static async Task VerifyPartialCodeFixExactlyAsync(
+        string testSource,
+        string expectedSource,
+        string diagnosticId)
+    {
+        var document = await CodeFixTestHarness.ApplyFirstAndFormatAsync(
+            testSource,
+            diagnosticId,
+            new SingletonDIPartialCodeFixProvider(),
+            "Add 'partial' modifier");
+
+        var actual = (await document.GetTextAsync()).ToString();
+        Assert.Equal(expectedSource, actual);
+
+        var compilation = await document.Project.GetCompilationAsync();
+        Assert.NotNull(compilation);
+        Assert.DoesNotContain(compilation!.GetDiagnostics(), diagnostic => diagnostic.Id == diagnosticId);
+        Assert.Empty(
+            compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
     }
 
     private static async Task VerifyCodeFixAsync(
