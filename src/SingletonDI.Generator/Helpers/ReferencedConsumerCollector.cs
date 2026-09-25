@@ -6,7 +6,7 @@ namespace SingletonDI.Generator.Helpers;
 
 internal static class ReferencedConsumerCollector
 {
-    private const string ConsumeAttributeName = "SingletonDI.Attributes.SingletonDIConsumeAttribute";
+    private const string ConsumeAttributeName = ProviderSymbolCollector.ConsumeAttributeName;
 
     internal static ImmutableArray<ImmutableArray<string>> CollectReferencedConsumerDependencies(
         Compilation compilation,

@@ -9,10 +9,12 @@ namespace SingletonDI.Generator.Helpers;
 internal static class ProviderSymbolCollector
 {
     private const string ProvideAttributeName = "SingletonDI.Attributes.SingletonDIProvideAttribute";
+    internal const string ConsumeAttributeName = "SingletonDI.Attributes.SingletonDIConsumeAttribute";
     private const string ProviderModuleMarkerName =
         "SingletonDI.Attributes.SingletonDIProviderModuleAttribute";
+    private const string GeneratedModuleNamespace = "SingletonDI.Generated.";
     private const string LegacyGeneratedBootstrapTypeName =
-        "global::SingletonDI.Generated.__SingletonDIProviderModule__";
+        GeneratedModuleNamespace + "__SingletonDIProviderModule__";
 
     internal static ImmutableArray<ProviderModel> CollectReferencedProviders(
         Compilation compilation,
@@ -88,17 +90,15 @@ internal static class ProviderSymbolCollector
         var candidateAssemblies = candidates
             .GroupBy(candidate => candidate.AssemblyIdentity, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
-        var bootstrapTypes = referencedTypes
-            .Where(referencedType => IsGeneratedBootstrapType(
-                referencedType.Type,
-                referencedType.Assembly.Identity.ToString()))
-            .GroupBy(
-                referencedType => referencedType.Assembly.Identity.ToString(),
-                StringComparer.Ordinal)
-            .ToDictionary(
-                group => group.Key,
-                SelectBootstrapType,
-                StringComparer.Ordinal);
+        var bootstrapTypes = new Dictionary<string, INamedTypeSymbol?>(StringComparer.Ordinal);
+        foreach (var group in referencedTypes
+                     .GroupBy(
+                         referencedType => referencedType.Assembly.Identity.ToString(),
+                         StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            bootstrapTypes[group.Key] = FindBootstrapType(group.First().Assembly);
+        }
         var referencedAssemblies = referencedTypes
             .GroupBy(referencedType => referencedType.Assembly.Identity.ToString(), StringComparer.Ordinal)
             .Select(group => group.First().Assembly)
@@ -159,36 +159,25 @@ internal static class ProviderSymbolCollector
             .ToImmutableArray();
     }
 
-    private static INamedTypeSymbol? SelectBootstrapType(
-        IEnumerable<ReferencedTypeData> types)
+    private static INamedTypeSymbol? FindBootstrapType(IAssemblySymbol assembly)
     {
-        var typeList = types.ToList();
-        var hashedName = GetProviderModuleTypeName(typeList[0].Assembly.Identity.ToString());
-        return typeList
-                   .Select(referencedType => referencedType.Type)
-                   .FirstOrDefault(type => string.Equals(
-                       type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                       hashedName,
-                       StringComparison.Ordinal))
-               ?? typeList
-                   .Select(referencedType => referencedType.Type)
-                   .FirstOrDefault(type => string.Equals(
-                       type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                       LegacyGeneratedBootstrapTypeName,
-                       StringComparison.Ordinal));
-    }
+        var assemblyIdentity = assembly.Identity.ToString();
+        var metadataNames = new[]
+        {
+            GeneratedModuleNamespace + ProviderModuleEmitter.GetProviderModuleTypeName(assemblyIdentity),
+            LegacyGeneratedBootstrapTypeName,
+        };
 
-    private static bool IsGeneratedBootstrapType(INamedTypeSymbol type, string assemblyIdentity)
-    {
-        var typeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        return string.Equals(typeName, LegacyGeneratedBootstrapTypeName, StringComparison.Ordinal) ||
-               string.Equals(typeName, GetProviderModuleTypeName(assemblyIdentity), StringComparison.Ordinal);
-    }
+        foreach (var metadataName in metadataNames)
+        {
+            var type = assembly.GetTypeByMetadataName(metadataName);
+            if (type is not null)
+            {
+                return type;
+            }
+        }
 
-    private static string GetProviderModuleTypeName(string assemblyIdentity)
-    {
-        return "global::SingletonDI.Generated." +
-               ProviderModuleEmitter.GetProviderModuleTypeName(assemblyIdentity);
+        return null;
     }
 
     private static bool HasPublicBootstrapMethod(INamedTypeSymbol type)
@@ -266,6 +255,12 @@ internal static class ProviderSymbolCollector
             foreach (var type in EnumerateTypes(assembly.GlobalNamespace))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (!HasAttribute(type, ProvideAttributeName) &&
+                    !HasAttribute(type, ConsumeAttributeName))
+                {
+                    continue;
+                }
+
                 types.Add(new ReferencedTypeData(assembly, type));
             }
         }
