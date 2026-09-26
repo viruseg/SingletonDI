@@ -78,8 +78,19 @@ internal sealed class ShutdownManager : IDisposable
             {
                 registrations.Add(_signalSource.RegisterProcessExit(
                     () => OnProcessExit(null, EventArgs.Empty)));
-                registrations.Add(_signalSource.RegisterCancelKeyPress(
-                    args => OnCancelKeyPress(null, args)));
+
+                // On a POSIX platform the console handler and the SIGINT registration are driven by
+                // the same interrupt, so registering both delivers one Ctrl+C twice. The second
+                // delivery reads as a second signal and terminates the process while the disposal
+                // the first one started is still in flight, which is the opposite of graceful
+                // shutdown. The signal registration also carries a real cancellation token, so it
+                // covers Ctrl+C on its own.
+                if (!_signalSource.SupportsPosixSignals)
+                {
+                    registrations.Add(_signalSource.RegisterCancelKeyPress(
+                        args => OnCancelKeyPress(null, args)));
+                }
+
                 RegisterPosixSignals(registrations);
                 _registrations = registrations.ToArray();
                 _registered = true;

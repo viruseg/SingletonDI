@@ -92,6 +92,44 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
+    public async Task ShutdownManager_OneInterruptOnPosixPlatformAwaitsDisposalInsteadOfTerminatingImmediately()
+    {
+        var disposeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var termination = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var terminateCount = 0;
+        var signalSource = new CapturingShutdownSignalSource();
+        var manager = new ShutdownManager(
+            () =>
+            {
+                disposeStarted.TrySetResult(true);
+                return new ValueTask(releaseDispose.Task);
+            },
+            code =>
+            {
+                Interlocked.Increment(ref terminateCount);
+                termination.TrySetResult(code);
+            },
+            signalSource,
+            TimeSpan.FromSeconds(5));
+
+        manager.Register();
+
+        // A single Ctrl+C reaches every handler the platform registered, so the same interrupt is
+        // delivered to more than one of them. A shutdown must not read the second delivery as the
+        // user insisting on an immediate exit while the first disposal is still in flight.
+        signalSource.RaiseInterrupt();
+
+        await disposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, Volatile.Read(ref terminateCount));
+
+        releaseDispose.TrySetResult(true);
+
+        Assert.Equal(130, await termination.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, Volatile.Read(ref terminateCount));
+    }
+
+    [Fact]
     public void ShutdownManager_Register_RollsBackEveryHandlerAfterPartialFailure()
     {
         var signalSource = new FailingShutdownSignalSource(PosixSignal.SIGTERM);
@@ -107,7 +145,10 @@ public sealed class SingletonDIInitializerTests
 
         signalSource.FailOnSignal = null;
         manager.Register();
-        Assert.Equal(5, signalSource.ActiveRegistrations);
+
+        // Process exit plus SIGINT, SIGTERM and SIGQUIT. A POSIX source needs no console handler,
+        // so the count is the signal registrations only.
+        Assert.Equal(4, signalSource.ActiveRegistrations);
 
         manager.Dispose();
         Assert.Equal(0, signalSource.ActiveRegistrations);
@@ -643,6 +684,77 @@ public sealed class SingletonDIInitializerTests
         {
             Interlocked.Increment(ref _activeRegistrations);
             return new CallbackRegistration(() => Interlocked.Decrement(ref _activeRegistrations));
+        }
+
+        private sealed class CallbackRegistration : IDisposable
+        {
+            private Action? _dispose;
+
+            internal CallbackRegistration(Action dispose)
+            {
+                _dispose = dispose;
+            }
+
+            public void Dispose()
+            {
+                Interlocked.Exchange(ref _dispose, null)?.Invoke();
+            }
+        }
+    }
+
+    private sealed class CapturingShutdownSignalSource : IShutdownSignalSource
+    {
+        private readonly List<Action<ConsoleCancelEventArgs>> _cancelKeyPressHandlers = [];
+        private readonly Dictionary<PosixSignal, List<Action<PosixSignalContext>>> _posixHandlers = [];
+
+        internal int RegisteredHandlerCount =>
+            _cancelKeyPressHandlers.Count + _posixHandlers.Values.Sum(handlers => handlers.Count);
+
+        public bool SupportsPosixSignals => true;
+
+        public IDisposable RegisterProcessExit(Action handler) => new CallbackRegistration(() => { });
+
+        public IDisposable RegisterCancelKeyPress(Action<ConsoleCancelEventArgs> handler)
+        {
+            _cancelKeyPressHandlers.Add(handler);
+            return new CallbackRegistration(
+                () => _cancelKeyPressHandlers.Remove(handler));
+        }
+
+        public IDisposable RegisterPosixSignal(PosixSignal signal, Action<PosixSignalContext> handler)
+        {
+            if (!_posixHandlers.TryGetValue(signal, out var handlers))
+            {
+                handlers = [];
+                _posixHandlers[signal] = handlers;
+            }
+
+            handlers.Add(handler);
+            return new CallbackRegistration(() => handlers.Remove(handler));
+        }
+
+        /// <summary>
+        /// Delivers one interrupt to every handler a platform would route it to, which on a POSIX
+        /// platform is both the console cancel-key handler and the registered signal handler.
+        /// </summary>
+        internal void RaiseInterrupt()
+        {
+            foreach (var handler in _cancelKeyPressHandlers.ToArray())
+            {
+                handler((ConsoleCancelEventArgs)RuntimeHelpers.GetUninitializedObject(
+                    typeof(ConsoleCancelEventArgs)));
+            }
+
+            if (!_posixHandlers.TryGetValue(PosixSignal.SIGINT, out var interruptHandlers))
+            {
+                return;
+            }
+
+            foreach (var handler in interruptHandlers.ToArray())
+            {
+                handler((PosixSignalContext)RuntimeHelpers.GetUninitializedObject(
+                    typeof(PosixSignalContext)));
+            }
         }
 
         private sealed class CallbackRegistration : IDisposable
