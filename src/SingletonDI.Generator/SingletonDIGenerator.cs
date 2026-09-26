@@ -68,7 +68,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         typeDeclaration,
                         typeSymbol,
                         context.SemanticModel.Compilation,
-                        ImmutableHashSet<string>.Empty,
                         diagnostics.Add);
                     var typeIdentity = ServiceTypeIdentity.FromSymbol(typeSymbol);
                     var reported = diagnostics.ToImmutable();

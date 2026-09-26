@@ -59,7 +59,6 @@ public class SingletonDIGeneratorTests
         var model = ProviderValidator.Validate(
             provider,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -90,7 +89,6 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -119,13 +117,11 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             compilationDiagnostics.Add);
         var symbolDiagnostics = new List<Diagnostic>();
         var symbolModel = ProviderValidator.Validate(
             provider,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             symbolDiagnostics.Add);
 
         // IBox<int> converts to IBox<object> only explicitly: the instance is not an IBox<object> at
@@ -158,7 +154,6 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -186,7 +181,6 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -219,13 +213,11 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             compilationDiagnostics.Add);
         var symbolDiagnostics = new List<Diagnostic>();
         var symbolModel = ProviderValidator.Validate(
             provider,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             symbolDiagnostics.Add);
 
         Assert.Null(compilationModel);
@@ -269,7 +261,6 @@ public class SingletonDIGeneratorTests
             provider,
             consumerCompilation,
             Location.None,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.Null(model);
@@ -304,7 +295,6 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -338,7 +328,6 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.Null(model);
@@ -370,7 +359,6 @@ public class SingletonDIGeneratorTests
             provider,
             compilation,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.Null(model);
@@ -397,7 +385,6 @@ public class SingletonDIGeneratorTests
         var model = ProviderValidator.Validate(
             provider,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.Null(model);
@@ -427,7 +414,6 @@ public class SingletonDIGeneratorTests
         var model = ConsumerValidator.Validate(
             declaration,
             consumer,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -463,12 +449,10 @@ public class SingletonDIGeneratorTests
         var model = ProviderValidator.Validate(
             provider,
             declaration.GetLocation(),
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
         var consumerModel = ConsumerValidator.Validate(
             declaration,
             provider,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -507,7 +491,6 @@ public class SingletonDIGeneratorTests
         var model = ConsumerValidator.Validate(
             declaration,
             consumer,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -544,7 +527,6 @@ public class SingletonDIGeneratorTests
         var model = ProviderValidator.Validate(
             provider,
             Location.None,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.NotNull(model);
@@ -587,7 +569,6 @@ public class SingletonDIGeneratorTests
         var model = ProviderValidator.Validate(
             provider,
             Location.None,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         Assert.Null(model);
@@ -615,7 +596,6 @@ public class SingletonDIGeneratorTests
         var model = ProviderValidator.Validate(
             declaration,
             provider,
-            ImmutableHashSet<string>.Empty,
             diagnostics.Add);
 
         var diagnostic = Assert.Single(diagnostics);

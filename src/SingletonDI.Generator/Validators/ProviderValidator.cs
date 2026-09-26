@@ -17,14 +17,12 @@ internal static class ProviderValidator
     internal static ProviderModel? Validate(
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
         return Validate(
             typeSymbol,
             typeDecl.GetLocation(),
             compilation: null,
-            knownProviderFullyQualifiedNames,
             reportDiagnostic);
     }
 
@@ -32,28 +30,24 @@ internal static class ProviderValidator
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
         Compilation compilation,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
         return Validate(
             typeSymbol,
             typeDecl.GetLocation(),
             compilation,
-            knownProviderFullyQualifiedNames,
             reportDiagnostic);
     }
 
     internal static ProviderModel? Validate(
         INamedTypeSymbol typeSymbol,
         Location location,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
         return Validate(
             typeSymbol,
             location,
             compilation: null,
-            knownProviderFullyQualifiedNames,
             reportDiagnostic);
     }
 
@@ -61,14 +55,12 @@ internal static class ProviderValidator
         INamedTypeSymbol typeSymbol,
         Compilation compilation,
         Location location,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
         return Validate(
             typeSymbol,
             location,
             compilation,
-            knownProviderFullyQualifiedNames,
             reportDiagnostic);
     }
 
@@ -76,7 +68,6 @@ internal static class ProviderValidator
         INamedTypeSymbol typeSymbol,
         Location location,
         Compilation? compilation,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic)
     {
         var provideAttribute = FindAttribute(typeSymbol, ProvideAttributeName);
@@ -258,7 +249,6 @@ internal static class ProviderValidator
         var dependencyIdentities = GetDependencyIdentities(
             typeSymbol,
             compilation,
-            knownProviderFullyQualifiedNames,
             location,
             reportDiagnostic);
         if (dependencyIdentities is null)
@@ -436,7 +426,6 @@ internal static class ProviderValidator
     private static ImmutableArray<ServiceTypeIdentity>? GetDependencyIdentities(
         INamedTypeSymbol typeSymbol,
         Compilation? compilation,
-        ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Location location,
         Action<Diagnostic> reportDiagnostic)
     {

@@ -84,9 +84,6 @@ internal static class ProviderSymbolCollector
             }
         }
 
-        var knownProviderNames = candidates
-            .Select(candidate => candidate.FullyQualifiedName)
-            .ToImmutableHashSet(StringComparer.Ordinal);
         var providers = new List<ProviderModel>();
         var candidateAssemblies = candidates
             .GroupBy(candidate => candidate.AssemblyIdentity, StringComparer.Ordinal)
@@ -114,7 +111,6 @@ internal static class ProviderSymbolCollector
                 candidate.Type,
                 compilation,
                 Location.None,
-                knownProviderNames,
                 reportDiagnostic);
             if (model is null)
             {
