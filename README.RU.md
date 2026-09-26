@@ -342,7 +342,9 @@ Runtime-часть SingletonDI предоставляет общепроцесс
 ### InitializeAsync
 
 ```csharp
-public static Task InitializeAsync(bool registerShutdownHandlers = true)
+public static Task InitializeAsync(
+    bool registerShutdownHandlers = true,
+    CancellationToken cancellationToken = default)
 ```
 
 Инициализирует все синглтоны в правильном порядке (топологическая сортировка по зависимостям).
@@ -356,6 +358,9 @@ public static Task InitializeAsync(bool registerShutdownHandlers = true)
   завершается успешно, контейнер остаётся рабочим, но завершение работы теперь зависит от явного
   вызова `DisposeAsync`. На POSIX-платформе `Ctrl+C` обрабатывается только регистрацией сигнала,
   поэтому одно нажатие запускает одно освобождение.
+- `cancellationToken` (по умолчанию `default`): ограничивает ожидание вызывающего и отклоняется сразу,
+  если уже отменён, до создания любого провайдера. Он не прерывает работу, которую провайдер уже начал,
+  поскольку initializer провайдера не принимает токен.
 
 **Возвращает:** `Task`
 
@@ -381,10 +386,10 @@ await SingletonDIInitializer.DisposeAsync();
 ### DisposeAsync
 
 ```csharp
-public static ValueTask DisposeAsync()
+public static ValueTask DisposeAsync(CancellationToken cancellationToken = default)
 ```
 
-Асинхронно освобождает все инициализированные синглтоны, реализующие `IAsyncDisposable` или `IDisposable`. Метод возвращает `ValueTask`; параллельные и повторные вызовы идемпотентны. Очистка продолжается после ошибки отдельного disposer-а, а ошибка освобождения сообщается после обработки остальных экземпляров.
+Асинхронно освобождает все инициализированные синглтоны, реализующие `IAsyncDisposable` или `IDisposable`. Метод возвращает `ValueTask`; параллельные и повторные вызовы идемпотентны. Очистка продолжается после ошибки отдельного disposer-а, а ошибка освобождения сообщается после обработки остальных экземпляров. `cancellationToken` ограничивает ожидание незавершённой инициализации, поэтому зависший initializer провайдера не оставит вызывающего ждать вечно. Он не прерывает уже начавшийся disposer, а отменённое таким образом освобождение не выполняется, поэтому контейнер остаётся инициализированным.
 
 **Возвращает:** `ValueTask`
 

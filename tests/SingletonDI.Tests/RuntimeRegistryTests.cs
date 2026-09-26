@@ -500,6 +500,46 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public async Task Registry_DisposeAsyncStopsWaitingWhenTheTokenIsCancelled()
+    {
+        // Disposal waited for a pending initialization with no bound, so a provider initializer that
+        // never completed left the caller awaiting forever. The token is the caller's way out.
+        var registry = new ServiceRegistry();
+        var releaseInitialization = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        registry.RegisterProvider<IHungService, HungService>(
+            static () => new HungService(),
+            Array.Empty<Type>(),
+            async _ => await releaseInitialization.Task,
+            null,
+            null);
+
+        var initialization = registry.InitializeAsync();
+        await cancellation.CancelAsync();
+
+        var exception = await Record.ExceptionAsync(
+            async () => await registry.DisposeAsync(cancellation.Token)
+                .AsTask()
+                .WaitAsync(TimeSpan.FromSeconds(2)));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(exception);
+
+        releaseInitialization.TrySetResult(true);
+        await initialization;
+    }
+
+    [Fact]
+    public async Task Registry_InitializeAsyncRejectsAnAlreadyCancelledToken()
+    {
+        var registry = new ServiceRegistry();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await registry.InitializeAsync(cancellation.Token));
+    }
+
+    [Fact]
     public async Task Registry_NamesTheProviderWhoseCreationFailed()
     {
         var registry = new ServiceRegistry();
@@ -1211,6 +1251,14 @@ public sealed class RuntimeRegistryTests
     }
 
     private sealed class RollbackFirst : IRollbackFirst
+    {
+    }
+
+    private interface IHungService
+    {
+    }
+
+    private sealed class HungService : IHungService
     {
     }
 }

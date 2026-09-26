@@ -347,8 +347,12 @@ The SingletonDI runtime supplies the process-wide `SingletonDIInitializer` class
 ### InitializeAsync
 
 ```csharp
-public static Task InitializeAsync(bool registerShutdownHandlers = true)
+public static Task InitializeAsync(
+    bool registerShutdownHandlers = true,
+    CancellationToken cancellationToken = default)
 ```
+
+`cancellationToken` bounds the caller's wait and is rejected outright when it is already cancelled, before any provider is created. It does not interrupt work a provider has already started, because a provider initializer takes no token.
 
 Initializes all singletons in the correct order (topological sorting by dependencies).
 
@@ -383,10 +387,10 @@ await SingletonDIInitializer.DisposeAsync();
 ### DisposeAsync
 
 ```csharp
-public static ValueTask DisposeAsync()
+public static ValueTask DisposeAsync(CancellationToken cancellationToken = default)
 ```
 
-Asynchronously disposes all initialized singletons implementing `IAsyncDisposable` or `IDisposable`. The method returns `ValueTask`; concurrent and repeated calls are idempotent. Cleanup continues after an individual disposer failure, and the disposal error is reported after the remaining instances have been released. Await the returned task in application shutdown code when disposal must complete before the process exits.
+Asynchronously disposes all initialized singletons implementing `IAsyncDisposable` or `IDisposable`. The method returns `ValueTask`; concurrent and repeated calls are idempotent. Cleanup continues after an individual disposer failure, and the disposal error is reported after the remaining instances have been released. Await the returned task in application shutdown code when disposal must complete before the process exits. `cancellationToken` bounds how long the call waits for an initialization that is still in progress, so a provider initializer that never completes does not leave the caller awaiting forever. It does not interrupt a disposer that has already started, and a disposal cancelled this way has not run, so the container stays initialized.
 
 **Returns:** `ValueTask`
 

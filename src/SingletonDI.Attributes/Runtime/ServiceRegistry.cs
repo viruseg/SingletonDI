@@ -102,8 +102,11 @@ internal sealed class ServiceRegistry
         }
     }
 
-    internal Task InitializeAsync()
+    internal Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        // Rejected before the graph is built, so a cancelled request never leaves providers created
+        // behind an initialization the caller no longer wants.
+        cancellationToken.ThrowIfCancellationRequested();
         Task task;
         TaskCompletionSource<object?>? startCompletion = null;
         Task? queuedDisposalTask = null;
@@ -191,7 +194,7 @@ internal sealed class ServiceRegistry
         }
     }
 
-    internal ValueTask DisposeAsync()
+    internal ValueTask DisposeAsync(CancellationToken cancellationToken = default)
     {
         TaskCompletionSource<object?> completion;
         Task? initializationTask;
@@ -216,7 +219,7 @@ internal sealed class ServiceRegistry
             _disposeTask = completion.Task;
         }
 
-        _ = DisposeCoreAsync(initializationTask, completion);
+        _ = DisposeCoreAsync(initializationTask, cancellationToken, completion);
         return new ValueTask(completion.Task);
     }
 
@@ -282,6 +285,7 @@ internal sealed class ServiceRegistry
 
     private async Task DisposeCoreAsync(
         Task? initializationTask,
+        CancellationToken cancellationToken,
         TaskCompletionSource<object?> completion)
     {
         var callbackScope = new ProviderCallbackScope();
@@ -292,7 +296,14 @@ internal sealed class ServiceRegistry
             {
                 try
                 {
-                    await initializationTask.ConfigureAwait(false);
+                    // Bounded by the caller's token. A provider initializer that never completes must
+                    // not leave the caller awaiting disposal forever, which is the reason the token
+                    // exists; the initialization fault itself is still swallowed so the disposal runs.
+                    await initializationTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch
                 {

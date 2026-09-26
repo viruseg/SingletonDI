@@ -27,6 +27,12 @@ public static class SingletonDIInitializer
     /// on a host that does not allow it, which does not fail initialization; the container stays usable and
     /// shutdown then depends on an explicit <see cref="DisposeAsync"/>.
     /// </param>
+    /// <param name="cancellationToken">
+    /// Stops a request that is still waiting. A token that is already cancelled is rejected before
+    /// any provider is created. The token bounds the caller's wait, not the work a provider does: a
+    /// provider initializer takes no token, so cancelling cannot interrupt one that has already
+    /// started.
+    /// </param>
     /// <returns>
     /// A task that completes after every provider instance has been created and every
     /// <c>InitializeAsync</c> method returning <see cref="Task"/> or <see cref="ValueTask"/> has completed.
@@ -36,7 +42,12 @@ public static class SingletonDIInitializer
     /// <exception cref="InvalidOperationException">
     /// The method is called reentrantly from a provider factory, initializer, or disposer.
     /// </exception>
-    public static Task InitializeAsync(bool registerShutdownHandlers = true)
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled before the request was accepted.
+    /// </exception>
+    public static Task InitializeAsync(
+        bool registerShutdownHandlers = true,
+        CancellationToken cancellationToken = default)
     {
         Task? pendingDisposal;
         QueuedInitialization? queuedInitialization = null;
@@ -59,7 +70,7 @@ public static class SingletonDIInitializer
         // does not flow the execution context. The registry serializes the start on its own state.
         var initializationTask = queuedInitialization is not null
             ? queuedInitialization.Task
-            : Registry.InitializeAsync();
+            : Registry.InitializeAsync(cancellationToken);
 
         if (queuedInitialization is not null)
         {
@@ -101,6 +112,13 @@ public static class SingletonDIInitializer
     /// <summary>
     /// Disposes all initialized providers asynchronously.
     /// </summary>
+    /// <param name="cancellationToken">
+    /// Bounds how long the caller waits for an initialization that is still in progress, so a
+    /// provider initializer that never completes does not leave the caller awaiting forever. The
+    /// token bounds the wait, not the work: a provider disposer takes no token, so cancelling cannot
+    /// interrupt one that has already started. A disposal that is cancelled this way has not run, and
+    /// the container stays initialized.
+    /// </param>
     /// <returns>
     /// A <see cref="ValueTask"/> that completes when each provider has been disposed.
     /// Asynchronous disposal is preferred when both disposal interfaces are implemented.
@@ -110,7 +128,11 @@ public static class SingletonDIInitializer
     /// <exception cref="InvalidOperationException">
     /// The method is called reentrantly from a provider factory, initializer, or disposer.
     /// </exception>
-    public static ValueTask DisposeAsync()
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was cancelled while waiting for an initialization that
+    /// had not completed.
+    /// </exception>
+    public static ValueTask DisposeAsync(CancellationToken cancellationToken = default)
     {
         TaskCompletionSource<object?> completion;
         long lifecycleVersion;
@@ -140,7 +162,7 @@ public static class SingletonDIInitializer
         Task registryDisposalTask;
         try
         {
-            registryDisposalTask = Registry.DisposeAsync().AsTask();
+            registryDisposalTask = Registry.DisposeAsync(cancellationToken).AsTask();
         }
         catch (Exception exception)
         {
