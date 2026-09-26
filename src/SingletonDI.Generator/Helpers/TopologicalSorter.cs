@@ -68,14 +68,12 @@ internal static class TopologicalSorter
             .ThenBy(provider => provider.AssemblyIdentity, StringComparer.Ordinal)
             .ToList();
         var nodeKeyByIdentity = new Dictionary<ServiceTypeIdentity, string>();
-        var providerNameByNodeKey = new Dictionary<string, string>(StringComparer.Ordinal);
         var providerIdentityByNodeKey = new Dictionary<string, ServiceTypeIdentity>(StringComparer.Ordinal);
         foreach (var provider in providerList)
         {
             var identity = provider.TypeIdentity;
             var nodeKey = GetNodeKey(identity);
             nodeKeyByIdentity[identity] = nodeKey;
-            providerNameByNodeKey[nodeKey] = provider.FullyQualifiedName;
             providerIdentityByNodeKey[nodeKey] = identity;
         }
 
@@ -115,7 +113,6 @@ internal static class TopologicalSorter
 
         return new GraphData(
             providerList,
-            providerNameByNodeKey,
             providerIdentityByNodeKey,
             adjacency,
             inDegree);
@@ -232,7 +229,6 @@ internal static class TopologicalSorter
 
     private readonly record struct GraphData(
         List<ProviderModel> Providers,
-        Dictionary<string, string> ProviderNameByNodeKey,
         Dictionary<string, ServiceTypeIdentity> ProviderIdentityByNodeKey,
         Dictionary<string, List<string>> Adjacency,
         Dictionary<string, int> InDegree);
