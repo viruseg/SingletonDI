@@ -572,6 +572,14 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(allProviders);
         var missingDependencies = new HashSet<ServiceTypeIdentity>();
 
+        // The map is built from local and referenced providers together, so a contract both of them
+        // export is a conflict here too. Reading only the missing dependencies bound the contract to
+        // whichever provider sorted first and reported nothing.
+        foreach (var conflict in serviceTypeMapResult.Conflicts)
+        {
+            ReportServiceTypeConflict(conflict, allProviders, sourceProductionContext.ReportDiagnostic);
+        }
+
         foreach (var dependencySet in referencedComposition.ConsumerDependencySets)
         {
             foreach (var dependency in dependencySet)

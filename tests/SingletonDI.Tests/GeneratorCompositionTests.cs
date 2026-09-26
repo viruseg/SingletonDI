@@ -1475,6 +1475,44 @@ public sealed class GeneratorCompositionTests
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0018");
     }
 
+    [Fact]
+    public void ExecutableWithoutRoot_ReportsAServiceTypeConflictBetweenALocalAndAReferencedProvider()
+    {
+        // The conflict list was only read by the composition root path. An executable that validates
+        // its referenced consumers instead bound the contract to whichever provider sorted first and
+        // reported nothing, so two providers for one key went unnoticed.
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                [SingletonDIProvide(ServiceType = typeof(Shared.Contracts.IDatabaseService))]
+                public sealed class Service : Shared.Contracts.IDatabaseService
+                {
+                }
+            }
+            """;
+        const string appSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide(ServiceType = typeof(Shared.Contracts.IDatabaseService))]
+                public sealed class LocalService : Shared.Contracts.IDatabaseService
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            appSource,
+            compositionRoot: false,
+            appOutputKind: OutputKind.ConsoleApplication);
+
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0019");
+    }
+
     private static CompositionRunResult RunComposition(
         string? providerSource,
         string appSource,
@@ -1484,7 +1522,8 @@ public sealed class GeneratorCompositionTests
         string? secondProviderSource = null,
         bool generateProviderModule = true,
         bool duplicateProviderReference = false,
-        bool providerIsCompositionRoot = false)
+        bool providerIsCompositionRoot = false,
+        OutputKind appOutputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         var contractsCompilation = CreateCompilation(
             "Shared.Contracts",
@@ -1549,7 +1588,7 @@ public sealed class GeneratorCompositionTests
                 "RootApp",
                 appSource,
                 providerReferences,
-                OutputKind.DynamicallyLinkedLibrary),
+                appOutputKind),
             compositionRoot);
     }
 

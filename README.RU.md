@@ -632,7 +632,7 @@ public sealed class DatabaseService { }
 
 ### DM0019: Multiple providers for service key
 
-Возникает, когда несколько провайдеров отображаются на один concrete или contract service key. Диагностика также сообщает о неоднозначности, когда одно полное имя источника связано с несколькими service/provider identity, включая одинаковое имя `App.Service` в root и подключённой provider-сборке. Такие identity не объединяются по полному имени; их assembly identity сохраняются в диагностике.
+Возникает, когда несколько провайдеров отображаются на один concrete или contract service key. Диагностика также сообщает о неоднозначности, когда одно полное имя источника связано с несколькими service/provider identity, включая одинаковое имя `App.Service` в root и подключённой provider-сборке. Такие identity не объединяются по полному имени; их assembly identity сохраняются в диагностике. Конфликт между локальным провайдером и провайдером из подключённой сборки сообщается независимо от того, является ли проект composition root.
 
 ### DM0020: Provider module marker is missing
 

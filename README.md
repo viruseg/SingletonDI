@@ -637,7 +637,7 @@ Occurs when any dependency in the complete composition-root graph has no provide
 
 ### DM0019: Multiple providers for service key
 
-Occurs when multiple providers map to the same concrete or contract service key. It also reports ambiguity when one fully qualified source name is associated with multiple service or provider identities, including the same `App.Service` name in the root and a referenced provider assembly. These identities are not merged by fully qualified name; their assembly identities are preserved in the diagnostic.
+Occurs when multiple providers map to the same concrete or contract service key. It also reports ambiguity when one fully qualified source name is associated with multiple service or provider identities, including the same `App.Service` name in the root and a referenced provider assembly. These identities are not merged by fully qualified name; their assembly identities are preserved in the diagnostic. A conflict between a local provider and one from a referenced assembly is reported whether or not the project is a composition root.
 
 ### DM0020: Provider module marker is missing
 
