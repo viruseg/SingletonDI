@@ -26,12 +26,36 @@ internal static class PackageSmokeLock
     /// <param name="cancellationToken">Cancels the wait.</param>
     /// <returns>A handle that releases the lock when disposed.</returns>
     /// <exception cref="TimeoutException">The lock was still held after the bounded wait.</exception>
+    internal static Task<IAsyncDisposable> AcquireAsync(
+        ITestOutputHelper? output,
+        CancellationToken cancellationToken = default) =>
+        AcquireAsync(
+            output,
+            Path.Combine(Path.GetTempPath(), "SingletonDI.PackageSmokeTests.lock"),
+            LockAttempts,
+            LockRetryDelay,
+            cancellationToken);
+
+    /// <summary>
+    /// Takes a packaging lock at a caller-supplied path with a caller-supplied bound.
+    /// </summary>
+    /// <param name="output">Receives a line per wait interval so a queued run is visible.</param>
+    /// <param name="lockPath">The file that represents the lock.</param>
+    /// <param name="lockAttempts">How many times to try the file before giving up.</param>
+    /// <param name="lockRetryDelayMilliseconds">How long to wait between attempts.</param>
+    /// <param name="cancellationToken">Cancels the wait.</param>
+    /// <returns>A handle that releases the lock when disposed.</returns>
+    /// <exception cref="TimeoutException">
+    /// The lock was still held after <paramref name="lockAttempts"/> attempts.
+    /// </exception>
     internal static async Task<IAsyncDisposable> AcquireAsync(
         ITestOutputHelper? output,
+        string lockPath,
+        int lockAttempts,
+        int lockRetryDelayMilliseconds,
         CancellationToken cancellationToken = default)
     {
-        var lockPath = Path.Combine(Path.GetTempPath(), "SingletonDI.PackageSmokeTests.lock");
-        for (var attempt = 1; attempt <= LockAttempts; attempt++)
+        for (var attempt = 1; attempt <= lockAttempts; attempt++)
         {
             try
             {
@@ -41,21 +65,29 @@ internal static class PackageSmokeLock
                     FileAccess.ReadWrite,
                     FileShare.None);
             }
-            catch (IOException) when (attempt < LockAttempts)
+            catch (IOException)
             {
+                // The last attempt leaves the loop through the shared throw, so a run that never
+                // takes the lock reports the bounded wait it was promised rather than the file
+                // sharing violation of that final attempt.
+                if (attempt == lockAttempts)
+                {
+                    break;
+                }
+
                 // A testhost orphaned by a killed run holds the lock indefinitely.
                 if (attempt % LockLogInterval == 0)
                 {
                     output?.WriteLine(
-                        $"Waiting for the package smoke lock at {lockPath}, attempt {attempt}/{LockAttempts}.");
+                        $"Waiting for the package smoke lock at {lockPath}, attempt {attempt}/{lockAttempts}.");
                 }
 
-                await Task.Delay(LockRetryDelay, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(lockRetryDelayMilliseconds, cancellationToken).ConfigureAwait(false);
             }
         }
 
         throw new TimeoutException(
-            $"The package smoke lock at {lockPath} was still held after {LockAttempts} attempts. " +
+            $"The package smoke lock at {lockPath} was still held after {lockAttempts} attempts. " +
             "A testhost orphaned by a killed run keeps it; delete the file once no test run is active.");
     }
 }
