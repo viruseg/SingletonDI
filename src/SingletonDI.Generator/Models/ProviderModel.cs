@@ -6,6 +6,28 @@ namespace SingletonDI.Generator.Models;
 /// <summary>
 /// Immutable model representing a singleton provider and its service-key dependencies.
 /// </summary>
+/// <param name="fullyQualifiedName">The provider type name including its namespace, as emitted into generated code.</param>
+/// <param name="shortName">The provider type name without its namespace or type arguments.</param>
+/// <param name="namespace">The namespace declaring the provider, empty for the global namespace.</param>
+/// <param name="assemblyIdentity">The identity of the assembly declaring the provider, used to tell same-named types apart.</param>
+/// <param name="hasInitializeAsyncMethod">Whether a usable initializer was found and is called during initialization.</param>
+/// <param name="isDisposable">Whether the provider implements <see cref="System.IDisposable"/>.</param>
+/// <param name="isAsyncDisposable">Whether the provider implements <see cref="System.IAsyncDisposable"/>, which is preferred.</param>
+/// <param name="dependencies">The fully qualified service keys the provider requires, in dependency order.</param>
+/// <param name="serviceTypeFullyQualifiedName">The service contract the provider is registered under, or <see langword="null"/> when it is registered under its own type.</param>
+/// <param name="serviceTypeShortName">The short name of the service contract, or <see langword="null"/>.</param>
+/// <param name="serviceTypeNamespace">The namespace of the service contract, or <see langword="null"/>.</param>
+/// <param name="propertyName">The property name the consumer exposes, or <see langword="null"/> to derive it.</param>
+/// <param name="location">Where the provider was declared, used to anchor diagnostics.</param>
+/// <param name="propertyNameLocation">Where the property name argument was written, or <see langword="null"/>.</param>
+/// <param name="dependencyIdentities">
+/// The resolved identity of each entry in <paramref name="dependencies"/>. Default when the
+/// provider was rejected, which is how a caller tells a rejected provider from a valid one.
+/// </param>
+/// <param name="serviceTypeIdentity">
+/// The resolved identity of <paramref name="serviceTypeFullyQualifiedName"/>, or <see langword="null"/>
+/// when the provider declares no service contract.
+/// </param>
 public readonly record struct ProviderModel(
     string fullyQualifiedName,
     string shortName,
