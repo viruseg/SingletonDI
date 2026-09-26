@@ -260,6 +260,63 @@ public class CodeFixProviderTests
     }
 
     [Fact]
+    public async Task DM0004_AddPublicConstructor_ChainsToThePrimaryConstructor()
+    {
+        // A constructor declared in a type that has a primary constructor must chain to it, so the
+        // added parameterless constructor without an initializer replaced DM0004 with a compiler
+        // error on the generated line.
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   record MyRecord(int Value)
+                   {
+                   }
+                   """;
+
+        var expected = """
+                        using SingletonDI.Attributes;
+
+                        [SingletonDIProvide]
+                        record MyRecord(int Value)
+                        {
+                            public MyRecord() : this(default(int))
+                            {
+                            }
+                        }
+                        """;
+
+        await VerifyProviderCodeFixAsync(test, expected, "DM0004");
+    }
+
+    [Fact]
+    public async Task DM0004_AddPublicConstructor_ChainsToTheClassPrimaryConstructor()
+    {
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   class MyService(int value)
+                   {
+                   }
+                   """;
+
+        var expected = """
+                        using SingletonDI.Attributes;
+
+                        [SingletonDIProvide]
+                        class MyService(int value)
+                        {
+                            public MyService() : this(default(int))
+                            {
+                            }
+                        }
+                        """;
+
+        await VerifyProviderCodeFixAsync(test, expected, "DM0004");
+    }
+
+    [Fact]
     public async Task DM0005_MakeMethodPublic_Private()
     {
         var test = """

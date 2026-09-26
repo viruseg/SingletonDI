@@ -139,11 +139,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         }
         else
         {
-            // No parameterless constructor exists, create a new public one
-            var constructor = SyntaxFactory.ConstructorDeclaration(typeDeclaration.Identifier)
-                .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)))
-                .WithBody(SyntaxFactory.Block())
-                .WithAdditionalAnnotations(Formatter.Annotation);
+            var constructor = CreateParameterlessConstructor(typeDeclaration);
 
             // Insert the constructor at the beginning of the members
             var newMembers = typeDeclaration.Members.Insert(0, constructor);
@@ -157,6 +153,81 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
             var newRoot = root.ReplaceNode(typeDeclaration, newTypeDeclaration);
             return document.WithSyntaxRoot(newRoot);
         }
+    }
+
+    /// <summary>
+    /// Builds a public parameterless constructor for a type that has none.
+    /// </summary>
+    /// <remarks>
+    /// A type with a primary constructor requires the added constructor to initialize it, and
+    /// leaving that out makes the added line a compile error, so the fix would only trade DM0004 for
+    /// a compiler diagnostic. Each primary constructor parameter receives <c>default!</c>, which keeps
+    /// the provider constructible without inventing values for it. A record is assigned in the
+    /// constructor body instead, because a record also has a compiler-supplied copy constructor and
+    /// chaining to <c>this(default!)</c> is then ambiguous between the two.
+    /// </remarks>
+    /// <summary>
+    /// Builds a public parameterless constructor for a type that has none.
+    /// </summary>
+    /// <remarks>
+    /// A type with a primary constructor requires every constructor it declares to chain to that
+    /// constructor, and leaving the initializer out makes the added line a compile error, so the fix
+    /// would only trade DM0004 for a compiler diagnostic. Each primary constructor parameter
+    /// receives <c>default</c> of its own declared type, which keeps the provider constructible
+    /// without inventing values for it. Spelling the type out also keeps the chain unambiguous for a
+    /// record, which additionally has a compiler-supplied copy constructor that an inferred
+    /// <c>default!</c> cannot choose between.
+    /// </remarks>
+    private static ConstructorDeclarationSyntax CreateParameterlessConstructor(
+        TypeDeclarationSyntax typeDeclaration)
+    {
+        var constructor = SyntaxFactory.ConstructorDeclaration(typeDeclaration.Identifier)
+            .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.PublicKeyword)));
+        var primaryParameterList = typeDeclaration switch
+        {
+            ClassDeclarationSyntax @class => @class.ParameterList,
+            StructDeclarationSyntax @struct => @struct.ParameterList,
+            RecordDeclarationSyntax record => record.ParameterList,
+            InterfaceDeclarationSyntax @interface => @interface.ParameterList,
+            _ => null,
+        };
+
+        if (primaryParameterList is not { Parameters.Count: > 0 })
+        {
+            return constructor
+                .WithBody(SyntaxFactory.Block())
+                .WithAdditionalAnnotations(Formatter.Annotation);
+        }
+
+        var arguments = primaryParameterList.Parameters
+            .Select(parameter => SyntaxFactory.Argument(
+                SyntaxFactory.ParseExpression(FormatDefaultArgument(parameter))))
+            .ToList();
+
+        return constructor
+            .WithInitializer(SyntaxFactory.ConstructorInitializer(
+                SyntaxKind.ThisConstructorInitializer,
+                SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments))))
+            .WithBody(SyntaxFactory.Block())
+            .WithAdditionalAnnotations(Formatter.Annotation);
+    }
+
+    /// <summary>
+    /// Renders the argument a primary constructor parameter receives when the added parameterless
+    /// constructor chains to it.
+    /// </summary>
+    private static string FormatDefaultArgument(ParameterSyntax parameter)
+    {
+        var hasPassingModifier = parameter.Modifiers.Any(modifier =>
+            modifier.IsKind(SyntaxKind.RefKeyword) ||
+            modifier.IsKind(SyntaxKind.InKeyword) ||
+            modifier.IsKind(SyntaxKind.OutKeyword) ||
+            modifier.IsKind(SyntaxKind.ParamsKeyword) ||
+            modifier.IsKind(SyntaxKind.ThisKeyword));
+
+        return parameter.Type is { } type && !hasPassingModifier
+            ? $"default({type})"
+            : "default!";
     }
 
     private static SyntaxTokenList MakePublicModifiers(SyntaxTokenList existingModifiers)
