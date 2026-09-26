@@ -89,7 +89,7 @@ internal static class ProviderValidator
         var declarationLocation = location;
         var providerDisplayName = GetProviderDisplayName(typeSymbol, location);
 
-        if (!IsAccessibleFromGeneratedCode(typeSymbol, compilation))
+        if (!IsAccessibleFromGeneratedCode(typeSymbol, typeSymbol.ContainingAssembly))
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProviderTypeNotAccessible,
@@ -235,7 +235,7 @@ internal static class ProviderValidator
         }
 
         if (serviceType != null &&
-            !IsAccessibleFromGeneratedCode(serviceType, compilation))
+            !IsAccessibleFromGeneratedCode(serviceType, typeSymbol.ContainingAssembly))
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProviderTypeNotAccessible,
@@ -445,7 +445,7 @@ internal static class ProviderValidator
                 continue;
             }
 
-            if (!IsAccessibleFromGeneratedCode(dependencyType, compilation))
+            if (!IsAccessibleFromGeneratedCode(dependencyType, typeSymbol.ContainingAssembly))
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.ProviderTypeNotAccessible,
@@ -616,14 +616,24 @@ internal static class ProviderValidator
         return attributeName == metadataName || attributeName == "global::" + metadataName;
     }
 
+    /// <summary>
+    /// Reports whether generated SingletonDI code can name <paramref name="typeSymbol"/>.
+    /// </summary>
+    /// <param name="typeSymbol">The type the generated code has to name.</param>
+    /// <param name="declaringAssembly">
+    /// The assembly the generated code is emitted into, which is the assembly that declares the
+    /// provider. Assembly accessibility is resolved against it rather than against the compilation
+    /// being built, because a provider discovered through a reference is validated while some other
+    /// project is being compiled while its own module is emitted into its own assembly.
+    /// </param>
     private static bool IsAccessibleFromGeneratedCode(
         ITypeSymbol typeSymbol,
-        Compilation? compilation)
+        IAssemblySymbol? declaringAssembly)
     {
-        var isSameAssembly = compilation is null ||
+        var isSameAssembly = declaringAssembly is null ||
             string.Equals(
-                typeSymbol.ContainingAssembly.Identity.ToString(),
-                compilation.Assembly.Identity.ToString(),
+                typeSymbol.ContainingAssembly?.Identity.ToString(),
+                declaringAssembly.Identity.ToString(),
                 StringComparison.Ordinal);
 
         for (INamedTypeSymbol? current = typeSymbol as INamedTypeSymbol;

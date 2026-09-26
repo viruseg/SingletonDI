@@ -1383,6 +1383,65 @@ public sealed class GeneratorCompositionTests
         }
         """;
 
+    [Fact]
+    public void Root_AcceptsAReferencedProviderWithAnInternalDependency()
+    {
+        // The generated module is emitted into the provider's own assembly, so the types it names
+        // are checked against that assembly, not against the compilation that happens to reference
+        // it. Validating with the consumer's compilation reported DM0022 for a dependency that the
+        // provider author can name, which broke the library for every consumer.
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                internal interface IHelper
+                {
+                }
+
+                [SingletonDIProvide]
+                [SingletonDIConsume(typeof(IHelper))]
+                public sealed class Service
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            "namespace App { public sealed class AppMarker { } }",
+            compositionRoot: true);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0022");
+    }
+
+    [Fact]
+    public void Root_AcceptsAReferencedProviderWithAnInternalServiceContract()
+    {
+        const string providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace Provider
+            {
+                internal interface IContract
+                {
+                }
+
+                [SingletonDIProvide(ServiceType = typeof(IContract))]
+                public sealed class Service : IContract
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(
+            providerSource,
+            "namespace App { public sealed class AppMarker { } }",
+            compositionRoot: true);
+
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0022");
+    }
+
     private static CompositionRunResult RunComposition(
         string? providerSource,
         string appSource,
