@@ -76,6 +76,22 @@ public sealed class DocumentationConsistencyTests
     }
 
     [Fact]
+    public void EveryGeneratorDiagnosticCarriesADescriptionAndADocumentationLink()
+    {
+        // The IDE shows the description in the diagnostics list and links the help entry from it.
+        // Without either, all of them arrived blank even though the readme documents every one.
+        var descriptors = ReadDescriptors();
+
+        Assert.NotEmpty(descriptors);
+        Assert.All(descriptors, descriptor => Assert.False(
+            string.IsNullOrWhiteSpace(descriptor.Description.ToString()),
+            $"{descriptor.Id} has no description."));
+        Assert.All(descriptors, descriptor => Assert.False(
+            string.IsNullOrWhiteSpace(descriptor.HelpLinkUri),
+            $"{descriptor.Id} has no help link."));
+    }
+
+    [Fact]
     public void EveryGeneratorDiagnosticIsAnError()
     {
         // The documented severity column is only correct because nothing pinned it.

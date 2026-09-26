@@ -341,6 +341,17 @@ internal static class DiagnosticDescriptors
         Category,
         DiagnosticSeverity.Error);
 
+    /// <summary>
+    /// The README section that documents every diagnostic, linked from each descriptor's help entry.
+    /// </summary>
+    /// <remarks>
+    /// A per-diagnostic anchor would be a hand-maintained slug of the heading for each of the
+    /// descriptors, which would rot silently the first time a heading was reworded. The section
+    /// anchor is stable, and the IDE already shows the identifier the reader searches for.
+    /// </remarks>
+    private const string DocumentationUrl =
+        "https://github.com/viruseg/SingletonDI/blob/main/README.md#diagnostics";
+
     private static DiagnosticDescriptor Create(
         string id,
         string title,
@@ -354,6 +365,8 @@ internal static class DiagnosticDescriptors
             messageFormat,
             category,
             severity,
+            description: messageFormat,
+            helpLinkUri: DocumentationUrl,
             isEnabledByDefault: true);
     }
 }
