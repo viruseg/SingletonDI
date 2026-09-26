@@ -10,17 +10,6 @@ internal static class ConsumerEmitter
 {
     public static ImmutableDictionary<string, string> Generate(List<ConsumerModel> consumers)
     {
-        return Generate(
-            consumers,
-            ImmutableDictionary<ServiceTypeIdentity, string>.Empty,
-            ImmutableDictionary<ServiceTypeIdentity, string?>.Empty);
-    }
-
-    public static ImmutableDictionary<string, string> Generate(
-        List<ConsumerModel> consumers,
-        ImmutableDictionary<string, string> propertyNames,
-        ImmutableDictionary<string, string?> customPropertyNames)
-    {
         if (consumers.Count == 0)
         {
             return ImmutableDictionary<string, string>.Empty;
@@ -32,8 +21,6 @@ internal static class ConsumerEmitter
         {
             var names = PropertyNameResolver.ResolveConsumerPropertyNames(
                 consumer.Dependencies,
-                propertyNames,
-                customPropertyNames,
                 out _);
             result.Add(
                 CreateHintName(consumer.FullyQualifiedName, usedHintNames),
@@ -47,10 +34,7 @@ internal static class ConsumerEmitter
         return result.ToImmutable();
     }
 
-    public static ImmutableDictionary<string, string> Generate(
-        List<ConsumerModel> consumers,
-        ImmutableDictionary<ServiceTypeIdentity, string> propertyNames,
-        ImmutableDictionary<ServiceTypeIdentity, string?> customPropertyNames)
+    public static ImmutableDictionary<string, string> GenerateByIdentity(List<ConsumerModel> consumers)
     {
         if (consumers.Count == 0)
         {
@@ -63,8 +47,6 @@ internal static class ConsumerEmitter
         {
             var names = PropertyNameResolver.ResolveConsumerPropertyNamesByIdentity(
                 consumer.Dependencies,
-                propertyNames,
-                customPropertyNames,
                 out _);
             result.Add(
                 CreateHintName(consumer.FullyQualifiedName, usedHintNames),

@@ -56,17 +56,11 @@ internal static class PropertyNameResolver
     public static ImmutableDictionary<string, string> ResolveConsumerPropertyNames(
         IEnumerable<ServiceReferenceModel> dependencies)
     {
-        return ResolveConsumerPropertyNames(
-            dependencies,
-            ImmutableDictionary<string, string>.Empty,
-            ImmutableDictionary<string, string?>.Empty,
-            out _);
+        return ResolveConsumerPropertyNames(dependencies, out _);
     }
 
     public static ImmutableDictionary<string, string> ResolveConsumerPropertyNames(
         IEnumerable<ServiceReferenceModel> dependencies,
-        IReadOnlyDictionary<string, string> providerPropertyNames,
-        IReadOnlyDictionary<string, string?> customPropertyNames,
         out ImmutableArray<ConsumerPropertyNameConflict> conflicts)
     {
         var references = dependencies.ToList();
@@ -115,17 +109,11 @@ internal static class PropertyNameResolver
     public static ImmutableDictionary<ServiceTypeIdentity, string> ResolveConsumerPropertyNamesByIdentity(
         IEnumerable<ServiceReferenceModel> dependencies)
     {
-        return ResolveConsumerPropertyNamesByIdentity(
-            dependencies,
-            ImmutableDictionary<ServiceTypeIdentity, string>.Empty,
-            ImmutableDictionary<ServiceTypeIdentity, string?>.Empty,
-            out _);
+        return ResolveConsumerPropertyNamesByIdentity(dependencies, out _);
     }
 
     public static ImmutableDictionary<ServiceTypeIdentity, string> ResolveConsumerPropertyNamesByIdentity(
         IEnumerable<ServiceReferenceModel> dependencies,
-        IReadOnlyDictionary<ServiceTypeIdentity, string> providerPropertyNames,
-        IReadOnlyDictionary<ServiceTypeIdentity, string?> customPropertyNames,
         out ImmutableArray<ConsumerPropertyNameConflict> conflicts)
     {
         var references = dependencies.ToList();

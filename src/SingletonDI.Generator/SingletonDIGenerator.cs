@@ -490,9 +490,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         var providerModels = GetProviderModels(providerCandidates);
         var localProviderIdentities = GetLocalProviderIdentities(providerCandidates);
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(providerModels);
-        var propertyNames = PropertyNameResolver.ResolvePropertyNamesByIdentity(providerModels);
-        var customPropertyNames = providerModels
-            .ToImmutableDictionary(provider => provider.TypeIdentity, provider => provider.PropertyName);
         var consumerModels = new List<ConsumerModel>();
 
         foreach (var candidate in consumerCandidates)
@@ -536,22 +533,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             ReportConsumerPropertyNameConflicts(
                 model,
                 candidate.DeclarationLocation,
-                propertyNames,
-                customPropertyNames,
                 sourceProductionContext.ReportDiagnostic);
             consumerModels.Add(MarkExistingConsumerMemberConflicts(
                 model,
                 candidate.ExistingMemberLocations,
                 candidate.DeclarationLocation,
-                propertyNames,
-                customPropertyNames,
                 sourceProductionContext.ReportDiagnostic));
         }
 
-        var consumerSources = ConsumerEmitter.Generate(
-            consumerModels,
-            propertyNames,
-            customPropertyNames);
+        var consumerSources = ConsumerEmitter.GenerateByIdentity(consumerModels);
         foreach (var generatedSource in consumerSources)
         {
             sourceProductionContext.AddSource(
@@ -1234,14 +1224,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         ConsumerModel consumer,
         ImmutableDictionary<string, Location> existingMemberLocations,
         Location location,
-        ImmutableDictionary<ServiceTypeIdentity, string> propertyNames,
-        ImmutableDictionary<ServiceTypeIdentity, string?> customPropertyNames,
         Action<Diagnostic> reportDiagnostic)
     {
         var resolvedNames = PropertyNameResolver.ResolveConsumerPropertyNamesByIdentity(
             consumer.Dependencies,
-            propertyNames,
-            customPropertyNames,
             out _);
         var existingMemberNames = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
 
@@ -1278,14 +1264,10 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     private static void ReportConsumerPropertyNameConflicts(
         ConsumerModel consumer,
         Location location,
-        ImmutableDictionary<ServiceTypeIdentity, string> propertyNames,
-        ImmutableDictionary<ServiceTypeIdentity, string?> customPropertyNames,
         Action<Diagnostic> reportDiagnostic)
     {
         _ = PropertyNameResolver.ResolveConsumerPropertyNamesByIdentity(
             consumer.Dependencies,
-            propertyNames,
-            customPropertyNames,
             out var conflicts);
 
         foreach (var conflict in conflicts)

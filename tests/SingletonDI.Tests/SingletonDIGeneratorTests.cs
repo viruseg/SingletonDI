@@ -1022,10 +1022,7 @@ public class SingletonDIGeneratorTests
             true,
             [first, second]);
 
-        var source = ConsumerEmitter.Generate(
-                [consumer],
-                ImmutableDictionary<ServiceTypeIdentity, string>.Empty,
-                ImmutableDictionary<ServiceTypeIdentity, string?>.Empty)
+        var source = ConsumerEmitter.GenerateByIdentity([consumer])
             .Values
             .Single();
 
