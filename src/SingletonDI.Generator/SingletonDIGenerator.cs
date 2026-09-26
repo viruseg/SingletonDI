@@ -23,8 +23,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     {
         var generatorOptions = context.AnalyzerConfigOptionsProvider
             .Select(static (optionsProvider, _) => ReadGeneratorOptions(optionsProvider));
-        var languageSupport = context.CompilationProvider
-            .Select(static (compilation, _) => GetLanguageSupport(compilation));
+        var languageScan = context.CompilationProvider
+            .Select(static (compilation, _) => GetLanguageScan(compilation))
+            .WithTrackingName("LanguageSupport");
         var referencedComposition = ReferencedCompositionCollector
             .CreateProvider(
                 context.CompilationProvider,
@@ -33,12 +34,16 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 ShouldCollectReferencedComposition)
             .WithTrackingName("ReferencedCompositionSnapshot");
 
+        // The scan is shared. Every consumer of the language facts derives from this one value, so a
+        // project that does not use SingletonDI pays for a single pass over its syntax trees per
+        // compilation rather than one per output. This is the generator's dominant per-keystroke cost
+        // in such a project.
         context.RegisterSourceOutput(
-            context.CompilationProvider.Combine(generatorOptions),
+            languageScan.Combine(generatorOptions),
             static (sourceProductionContext, input) =>
             {
-                var (compilation, options) = input;
-                ReportLanguageDiagnostics(compilation, options, sourceProductionContext.ReportDiagnostic);
+                var (scan, options) = input;
+                ReportLanguageDiagnostics(scan, options, sourceProductionContext.ReportDiagnostic);
             });
 
         var providerCandidates = context.SyntaxProvider
@@ -124,6 +129,8 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         existingMemberLocations);
                 });
 
+        var languageSupport = languageScan.Select(static (scan, _) => scan.Support);
+
         var providerInputs = providerCandidates
             .Collect()
             .Combine(languageSupport)
@@ -150,15 +157,16 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             .Collect()
             .Combine(consumerDeclarations.Collect())
             .Combine(context.CompilationProvider)
+            .Combine(languageSupport)
             .Combine(referencedComposition)
             .Combine(generatorOptions)
             .WithTrackingName("CompositionRootOutput");
         context.RegisterSourceOutput(compositionInputs, (sourceProductionContext, input) =>
         {
             var (compositionData, options) = input;
-            var ((candidatesAndConsumers, compilation), snapshot) = compositionData;
+            var (((candidatesAndConsumers, compilation), language), snapshot) = compositionData;
             var (candidates, consumerDeclarationsForRoot) = candidatesAndConsumers;
-            if (!CanEmitGeneratedSource(compilation) || !options.IsCompositionRoot)
+            if (!language.CanEmit || !options.IsCompositionRoot)
             {
                 return;
             }
@@ -766,22 +774,17 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     }
 
     private static void ReportLanguageDiagnostics(
-        Compilation compilation,
+        LanguageScan scan,
         GeneratorOptions options,
         Action<Diagnostic> reportDiagnostic)
     {
-        // One pass for both lookups. They were previously performed four times per run - twice for
-        // the attribute location and twice for the file-scoped consumer - each a full
-        // DescendantNodes walk of every tree. That is the generator's dominant per-keystroke cost
-        // in a project that does not otherwise use SingletonDI.
-        var usage = ScanSingletonDIUsage(compilation);
-        var inputLocation = usage.ConsumeAttributeLocation ?? usage.ProvideAttributeLocation;
+        var inputLocation = scan.Usage.ConsumeAttributeLocation ?? scan.Usage.ProvideAttributeLocation;
         if (inputLocation is null && !options.IsCompositionRoot)
         {
             return;
         }
 
-        var effectiveVersion = GetEffectiveLanguageVersion(compilation);
+        var effectiveVersion = scan.Support.EffectiveVersion;
         if (effectiveVersion.CompareTo(LanguageVersion.CSharp9) < 0)
         {
             reportDiagnostic(Diagnostic.Create(
@@ -790,12 +793,12 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 effectiveVersion));
         }
 
-        if (usage.FileScopedConsumerLocation is not null &&
+        if (scan.Usage.FileScopedConsumerLocation is not null &&
             effectiveVersion.CompareTo(LanguageVersion.CSharp10) < 0)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.FileScopedConsumerLanguageVersionNotSupported,
-                usage.FileScopedConsumerLocation,
+                scan.Usage.FileScopedConsumerLocation,
                 effectiveVersion));
         }
     }
@@ -810,17 +813,25 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             (!HasFileScopedConsumer || EffectiveVersion.CompareTo(LanguageVersion.CSharp10) >= 0);
     }
 
-    private static bool CanEmitGeneratedSource(Compilation compilation)
-    {
-        return GetLanguageSupport(compilation).CanEmit;
-    }
+    private readonly record struct LanguageScan(LanguageSupport Support, SingletonDIUsage Usage);
 
-    private static LanguageSupport GetLanguageSupport(Compilation compilation)
+    /// <summary>
+    /// Produces the language facts and the attribute locations from one pass over the syntax trees.
+    /// </summary>
+    /// <remarks>
+    /// The two lookups need the same walk, and every output in the pipeline needs the result, so
+    /// deriving them separately meant repeating the walk once per consumer. In a project that does
+    /// not use SingletonDI the walk is the only work the generator does.
+    /// </remarks>
+    private static LanguageScan GetLanguageScan(Compilation compilation)
     {
-        return new LanguageSupport(
-            GetEffectiveLanguageVersion(compilation),
-            ScanSingletonDIUsage(compilation).FileScopedConsumerLocation is not null,
-            compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication);
+        var usage = ScanSingletonDIUsage(compilation);
+        return new LanguageScan(
+            new LanguageSupport(
+                GetEffectiveLanguageVersion(compilation),
+                usage.FileScopedConsumerLocation is not null,
+                compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication),
+            usage);
     }
 
     private static LanguageVersion GetEffectiveLanguageVersion(Compilation compilation)

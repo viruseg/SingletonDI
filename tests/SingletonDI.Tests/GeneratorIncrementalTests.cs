@@ -511,6 +511,45 @@ public sealed class GeneratorIncrementalTests
             secondDiagnostic.Location.SourceSpan.Start);
     }
 
+    [Fact]
+    public void NoOpRunCachesTheLanguageScanSharedByEveryOutput()
+    {
+        // The language facts were recomputed per output, and the scan behind them is a full walk of
+        // every syntax tree, so a project that does not use SingletonDI paid for it once per output
+        // on every keystroke. The scan is now computed once and shared, which the tracked step shows
+        // as cached.
+        var parseOptions = new CSharpParseOptions(
+            LanguageVersion.Latest,
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        var compilation = CreateCompilation(
+            [CSharpSyntaxTree.ParseText("namespace App { public sealed class Marker { } }", parseOptions)],
+            parseOptions);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(compilation);
+        driver = driver.RunGenerators(compilation);
+        var runResult = driver.GetRunResult();
+        var languageSteps = runResult.Results
+            .SelectMany(result => result.TrackedSteps)
+            .Concat(runResult.Results.SelectMany(result => result.TrackedOutputSteps))
+            .Where(pair => pair.Key == "LanguageSupport")
+            .SelectMany(pair => pair.Value)
+            .ToList();
+
+        var languageStep = Assert.Single(languageSteps);
+        Assert.Contains(
+            languageStep.Outputs,
+            output => output.Reason == IncrementalStepRunReason.Cached);
+    }
+
     private static CSharpCompilation CreateCompilation(
         IEnumerable<SyntaxTree> syntaxTrees,
         CSharpParseOptions parseOptions,
