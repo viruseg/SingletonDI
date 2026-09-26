@@ -15,7 +15,11 @@ namespace SingletonDI.Tests;
 /// </remarks>
 internal static class PackageSmokeLock
 {
-    private const int LockAttempts = 600;
+    // Both packaging classes run dotnet pack and then build and run a consumer app against the
+    // package, which takes well over two minutes on a cold SDK. The bound has to exceed the longest
+    // operation it serializes, otherwise the class that waits reports a held lock on every run
+    // rather than on the rare orphaned testhost this message is about.
+    private const int LockAttempts = 3000;
     private const int LockLogInterval = 100;
     private const int LockRetryDelay = 100;
 

@@ -5,6 +5,21 @@ using Xunit.Abstractions;
 
 namespace SingletonDI.Tests;
 
+/// <summary>
+/// Serializes the packaging tests against each other in this process, so neither waits on the lock
+/// the other holds.
+/// </summary>
+/// <remarks>
+/// Both classes pack the same project and then build against the package, which takes minutes. Run
+/// in parallel they spent the whole of one class's pack waiting for the lock, so the file lock is
+/// left to do the job it exists for: separating two concurrent test processes.
+/// </remarks>
+[CollectionDefinition("SingletonDI packaging", DisableParallelization = true)]
+public sealed class SingletonDIPackagingCollection
+{
+}
+
+[Collection("SingletonDI packaging")]
 [Trait("Category", "Packaging")]
 public sealed class PackageContentTests
 {

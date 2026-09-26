@@ -3,6 +3,7 @@ using Xunit.Abstractions;
 
 namespace SingletonDI.Tests;
 
+[Collection("SingletonDI packaging")]
 [Trait("Category", "Packaging")]
 public sealed class PackageSmokeTests
 {
