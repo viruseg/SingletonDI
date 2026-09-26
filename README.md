@@ -704,7 +704,11 @@ Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`.
 
 ## Known issues
 
-[`docs/coverage-matrix-findings.md`](docs/coverage-matrix-findings.md) records what the declaration coverage matrix found, including the generator defects it exposed and how each one was resolved. The behaviours that remain undocumented, and the branch in the generator that shipped code cannot reach, are listed there as well.
+- **An unsupported `InitializeAsync` is dropped without a diagnostic** — the provider is registered and resolves normally, the method is never called, and nothing is reported. This affects `async void InitializeAsync()`, a return type other than `Task`/`ValueTask` such as `Task<int>`, and an initializer inherited from a base type. Only a parameterless `Task`/`ValueTask` instance method declared on the provider type itself is called
+- **A provider nested in a generic type is rejected by DM0015 even when it has no type parameters of its own** — the message names the provider, not the generic container, so the stated reason does not apply. See [DM0015](#dm0015-generic-types-are-not-supported-for-singletons)
+- **`PropertyName = "..."` does not compile** — the property is get-only, so a named attribute argument for it is rejected by the compiler (CS0617). Pass the name positionally (`[SingletonDIProvide("Repo")]`) or as `propertyName: "Repo"`. The generator's branch that reads a named `PropertyName` cannot be reached through the shipped attribute
+- **DM0025 also fires for a same-named member on an implemented interface** — which the [DM0025](#dm0025-consumer-property-name-already-exists) text does not mention — and the match ignores what kind of member it found, so a field, method, or nested type of that name triggers it too
+- **`Inherited = true` on `[SingletonDIConsume]` means access to dependencies, not validation** — a derived type reads the base type's generated properties, but its own declaration is neither validated nor generated, so DM0007, DM0026, and DM0029 never fire on it. The provider side does inherit the attribute; see [Declaring consumers](#2-declaring-consumers)
 
 ## License
 

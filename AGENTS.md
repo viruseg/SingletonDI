@@ -16,7 +16,7 @@ SingletonDI/
 │   ├── SingletonDI.Refactoring/   # Code fixes and refactorings
 │   └── SingletonDI.SampleApp/     # Executable sample
 ├── docs/
-│   └── coverage-matrix-findings.md  # Prose record of what the declaration coverage matrix found
+│   └── superpowers/                # Design specs and implementation plans
 └── tests/
     ├── SingletonDI.Tests/         # xUnit and Roslyn test harnesses
     ├── InterProjectFixtures/      # Provider, consumer, and root scenarios
@@ -77,4 +77,4 @@ instead of waiting silently for minutes; delete the lock file after confirming n
 - Start child `dotnet` processes only through `DotnetProcessRunner` so a stuck build cannot hang the test run.
 - Assert exact diagnostic IDs, severity, locations, messages, and generated compilation results.
 - Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 10.
-- Every row of the declaration coverage matrix in `SingletonDI.Tests.Coverage` is green. `docs/coverage-matrix-findings.md` records the defects the matrix exposed, how each one was fixed, and the behaviours that are still undocumented; a red row is a regression.
+- Every row of the declaration coverage matrix in `SingletonDI.Tests.Coverage` is green. A row records a documented contract, so a red row is a regression in `src/`, not a row to be edited; the exceptions the matrix found that ship as behaviour are listed under "Known issues" in `README.md`.
