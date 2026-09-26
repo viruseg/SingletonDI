@@ -55,7 +55,7 @@ instead of waiting silently for minutes; delete the lock file after confirming n
 ## Important characteristics
 
 - The source generator runs at compile time; generated source requires C# 9 or later, and file-scoped consumer declarations require C# 10 or later.
-- The package targets the Roslyn 4.8 API baseline and is verified with SDK 10.
+- The generator and refactoring assemblies target `netstandard2.0` so the analyzer loads in any Roslyn host, and are verified with SDK 10.
 - Runtime APIs and generated provider modules use the `SingletonDI.Generated` namespace.
 - A cross-project executable opts in with `SingletonDICompositionRoot=true` and exposes the property through `CompilerVisibleProperty`.
 - Consumers are partial top-level or nested classes, structs, records, or record structs. The consume attribute is inherited, so derived types receive the same dependencies.
