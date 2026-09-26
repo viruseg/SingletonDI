@@ -1,17 +1,25 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace SingletonDI.Tests;
 
 [Trait("Category", "Packaging")]
 public sealed class PackageContentTests
 {
+    private readonly ITestOutputHelper _output;
+
     private static readonly string[] AnalyzerAssemblyNames =
     [
         "SingletonDI.Generator.dll",
         "SingletonDI.Refactoring.dll",
     ];
+
+    public PackageContentTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
 
     [Fact]
     public void RuntimeProjectUsesTargetPathForAnalyzerAssets()
@@ -40,7 +48,7 @@ public sealed class PackageContentTests
     public async Task PackUsesArtifactsPathForAnalyzerAssets()
     {
         // Packs the same project as PackageSmokeTests, and the two share one obj/ directory.
-        await using var packageSmokeLock = await PackageSmokeLock.AcquireAsync(null);
+        await using var packageSmokeLock = await PackageSmokeLock.AcquireAsync(_output);
         var root = FindRepositoryRoot();
         var projectPath = Path.Combine(
             root,
