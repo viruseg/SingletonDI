@@ -1513,6 +1513,52 @@ public sealed class GeneratorCompositionTests
         Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0019");
     }
 
+    [Fact]
+    public void Root_ImportsAnInternalProviderFromAnAssemblyThatGrantsFriendAccess()
+    {
+        // The scan required a public provider, so an internal provider whose assembly names the root
+        // as a friend was filtered out. The composition root then reported a consumer dependency as
+        // unmapped even though the provider was registered and resolvable.
+        const string providerSource = """
+            using System.Runtime.CompilerServices;
+            using SingletonDI.Attributes;
+
+            [assembly: InternalsVisibleTo("RootApp")]
+
+            namespace Provider
+            {
+                public interface IService
+                {
+                }
+
+                [SingletonDIProvide(ServiceType = typeof(IService))]
+                internal sealed class Service : IService
+                {
+                }
+            }
+            """;
+        const string appSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(Provider.IService))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(providerSource, appSource, compositionRoot: true);
+
+        Assert.DoesNotContain(
+            result.Diagnostics,
+            diagnostic => diagnostic.Id is "DM0018" or "DM0022");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
     private static CompositionRunResult RunComposition(
         string? providerSource,
         string appSource,

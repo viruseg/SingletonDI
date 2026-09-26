@@ -156,7 +156,7 @@ public sealed class DatabaseService : IDatabaseService
 }
 ```
 
-При установленном свойстве root рекурсивно анализирует свои metadata references, импортирует публичных провайдеров, проверяет полный граф сервисов и запускает registration module каждой подключённой provider-сборки до вызова `InitializeAsync()`. `ProjectReference` и `PackageReference` поддерживаются одинаково. Непубличные провайдеры из подключённых сборок не импортируются, а provider-пакет без сгенерированного assembly marker `SingletonDIProviderModuleAttribute` отклоняется с `DM0020`.
+При установленном свойстве root рекурсивно анализирует свои metadata references, импортирует публичных провайдеров, проверяет полный граф сервисов и запускает registration module каждой подключённой provider-сборки до вызова `InitializeAsync()`. `ProjectReference` и `PackageReference` поддерживаются одинаково. Непубличные провайдеры из подключённых сборок импортируются, если объявляющая сборка называет root другом через `InternalsVisibleTo`, и пропускаются иначе; вложенный непубличный провайдер пропускается в обоих случаях. Provider-пакет без сгенерированного assembly marker `SingletonDIProviderModuleAttribute` отклоняется с `DM0020`.
 
 Приложение регистрирует `DatabaseService` по двум ключам: concrete type и `IDatabaseService`. Оба ключа разрешают один и тот же объект. Имя свойства contract-потребителя вычисляется из типа контракта (`IDatabaseServiceInstance`), а не из `PropertyName` провайдера: библиотека, видящая только контракт, не может анализировать объявление провайдера в приложении. В самом приложении могут одновременно использоваться concrete- и contract-доступ.
 

@@ -67,7 +67,7 @@ internal static class ProviderSymbolCollector
         {
             cancellationToken.ThrowIfCancellationRequested();
             var type = referencedType.Type;
-            if (!IsAccessiblePublic(type) || !HasAttribute(type, ProvideAttributeName))
+            if (!IsAccessibleFrom(type, compilation.Assembly) || !HasAttribute(type, ProvideAttributeName))
             {
                 continue;
             }
@@ -357,17 +357,68 @@ internal static class ProviderSymbolCollector
                string.Equals(displayName, "global::" + metadataName, StringComparison.Ordinal);
     }
 
-    private static bool IsAccessiblePublic(INamedTypeSymbol type)
+    /// <summary>
+    /// Reports whether a referenced provider is nameable and usable from the compilation doing the
+    /// importing.
+    /// </summary>
+    /// <remarks>
+    /// Assembly accessibility counts here, not just <see cref="Accessibility.Public"/>. A provider
+    /// that is internal is still importable when its assembly names the importing assembly as a
+    /// friend, and filtering it out left a registered provider invisible, so the root reported a
+    /// consumer dependency as unmapped.
+    /// </remarks>
+    private static bool IsAccessibleFrom(INamedTypeSymbol type, IAssemblySymbol importingAssembly)
     {
+        var friendAssemblies = GetFriendAssemblies(type.ContainingAssembly);
         for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
         {
-            if (current.DeclaredAccessibility != Accessibility.Public)
+            if (current.DeclaredAccessibility == Accessibility.Public)
+            {
+                continue;
+            }
+
+            if (current.DeclaredAccessibility is not (Accessibility.Internal or Accessibility.ProtectedOrInternal))
+            {
+                return false;
+            }
+
+            if (current.ContainingType is not null)
+            {
+                return false;
+            }
+
+            if (!friendAssemblies.Contains(importingAssembly.Identity.Name))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Reads the simple assembly names a referenced assembly names as friends through
+    /// <c>InternalsVisibleTo</c>.
+    /// </summary>
+    private static HashSet<string> GetFriendAssemblies(IAssemblySymbol assembly)
+    {
+        var friends = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var attribute in assembly.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() !=
+                "System.Runtime.CompilerServices.InternalsVisibleToAttribute" ||
+                attribute.ConstructorArguments.Length == 0 ||
+                attribute.ConstructorArguments[0].Value is not string friendName)
+            {
+                continue;
+            }
+
+            // The argument may carry a public key, which the identity name does not.
+            var comma = friendName.IndexOf(',');
+            friends.Add((comma < 0 ? friendName : friendName.Substring(0, comma)).Trim());
+        }
+
+        return friends;
     }
 
     private static string CreateProviderKey(string assemblyIdentity, string fullyQualifiedName)
