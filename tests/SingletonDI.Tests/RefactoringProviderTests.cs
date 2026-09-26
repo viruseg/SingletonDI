@@ -191,6 +191,42 @@ public sealed class RefactoringProviderTests
         Assert.Single(await ActionsAtAsync(context, declarations[3], provider));
     }
 
+    [Fact]
+    public async Task DoesNotOfferActionWhenTheBaseTypeAlreadyProvidesTheInitializer()
+    {
+        // The generator binds the initializer by C# member lookup, which finds an inherited one, so
+        // adding a declaration to the derived type would shadow it. The generated call would then
+        // reach the new no-op and the base initialization would be lost without any diagnostic.
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            public abstract class BaseService
+            {
+                public Task InitializeAsync() => Task.CompletedTask;
+            }
+
+            [SingletonDIProvide]
+            public class DerivedService : BaseService
+            {
+            }
+
+            [SingletonDIProvide]
+            public class Other
+            {
+            }
+            """;
+        var context = await RefactoringTestHarness.CreateAsync(source);
+        var declarations = (await context.Document.GetSyntaxRootAsync())!
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .ToArray();
+        var provider = new SingletonDIProvideRefactoringProvider();
+
+        Assert.Empty(await ActionsAtAsync(context, declarations[1], provider));
+        Assert.Single(await ActionsAtAsync(context, declarations[2], provider));
+    }
+
     private static async Task<ImmutableArray<CodeAction>> ActionsAtAsync(
         RefactoringTestContext context,
         ClassDeclarationSyntax declaration,

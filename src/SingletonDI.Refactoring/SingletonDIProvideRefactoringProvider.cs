@@ -61,10 +61,11 @@ public class SingletonDIProvideRefactoringProvider : CodeRefactoringProvider
         if (classSymbol.IsStatic || classSymbol.IsAbstract || classSymbol.TypeParameters.Length > 0)
             return;
 
-        // Check if InitializeAsync method already exists
-        var hasInitializeAsync = classSymbol.GetMembers("InitializeAsync")
-            .OfType<IMethodSymbol>()
-            .Any(m => m.Parameters.Length == 0 && IsTaskType(m.ReturnType));
+        // Check if InitializeAsync method already exists. The base types are walked because the
+        // generator binds the initializer by C# member lookup and an inherited declaration already
+        // provides it; adding one here would shadow it and silently replace the base initialization
+        // with a no-op, which no diagnostic reports.
+        var hasInitializeAsync = HasTaskInitializer(classSymbol);
 
         if (hasInitializeAsync)
             return;
@@ -76,6 +77,23 @@ public class SingletonDIProvideRefactoringProvider : CodeRefactoringProvider
             Title);
 
         context.RegisterRefactoring(action);
+    }
+
+    private static bool HasTaskInitializer(INamedTypeSymbol typeSymbol)
+    {
+        for (INamedTypeSymbol? current = typeSymbol;
+             current is not null && current.SpecialType != SpecialType.System_Object;
+             current = current.BaseType)
+        {
+            if (current.GetMembers("InitializeAsync")
+                .OfType<IMethodSymbol>()
+                .Any(method => method.Parameters.Length == 0 && IsTaskType(method.ReturnType)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsTaskType(ITypeSymbol type)
