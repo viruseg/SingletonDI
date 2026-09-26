@@ -2119,6 +2119,29 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0005_NamesTheAccessModifierTheWayCSharpSpellsIt()
+    {
+        // Enum.ToString gives the CLR name, so the message told a reader to look for
+        // "protectedandinternal", which is not a C# access modifier and matches nothing they can type.
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                private protected Task InitializeAsync() => Task.CompletedTask;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0005");
+        Assert.Contains("'private protected'", diagnostic.GetMessage(), StringComparison.Ordinal);
+        Assert.DoesNotContain("protectedandinternal", diagnostic.GetMessage(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DM0023_GenericInitializerStillReported()
     {
         const string source = """

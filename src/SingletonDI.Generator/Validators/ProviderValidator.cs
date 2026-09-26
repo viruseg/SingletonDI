@@ -189,7 +189,7 @@ internal static class ProviderValidator
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.InitializeAsyncNotAccessible,
                     initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
-                    accessibility.ToString().ToLowerInvariant()));
+                    GetCSharpAccessModifier(accessibility)));
                 return null;
             }
         }
@@ -649,6 +649,20 @@ internal static class ProviderValidator
     /// being built, because a provider discovered through a reference is validated while some other
     /// project is being compiled while its own module is emitted into its own assembly.
     /// </param>
+    /// <summary>
+    /// Renders an accessibility the way the C# language spells it, for a message the reader has to
+    /// act on.
+    /// </summary>
+    /// <remarks>
+    /// The enum names are the CLR ones, so <c>ProtectedAndInternal</c> would be lowercased to
+    /// "protectedandinternal", which is not a modifier anyone can type. <c>ProtectedOrInternal</c> is
+    /// the only case that differs from its own lowercased name.
+    /// </remarks>
+    private static string GetCSharpAccessModifier(Accessibility accessibility) =>
+        accessibility == Accessibility.ProtectedAndInternal
+            ? "private protected"
+            : accessibility.ToString().ToLowerInvariant();
+
     private static bool IsAccessibleFromGeneratedCode(
         ITypeSymbol typeSymbol,
         IAssemblySymbol? declaringAssembly)
