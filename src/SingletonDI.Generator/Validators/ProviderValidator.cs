@@ -308,51 +308,69 @@ internal static class ProviderValidator
         Compilation? compilation,
         Action<Diagnostic> reportDiagnostic)
     {
-        IMethodSymbol? genericMethod = null;
-        IMethodSymbol? rejected = null;
         for (INamedTypeSymbol? current = typeSymbol;
              current is not null && current.SpecialType != SpecialType.System_Object;
              current = current.BaseType)
         {
+            IMethodSymbol? declared = null;
             foreach (var member in current.GetMembers())
             {
-                if (member is not IMethodSymbol { Parameters.IsEmpty: true } method ||
-                    GetSimpleMemberName(method) != "InitializeAsync")
+                if (member is IMethodSymbol { Parameters.IsEmpty: true } method &&
+                    GetSimpleMemberName(method) == "InitializeAsync")
                 {
-                    continue;
+                    declared = method;
+                    break;
                 }
-
-                if (!IsSupportedInitializerReturnType(method.ReturnType, compilation))
-                {
-                    // Dropping the method silently left the provider registered with no initializer
-                    // and no diagnostic, so the rejection is reported instead. A usable overload still
-                    // wins, because an explicit interface implementation can sit next to a parameterless
-                    // method of the same name.
-                    rejected ??= method;
-                    continue;
-                }
-
-                if (method.Arity == 0)
-                {
-                    return method;
-                }
-
-                genericMethod ??= method;
             }
+
+            if (declared is null)
+            {
+                continue;
+            }
+
+            // The generated call binds by member lookup, which stops at the most derived type that
+            // declares the member. Returning a base declaration hidden by this one would emit a call
+            // that resolves to a different method than the one registered here.
+            if (!IsSupportedInitializerReturnType(declared.ReturnType, compilation))
+            {
+                if (!SymbolEqualityComparer.Default.Equals(current, typeSymbol))
+                {
+                    return null;
+                }
+
+                // Dropping the method silently left the provider registered with no initializer and
+                // no diagnostic, so the rejection is reported instead.
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.InitializerReturnTypeNotSupported,
+                    declared.Locations.FirstOrDefault() ?? Location.None,
+                    declared.ToDisplayString(),
+                    typeSymbol.Name));
+                return null;
+            }
+
+            if (SymbolEqualityComparer.Default.Equals(current, typeSymbol))
+            {
+                return declared;
+            }
+
+            // An inherited declaration was invisible before the base walk, so it is used only when it
+            // is callable as the initializer. Anything else keeps the previous outcome, a provider
+            // with no initializer, instead of reporting a diagnostic about a member the provider's
+            // author does not own and cannot rename.
+            return IsCallableInheritedInitializer(declared) ? declared : null;
         }
 
-        if (rejected is not null)
-        {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.InitializerReturnTypeNotSupported,
-                rejected.Locations.FirstOrDefault() ?? Location.None,
-                rejected.ToDisplayString(),
-                typeSymbol.Name));
-            return null;
-        }
-
-        return genericMethod;
+        return null;
     }
+
+    private static bool IsCallableInheritedInitializer(IMethodSymbol method) =>
+        method.Arity == 0 &&
+        !method.IsStatic &&
+        method.ReturnType.NullableAnnotation != NullableAnnotation.Annotated &&
+        method.DeclaredAccessibility is not (
+            Accessibility.Private or
+            Accessibility.Protected or
+            Accessibility.ProtectedAndInternal);
 
     private static string GetSimpleMemberName(IMethodSymbol method)
     {

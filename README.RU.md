@@ -446,6 +446,8 @@ public static async Task Main(string[] args)
 | **DM0031** | Error | Consumer type parameter attributes are not supported |
 | **DM0032** | Error | Provider required members are not supported |
 | **DM0033** | Error | Nullable initializer return type is not supported |
+| **DM0034** | Error | InitializeAsync has an unsupported return type |
+| **DM0035** | Error | Provider nested in a generic type is not supported |
 
 Идентификаторы сервисов и провайдеров в межпроектной диагностике включают содержащую их сборку. Повторные ссылки на одну сборку дедуплицируются, а одинаковые имена типов из разных сборок остаются разными CLR-типами. `DM0019` также выдаётся для конфликтов локальных `ServiceType`-сопоставлений, не только в composition root, и сообщает все конфликтующие identity провайдеров. Диагностика также сообщает о неоднозначности, когда одно полное имя связано с несколькими identity, например локальный `App.Service` и подключённый `App.Service`; assembly identity сохраняются.
 

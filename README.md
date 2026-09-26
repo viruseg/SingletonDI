@@ -453,6 +453,8 @@ The generator reports errors at compile time:
 | **DM0031** | Error | Consumer type parameter attributes are not supported |
 | **DM0032** | Error | Provider required members are not supported |
 | **DM0033** | Error | Nullable initializer return type is not supported |
+| **DM0034** | Error | InitializeAsync has an unsupported return type |
+| **DM0035** | Error | Provider nested in a generic type is not supported |
 
 Cross-project service and provider identities include the containing assembly. Repeated references to the same assembly are deduplicated, while equal type names from different assemblies remain distinct. `DM0019` is also emitted for conflicting local `ServiceType` mappings, not only in a composition root, and reports all conflicting provider identities. It also reports ambiguity when the same fully qualified name is associated with multiple identities, for example a local `App.Service` and a referenced `App.Service`; the diagnostic keeps their assembly identities separate.
 

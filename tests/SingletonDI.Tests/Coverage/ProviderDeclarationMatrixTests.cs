@@ -1251,5 +1251,181 @@ public sealed partial class ProviderDeclarationMatrixTests
             new SupportedExpectation(),
             [InitializerCall],
             []),
+        new(
+            "PROV-INI-18",
+            "PROVIDER_INITIALIZER",
+            "async void initializer hiding a usable one in the base type",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public Task InitializeAsync() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                    public new async void InitializeAsync()
+                    {
+                        await Task.Yield();
+                    }
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0034"]),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-19",
+            "PROVIDER_INITIALIZER",
+            "Task-of-T initializer hiding a usable one in the base type",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public Task InitializeAsync() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                    public new Task<int> InitializeAsync() => Task.FromResult(0);
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0034"]),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-20",
+            "PROVIDER_INITIALIZER",
+            "protected initializer in the base type, not an initializer and not reported",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    protected Task InitializeAsync() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-21",
+            "PROVIDER_INITIALIZER",
+            "static initializer in the base type, not an initializer and not reported",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public static Task InitializeAsync() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-22",
+            "PROVIDER_INITIALIZER",
+            "generic initializer in the base type, not an initializer and not reported",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public Task InitializeAsync<T>() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-23",
+            "PROVIDER_INITIALIZER",
+            "async void initializer in the base type, not an initializer and not reported",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    public async void InitializeAsync()
+                    {
+                        await Task.Yield();
+                    }
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [ServiceFactory],
+            [InitializerCall]),
+        new(
+            "PROV-INI-24",
+            "PROVIDER_INITIALIZER",
+            "private initializer in the base type, not an initializer and not reported",
+            """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public abstract class BaseService
+                {
+                    private Task InitializeAsync() => Task.CompletedTask;
+                }
+
+                [SingletonDIProvide]
+                public sealed class Service : BaseService
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [ServiceFactory],
+            [InitializerCall]),
     ];
 }
