@@ -663,7 +663,7 @@ Occurs when a provider or consumer uses an unbound generic type such as `typeof(
 
 Occurs when a generated dependency property would collide with a member already declared by the consumer or an inherited type. Rename the dependency property or remove the conflicting member; the generator omits the colliding property.
 
-The check reaches further than the sentence above: a member with the same name on an implemented interface triggers DM0025 as well, even though a class does not inherit members from its interfaces, and the match is by name only, so a field, method, or nested type of that name triggers it too.
+The check reaches further than the sentence above: a member with the same name on an implemented interface triggers DM0025 as well, even though a class does not inherit members from its interfaces, and the match is by name only, so a field, method, or nested type of that name triggers it too. A type parameter of the consumer, or of a type that contains it, triggers it as well, because a type parameter is in scope for the whole type body and is not a member.
 
 ### DM0026: Consumer containing type is not partial
 

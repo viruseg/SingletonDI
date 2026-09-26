@@ -1117,6 +1117,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
              current is not null;
              current = current.BaseType)
         {
+            AddTypeParameterLocations(current);
             AddMemberLocations(current);
         }
 
@@ -1125,7 +1126,29 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             AddMemberLocations(interfaceType);
         }
 
+        // A containing type contributes its own type parameters to the scope of the nested type,
+        // and it is not a base type, so it is walked separately.
+        for (INamedTypeSymbol? containing = typeSymbol.ContainingType;
+             containing is not null;
+             containing = containing.ContainingType)
+        {
+            AddTypeParameterLocations(containing);
+        }
+
         return locations.ToImmutable();
+
+        // A type parameter is not a member, so GetMembers never reports it, but it is in scope for
+        // the whole type body and a property that takes its name does not compile.
+        void AddTypeParameterLocations(INamedTypeSymbol type)
+        {
+            foreach (var typeParameter in type.TypeParameters)
+            {
+                if (possibleNames.Contains(typeParameter.Name) && !locations.ContainsKey(typeParameter.Name))
+                {
+                    locations.Add(typeParameter.Name, typeParameter.Locations.FirstOrDefault() ?? Location.None);
+                }
+            }
+        }
 
         void AddMemberLocations(INamedTypeSymbol type)
         {

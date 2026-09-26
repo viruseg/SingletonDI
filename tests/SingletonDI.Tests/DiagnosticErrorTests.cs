@@ -1639,6 +1639,67 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0025_TypeParameterCollisionIsReported()
+    {
+        // A type parameter is in scope for the whole type body, so a property that takes its name
+        // is a compile error. GetMembers does not return type parameters, so the collision was not
+        // seen and the generated property shadowed the parameter.
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide("T")]
+            public sealed class Service
+            {
+            }
+
+            [SingletonDIConsume(typeof(Service))]
+            public partial class Consumer<T>
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0025");
+        Assert.Contains("T", diagnostic.GetMessage());
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Severity == DiagnosticSeverity.Error);
+
+        var generated = string.Join(
+            Environment.NewLine,
+            result.OutputCompilation.SyntaxTrees.Select(tree => tree.ToString()));
+        Assert.DoesNotContain(generated, "Resolve<global::Service>()", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DM0025_OuterTypeParameterCollisionIsReported()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide("T")]
+            public sealed class Service
+            {
+            }
+
+            public partial class Outer<T>
+            {
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Inner
+                {
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Single(result.Diagnostics, item => item.Id == "DM0025");
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void DM0025_CollisionSkipsOnlyTheConflictingProperty()
     {
         const string source = """
