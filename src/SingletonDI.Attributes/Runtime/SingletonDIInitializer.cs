@@ -10,6 +10,7 @@ public static class SingletonDIInitializer
 {
     private static readonly ServiceRegistry Registry = new();
     private static readonly object Sync = new();
+    private static IShutdownSignalSource _signalSource = PlatformShutdownSignalSource.Instance;
     private static ShutdownManager? _shutdownManager;
     private static Task? _disposeTask;
     private static QueuedInitialization? _queuedInitialization;
@@ -22,7 +23,9 @@ public static class SingletonDIInitializer
     /// Whether process-exit, console-cancel, and supported POSIX signal handlers should be registered.
     /// When enabled, handled signals cancel default termination, wait for one bounded disposal operation,
     /// and terminate with exit code 130 for SIGINT, 143 for SIGTERM, or 131 for SIGQUIT. A second handled
-    /// signal terminates immediately using the first signal's exit code.
+    /// signal terminates immediately using the first signal's exit code. Subscribing the handlers can fail
+    /// on a host that does not allow it, which does not fail initialization; the container stays usable and
+    /// shutdown then depends on an explicit <see cref="DisposeAsync"/>.
     /// </param>
     /// <returns>
     /// A task that completes after every provider instance has been created and every
@@ -292,8 +295,23 @@ public static class SingletonDIInitializer
 
     private static void RegisterShutdownHandlers()
     {
-        _shutdownManager ??= new ShutdownManager(static () => DisposeAsync(), Environment.Exit);
-        _shutdownManager.Register();
+        // The graph is already built when the handlers are subscribed, so a subscription failure
+        // cannot be reported as a failed initialization without leaving a working container behind
+        // a thrown call. Drop the manager so a later request subscribes again, and leave shutdown
+        // to the explicit disposal path.
+        try
+        {
+            _shutdownManager ??= new ShutdownManager(
+                static () => DisposeAsync(),
+                Environment.Exit,
+                _signalSource);
+            _shutdownManager.Register();
+        }
+        catch
+        {
+            _shutdownManager?.Dispose();
+            _shutdownManager = null;
+        }
     }
 
     private sealed class QueuedInitialization

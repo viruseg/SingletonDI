@@ -773,11 +773,67 @@ public sealed class SingletonDIInitializerTests
         }
     }
 
+    [Fact]
+    public async Task InitializeAsync_KeepsTheContainerUsableWhenShutdownHandlerRegistrationFails()
+    {
+        await TestGate.WaitAsync();
+
+        try
+        {
+            await SingletonDIInitializer.DisposeAsync();
+            SetShutdownSignalSource(new FailingShutdownSignalSource(PosixSignal.SIGINT));
+            __SingletonDIHost__.RegisterProvider<ISignalSubscriptionService, SignalSubscriptionService>(
+                static () => new SignalSubscriptionService(),
+                Array.Empty<Type>(),
+                null,
+                null,
+                null);
+
+            // The graph is already built by the time the handlers are subscribed, so failing here
+            // would report a failed initialization for a container that is serving instances.
+            await SingletonDIInitializer.InitializeAsync();
+            Assert.NotNull(SingletonDIInitializer.Resolve<ISignalSubscriptionService>());
+
+            await SingletonDIInitializer.InitializeAsync();
+            Assert.NotNull(SingletonDIInitializer.Resolve<ISignalSubscriptionService>());
+
+            await SingletonDIInitializer.DisposeAsync();
+        }
+        finally
+        {
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            SetShutdownSignalSource(null);
+            TestGate.Release();
+        }
+    }
+
+    private static void SetShutdownSignalSource(IShutdownSignalSource? signalSource)
+    {
+        typeof(SingletonDIInitializer)
+            .GetField("_signalSource", BindingFlags.NonPublic | BindingFlags.Static)!
+            .SetValue(null, signalSource ?? PlatformShutdownSignalSource.Instance);
+    }
+
     private interface IInitializationHandlerService
     {
     }
 
     private sealed class InitializationHandlerService : IInitializationHandlerService
+    {
+    }
+
+    private interface ISignalSubscriptionService
+    {
+    }
+
+    private sealed class SignalSubscriptionService : ISignalSubscriptionService
     {
     }
 
