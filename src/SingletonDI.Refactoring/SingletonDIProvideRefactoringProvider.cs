@@ -55,6 +55,12 @@ public class SingletonDIProvideRefactoringProvider : CodeRefactoringProvider
         if (!hasAttribute)
             return;
 
+        // A static type cannot hold an instance method, and the generator rejects an abstract or an
+        // open generic provider, so the initializer would be a method that cannot compile or a
+        // provider that cannot be registered.
+        if (classSymbol.IsStatic || classSymbol.IsAbstract || classSymbol.TypeParameters.Length > 0)
+            return;
+
         // Check if InitializeAsync method already exists
         var hasInitializeAsync = classSymbol.GetMembers("InitializeAsync")
             .OfType<IMethodSymbol>()

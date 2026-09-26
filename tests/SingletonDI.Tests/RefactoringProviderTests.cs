@@ -149,6 +149,60 @@ public sealed class RefactoringProviderTests
     }
 
     [Fact]
+    public async Task DoesNotOfferActionForATypeThatCannotCarryTheInitializer()
+    {
+        // A static type cannot hold an instance method at all, and the generator rejects an abstract
+        // or open generic provider, so offering the initializer for any of them only produced code
+        // that could not compile or could not be registered.
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public static class StaticService
+            {
+            }
+
+            [SingletonDIProvide]
+            public abstract class AbstractService
+            {
+            }
+
+            [SingletonDIProvide]
+            public class GenericService<T>
+            {
+            }
+
+            [SingletonDIProvide]
+            public class Other
+            {
+            }
+            """;
+        var context = await RefactoringTestHarness.CreateAsync(source);
+        var declarations = (await context.Document.GetSyntaxRootAsync())!
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .ToArray();
+        var provider = new SingletonDIProvideRefactoringProvider();
+
+        Assert.Empty(await ActionsAtAsync(context, declarations[0], provider));
+        Assert.Empty(await ActionsAtAsync(context, declarations[1], provider));
+        Assert.Empty(await ActionsAtAsync(context, declarations[2], provider));
+        Assert.Single(await ActionsAtAsync(context, declarations[3], provider));
+    }
+
+    private static async Task<ImmutableArray<CodeAction>> ActionsAtAsync(
+        RefactoringTestContext context,
+        ClassDeclarationSyntax declaration,
+        SingletonDIProvideRefactoringProvider provider)
+    {
+        return await RefactoringTestHarness.GetActionsAsync(
+            context,
+            declaration.Identifier.Span,
+            provider);
+    }
+
+    [Fact]
     public async Task DoesNotOfferActionWhenValueTaskInitializerExists()
     {
         const string source = """
