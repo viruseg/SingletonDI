@@ -1157,7 +1157,7 @@ public sealed partial class ProviderDeclarationMatrixTests
                 }
             }
             """,
-            new SilentlyIgnoredExpectation(),
+            new RejectedExpectation(["DM0034"]),
             [ServiceFactory],
             [InitializerCall]),
         new(
@@ -1177,7 +1177,7 @@ public sealed partial class ProviderDeclarationMatrixTests
                 }
             }
             """,
-            new SilentlyIgnoredExpectation(),
+            new RejectedExpectation(["DM0034"]),
             [ServiceFactory],
             [InitializerCall]),
         new(

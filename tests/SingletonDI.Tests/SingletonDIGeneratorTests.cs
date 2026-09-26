@@ -277,7 +277,7 @@ public class SingletonDIGeneratorTests
     }
 
     [Fact]
-    public void ProviderValidator_IgnoresUserDefinedTaskInitializer()
+    public void ProviderValidator_ReportsUserDefinedTaskAsUnsupportedReturnType()
     {
         var (compilation, declaration) = CreateCompilation(
             """
@@ -309,7 +309,8 @@ public class SingletonDIGeneratorTests
 
         Assert.NotNull(model);
         Assert.False(model!.Value.HasInitializeAsyncMethod);
-        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        var diagnostic = Assert.Single(diagnostics, item => item.Id == "DM0034");
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
     }
 
     [Fact]

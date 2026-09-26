@@ -312,6 +312,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0034: InitializeAsync has an unsupported return type.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InitializerReturnTypeNotSupported = Create(
+        "DM0034",
+        "InitializeAsync has an unsupported return type",
+        "Method '{0}' on provider '{1}' must return a non-generic Task or ValueTask. The method was not registered as the initializer.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

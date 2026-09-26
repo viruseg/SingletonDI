@@ -693,6 +693,10 @@ Occurs when a provider has required members and its public parameterless constru
 
 Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`. The generated registration requires a non-nullable task, because a `null` return would break initialization ordering. Return a non-nullable `Task` or `ValueTask`.
 
+### DM0034: InitializeAsync has an unsupported return type
+
+Occurs when a provider declares a parameterless `InitializeAsync` whose return type is neither `Task` nor `ValueTask`, for example `async void` or `Task<int>`. The method is not registered as the initializer. Return a non-generic `Task` or `ValueTask`.
+
 ## Limitations
 
 - **Singletons only** — the library does not support Scoped or Transient lifestyles
@@ -704,7 +708,6 @@ Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`.
 
 ## Known issues
 
-- **An unsupported `InitializeAsync` is dropped without a diagnostic** — the provider is registered and resolves normally, the method is never called, and nothing is reported. This affects `async void InitializeAsync()`, a return type other than `Task`/`ValueTask` such as `Task<int>`, and an initializer inherited from a base type. Only a parameterless `Task`/`ValueTask` instance method declared on the provider type itself is called
 - **A provider nested in a generic type is rejected by DM0015 even when it has no type parameters of its own** — the message names the provider, not the generic container, so the stated reason does not apply. See [DM0015](#dm0015-generic-types-are-not-supported-for-singletons)
 - **`PropertyName = "..."` does not compile** — the property is get-only, so a named attribute argument for it is rejected by the compiler (CS0617). Pass the name positionally (`[SingletonDIProvide("Repo")]`) or as `propertyName: "Repo"`. The generator's branch that reads a named `PropertyName` cannot be reached through the shipped attribute
 - **DM0025 also fires for a same-named member on an implemented interface** — which the [DM0025](#dm0025-consumer-property-name-already-exists) text does not mention — and the match ignores what kind of member it found, so a field, method, or nested type of that name triggers it too

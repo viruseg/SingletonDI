@@ -1916,6 +1916,108 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0034_AsyncVoidInitializerIsRejected()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public async void InitializeAsync()
+                {
+                    await Task.Yield();
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0034");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal("InitializeAsync has an unsupported return type", diagnostic.Descriptor.Title);
+        Assert.Contains("InitializeAsync", diagnostic.GetMessage());
+        Assert.Contains("Service", diagnostic.GetMessage());
+    }
+
+    [Fact]
+    public void DM0034_TaskOfTInitializerIsRejected()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public Task<int> InitializeAsync() => Task.FromResult(0);
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Single(result.Diagnostics, item => item.Id == "DM0034");
+    }
+
+    [Fact]
+    public void ProviderWithoutInitializerReportsNoDiagnostic()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void ValueTaskInitializerIsStillAccepted()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("static value => ToTask(value.InitializeAsync()),", result.GeneratedSource);
+    }
+
+    [Fact]
+    public void DM0023_GenericInitializerStillReported()
+    {
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service
+            {
+                public Task InitializeAsync<T>() => Task.CompletedTask;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.DoesNotContain(result.Diagnostics, item => item.Id == "DM0034");
+        Assert.Single(result.Diagnostics, item => item.Id == "DM0023");
+    }
+
+    [Fact]
     public void DM0017_UsesCompilationOutputKindWhenOutputTypePropertyIsMissing()
     {
         const string source = """

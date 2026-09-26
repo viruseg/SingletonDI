@@ -140,7 +140,7 @@ internal static class ProviderValidator
             return null;
         }
 
-        var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol, compilation);
+        var initializeAsyncMethod = FindInitializeAsyncMethod(typeSymbol, compilation, reportDiagnostic);
 
         if (initializeAsyncMethod?.ReturnType.NullableAnnotation == NullableAnnotation.Annotated)
         {
@@ -287,9 +287,11 @@ internal static class ProviderValidator
 
     private static IMethodSymbol? FindInitializeAsyncMethod(
         INamedTypeSymbol typeSymbol,
-        Compilation? compilation)
+        Compilation? compilation,
+        Action<Diagnostic> reportDiagnostic)
     {
         IMethodSymbol? genericMethod = null;
+        IMethodSymbol? rejected = null;
         foreach (var member in typeSymbol.GetMembers())
         {
             if (member is not IMethodSymbol { Parameters.IsEmpty: true } method ||
@@ -300,6 +302,11 @@ internal static class ProviderValidator
 
             if (!IsSupportedInitializerReturnType(method.ReturnType, compilation))
             {
+                // Dropping the method silently left the provider registered with no initializer
+                // and no diagnostic, so the rejection is reported instead. A usable overload still
+                // wins, because an explicit interface implementation can sit next to a parameterless
+                // method of the same name.
+                rejected ??= method;
                 continue;
             }
 
@@ -309,6 +316,16 @@ internal static class ProviderValidator
             }
 
             genericMethod ??= method;
+        }
+
+        if (rejected is not null)
+        {
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.InitializerReturnTypeNotSupported,
+                rejected.Locations.FirstOrDefault() ?? Location.None,
+                rejected.ToDisplayString(),
+                typeSymbol.Name));
+            return null;
         }
 
         return genericMethod;
