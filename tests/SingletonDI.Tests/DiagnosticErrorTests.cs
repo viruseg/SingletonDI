@@ -2018,6 +2018,50 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0035_ProviderNestedInGenericTypeIsRejected()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public class Outer<T>
+                {
+                    [SingletonDIProvide]
+                    public sealed class Service
+                    {
+                    }
+                }
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+        var diagnostic = Assert.Single(result.Diagnostics, item => item.Id == "DM0035");
+
+        Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("App.Outer<T>", diagnostic.GetMessage());
+        Assert.Contains("Service", diagnostic.GetMessage());
+        Assert.DoesNotContain(result.Diagnostics, item => item.Id == "DM0015");
+    }
+
+    [Fact]
+    public void DM0015_StillReportedForAGenericProvider()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public sealed class Service<T>
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Single(result.Diagnostics, item => item.Id == "DM0015");
+    }
+
+    [Fact]
     public void DM0017_UsesCompilationOutputKindWhenOutputTypePropertyIsMissing()
     {
         const string source = """

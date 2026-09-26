@@ -322,6 +322,16 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0035: Provider nested in a generic type is not supported.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ProviderInGenericTypeNotSupported = Create(
+        "DM0035",
+        "Provider nested in a generic type is not supported",
+        "Provider '{0}' is nested in generic type '{1}'. Generated code cannot name a provider nested in a generic type. Declare the provider in a non-generic type.",
+        Category,
+        DiagnosticSeverity.Error);
+
+    /// <summary>
     /// DM0026: A nested consumer has a containing type that cannot be reopened.
     /// </summary>
     public static readonly DiagnosticDescriptor ConsumeContainingTypeNotPartial = Create(

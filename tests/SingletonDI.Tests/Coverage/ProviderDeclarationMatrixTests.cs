@@ -409,7 +409,7 @@ public sealed partial class ProviderDeclarationMatrixTests
                 }
             }
             """,
-            new RejectedExpectation(["DM0015"]),
+            new RejectedExpectation(["DM0035"]),
             [],
             ["global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::App.Outer<T>.Service, global::App.Outer<T>.Service>("]),
     ];

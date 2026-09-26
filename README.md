@@ -605,7 +605,7 @@ public class CachedService { }
 
 ### DM0015: Generic types are not supported for singletons
 
-Occurs when the `[SingletonDIProvide]` attribute is applied to a generic type. SingletonDI does not support generic types as singletons, as a separate instance would be required for each generic parameter.
+Occurs when the `[SingletonDIProvide]` attribute is applied to a generic type. SingletonDI does not support generic types as singletons, as a separate instance would be required for each generic parameter. A provider that has no type parameters of its own but is nested in a generic type is reported by DM0035 instead, because the reason above does not apply to it.
 
 ```csharp
 [SingletonDIProvide]  // Error DM0015
@@ -697,6 +697,10 @@ Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`.
 
 Occurs when a provider declares a parameterless `InitializeAsync` whose return type is neither `Task` nor `ValueTask`, for example `async void` or `Task<int>`. The method is not registered as the initializer. Return a non-generic `Task` or `ValueTask`.
 
+### DM0035: Provider nested in a generic type is not supported
+
+Occurs when a provider that has no type parameters of its own is declared inside a generic type. Generated code cannot name such a provider, because its only fully qualified name is not a legal C# source. Declare the provider in a non-generic type.
+
 ## Limitations
 
 - **Singletons only** — the library does not support Scoped or Transient lifestyles
@@ -708,7 +712,6 @@ Occurs when a provider declares a parameterless `InitializeAsync` whose return t
 
 ## Known issues
 
-- **A provider nested in a generic type is rejected by DM0015 even when it has no type parameters of its own** — the message names the provider, not the generic container, so the stated reason does not apply. See [DM0015](#dm0015-generic-types-are-not-supported-for-singletons)
 - **`PropertyName = "..."` does not compile** — the property is get-only, so a named attribute argument for it is rejected by the compiler (CS0617). Pass the name positionally (`[SingletonDIProvide("Repo")]`) or as `propertyName: "Repo"`. The generator's branch that reads a named `PropertyName` cannot be reached through the shipped attribute
 - **DM0025 also fires for a same-named member on an implemented interface** — which the [DM0025](#dm0025-consumer-property-name-already-exists) text does not mention — and the match ignores what kind of member it found, so a field, method, or nested type of that name triggers it too
 - **`Inherited = true` on `[SingletonDIConsume]` means access to dependencies, not validation** — a derived type reads the base type's generated properties, but its own declaration is neither validated nor generated, so DM0007, DM0026, and DM0029 never fire on it. The provider side does inherit the attribute; see [Declaring consumers](#2-declaring-consumers)

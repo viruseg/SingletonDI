@@ -98,13 +98,31 @@ internal static class ProviderValidator
             return null;
         }
 
-        if (typeSymbol.IsGenericType || typeSymbol.TypeParameters.Length > 0)
+        if (typeSymbol.TypeParameters.Length > 0)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.GenericTypeNotSupported,
                 declarationLocation,
                 providerDisplayName));
             return null;
+        }
+
+        for (INamedTypeSymbol? container = typeSymbol.ContainingType;
+             container is not null;
+             container = container.ContainingType)
+        {
+            if (container.Arity > 0)
+            {
+                // A provider nested in a generic type cannot be named by generated code, because
+                // the only fully qualified name it has is not a legal C# source. The rejection is
+                // separate from DM0015 because the provider itself has no type parameters.
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.ProviderInGenericTypeNotSupported,
+                    declarationLocation,
+                    providerDisplayName,
+                    GetFullyQualifiedName(container)));
+                return null;
+            }
         }
 
         // A source static class reports IsAbstract and IsSealed as false, so both flags are needed to
