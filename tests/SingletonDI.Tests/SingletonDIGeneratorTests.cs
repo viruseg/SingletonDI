@@ -625,6 +625,7 @@ public class SingletonDIGeneratorTests
         Assert.Same(declaration.SyntaxTree, diagnostic.Location.SourceTree);
     }
 
+    [Fact]
     public void ServiceTypeMap_MapsContractAndImplementationToOneProvider()
     {
         var provider = new ProviderModel(
