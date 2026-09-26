@@ -322,7 +322,7 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - Each dependency must be a visible `[SingletonDIProvide]` type or a supported interface/abstract contract; the composition root verifies that a requested contract has exactly one provider
 - Cannot specify the consumer type itself in the dependency list (self-reference)
 - Cannot duplicate types in the dependency list
-- The attribute is inherited (`Inherited = true`), so a derived consumer receives the same generated dependencies without repeating the attribute
+- The attribute is inherited (`Inherited = true`), so a derived consumer reads the same generated dependencies through the base type without repeating the attribute; a derived declaration is not itself validated and receives no generated members, so DM0007, DM0026, and DM0029 do not apply to it. The provider side does inherit the attribute for validation
 - Generated properties are `protected` for an unsealed class and `private` for a sealed class, a `static` class, a `struct`, or a `record struct`
 
 ```csharp
@@ -661,6 +661,8 @@ Occurs when a provider or consumer uses an unbound generic type such as `typeof(
 
 Occurs when a generated dependency property would collide with a member already declared by the consumer or an inherited type. Rename the dependency property or remove the conflicting member; the generator omits the colliding property.
 
+The check reaches further than the sentence above: a member with the same name on an implemented interface triggers DM0025 as well, even though a class does not inherit members from its interfaces, and the match is by name only, so a field, method, or nested type of that name triggers it too.
+
 ### DM0026: Consumer containing type is not partial
 
 Occurs when a nested consumer has a containing type that cannot be reopened. Declare every containing type as `partial`.
@@ -709,11 +711,6 @@ Occurs when a provider that has no type parameters of its own is declared inside
 - **Public external providers only** — composition roots import public `[SingletonDIProvide]` types from referenced assemblies
 - **Shared contracts for reverse dependencies** — a library that consumes an app-owned implementation must depend on a lower-level contract assembly, not on the app
 - **`struct` not allowed** — only `class` can be a provider
-
-## Known issues
-
-- **DM0025 also fires for a same-named member on an implemented interface** — which the [DM0025](#dm0025-consumer-property-name-already-exists) text does not mention — and the match ignores what kind of member it found, so a field, method, or nested type of that name triggers it too
-- **`Inherited = true` on `[SingletonDIConsume]` means access to dependencies, not validation** — a derived type reads the base type's generated properties, but its own declaration is neither validated nor generated, so DM0007, DM0026, and DM0029 never fire on it. The provider side does inherit the attribute; see [Declaring consumers](#2-declaring-consumers)
 
 ## License
 

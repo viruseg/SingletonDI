@@ -131,6 +131,29 @@ public sealed class DocumentationConsistencyTests
         }
     }
 
+    [Fact]
+    public void ShippedConsumeAttributeDocumentSaysInheritanceIsAboutAccess()
+    {
+        // The shipped XML documentation promises more than the generator delivers: a derived
+        // declaration is never validated, so DM0007, DM0026 and DM0029 cannot fire on it.
+        var root = FindRepositoryRoot();
+        var source = File.ReadAllText(Path.Combine(
+            root,
+            "src",
+            "SingletonDI.Attributes",
+            "SingletonDIConsumeAttribute.cs"));
+        var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+
+        Assert.Contains(
+            "carries access to the base type's generated properties",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "a derived declaration is not itself validated",
+            readme,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

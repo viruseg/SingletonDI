@@ -16,8 +16,10 @@ namespace SingletonDI.Attributes;
 /// </para>
 /// <para>
 /// The attribute is inherited, so derived types receive the same generated dependencies without
-/// repeating the attribute. Generated properties are protected for an unsealed class and private
-/// for a sealed class, struct, or record struct.
+/// repeating the attribute: inheritance carries access to the base type's generated properties, and
+/// nothing else. A derived declaration is not validated and receives no generated members of its
+/// own. Generated properties are protected for an unsealed class and private for a sealed class, a
+/// static class, a struct, or a record struct.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]
