@@ -273,6 +273,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         SourceProductionContext sourceProductionContext)
     {
         var localProviders = GetProviderModels(candidates);
+        var declaredLocalProviderIdentities = GetLocalProviderIdentities(candidates);
         var externalProviders = referencedComposition.Providers;
         var externalProviderAssemblies = referencedComposition.ProviderAssemblies;
         var referencedConsumerDependencies = referencedComposition.ConsumerDependencySets;
@@ -313,6 +314,15 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         }
 
         var missingDependencies = new Dictionary<ServiceTypeIdentity, Location>();
+
+        // A provider that failed validation is absent from the service type map, but it was declared
+        // and its own diagnostic already explains why it cannot be registered. Reporting a missing
+        // provider for it as well named a provider the author had written, and the duplicate failure
+        // also suppressed this root's module.
+        bool IsUnmapped(ServiceTypeIdentity identity) =>
+            !serviceTypeMapResult.IdentityMap.ContainsKey(identity) &&
+            !declaredLocalProviderIdentities.Contains(identity);
+
         foreach (var provider in allProviders)
         {
             if (provider.Dependencies.IsDefault)
@@ -322,7 +332,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
             foreach (var dependency in provider.DependencyIdentities)
             {
-                if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependency))
+                if (IsUnmapped(dependency))
                 {
                     AddMissingDependency(missingDependencies, dependency, provider.Location);
                 }
@@ -334,7 +344,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             propertyNameDependencySets.Add(dependencySet);
             foreach (var dependency in dependencySet)
             {
-                if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependency))
+                if (IsUnmapped(dependency))
                 {
                     AddMissingDependency(missingDependencies, dependency, Location.None);
                 }
@@ -375,7 +385,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             propertyNameDependencySets.Add(dependencyIdentities);
             foreach (var dependencyIdentity in dependencyIdentities)
             {
-                if (!serviceTypeMapResult.IdentityMap.ContainsKey(dependencyIdentity))
+                if (IsUnmapped(dependencyIdentity))
                 {
                     AddMissingDependency(
                         missingDependencies,

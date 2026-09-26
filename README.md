@@ -633,7 +633,7 @@ Occurs when an executable project without `SingletonDICompositionRoot=true` has 
 
 ### DM0018: No provider for requested service
 
-Occurs when any dependency in the complete composition-root graph has no provider in the service map. This includes dependencies declared by local or external providers, dependencies declared by referenced consumers, and dependencies declared by consumers in the root project. The message identifies each missing service by its assembly-qualified identity.
+Occurs when any dependency in the complete composition-root graph has no provider in the service map. This includes dependencies declared by local or external providers, dependencies declared by referenced consumers, and dependencies declared by consumers in the root project. The message identifies each missing service by its assembly-qualified identity. A provider that was declared but rejected during generation is not reported here: its own diagnostic already explains the rejection, and reporting a missing provider as well would name a provider the author had written.
 
 ### DM0019: Multiple providers for service key
 

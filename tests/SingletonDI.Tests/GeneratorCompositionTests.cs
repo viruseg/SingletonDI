@@ -1442,6 +1442,39 @@ public sealed class GeneratorCompositionTests
         Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0022");
     }
 
+    [Fact]
+    public void Root_DoesNotReportAMissingProviderForAnInvalidLocalProvider()
+    {
+        // A provider that fails validation is dropped from the registration map, so the consumer
+        // dependency looked unmapped and produced DM0018 naming a provider the author had declared.
+        // The provider's own diagnostic already explains the rejection, and the extra one also
+        // suppressed the root's module.
+        const string appSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                    public Service(int value)
+                    {
+                    }
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+
+        var result = RunComposition(null, appSource, compositionRoot: true);
+
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0004");
+        Assert.DoesNotContain(result.Diagnostics, diagnostic => diagnostic.Id == "DM0018");
+    }
+
     private static CompositionRunResult RunComposition(
         string? providerSource,
         string appSource,
