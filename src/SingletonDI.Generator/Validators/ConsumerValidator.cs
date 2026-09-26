@@ -178,6 +178,19 @@ internal static class ConsumerValidator
                 continue;
             }
 
+            // The consumer property is written into its own generated document, so a type the
+            // source file can name but that document cannot is not a usable dependency. A file-local
+            // type is the case that reaches this: the attribute sits in the file that declares it and
+            // resolves, while the generated reference to it does not.
+            if (IsFileLocal(dependencyType))
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.ProviderTypeNotAccessible,
+                    location ?? typeDecl.Identifier.GetLocation(),
+                    GetFullyQualifiedName(dependencyType)));
+                continue;
+            }
+
             var dependencyFullyQualifiedName = GetFullyQualifiedName(dependencyType);
             var dependencyIdentity = CreateIdentity(dependencyType);
 
@@ -520,6 +533,21 @@ internal static class ConsumerValidator
         }
 
         return true;
+    }
+
+    private static bool IsFileLocal(ITypeSymbol typeSymbol)
+    {
+        for (INamedTypeSymbol? current = typeSymbol as INamedTypeSymbol;
+             current is not null;
+             current = current.ContainingType)
+        {
+            if (current.IsFileLocal)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string GetFullyQualifiedName(ITypeSymbol typeSymbol)

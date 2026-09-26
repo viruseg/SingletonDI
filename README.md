@@ -649,7 +649,7 @@ Occurs when a marked provider assembly does not expose a public static parameter
 
 ### DM0022: Provider type is not accessible
 
-Occurs when generated code cannot name a provider, service contract, or provider dependency because of its declared accessibility or a file-local containing type. Use a public or assembly-accessible type.
+Occurs when generated code cannot name a provider, service contract, provider dependency, or consumer dependency because of its declared accessibility or a file-local containing type. Use a public or assembly-accessible type. A consumer dependency is rejected for the same reason even when the file that declares the attribute can resolve it, because the generated consumer property lives in a separate document.
 
 ### DM0023: Generic InitializeAsync is not supported
 

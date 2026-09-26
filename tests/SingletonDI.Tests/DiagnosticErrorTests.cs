@@ -1508,6 +1508,33 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void DM0022_ConsumerDependencyMustBeNameableFromGeneratedCode()
+    {
+        // A file-local contract is nameable from the file that declares it, which is where the
+        // attribute sits, but the consumer property is written into a separate generated document
+        // that cannot see it. Accepting the dependency left a type reference that did not resolve.
+        const string source = """
+            using SingletonDI.Attributes;
+
+            file interface IHelper
+            {
+            }
+
+            [SingletonDIConsume(typeof(IHelper))]
+            public partial class Consumer
+            {
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.DoesNotContain(
+            result.OutputCompilation.GetDiagnostics(),
+            item => item.Id is "CS0400" or "CS0122" or "CS0246");
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "DM0022");
+    }
+
+    [Fact]
     public void DM0023_GenericInitializeAsyncIsRejected()
     {
         const string source = """
