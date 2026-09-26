@@ -259,6 +259,7 @@ internal static class ConsumerValidator
             GetConstraintClauses(typeDeclaration, semanticModel),
             true,
             typeSymbol.IsSealed,
+            typeSymbol.IsStatic,
             containingTypes,
             namespaceDeclaration is FileScopedNamespaceDeclarationSyntax);
     }
@@ -389,18 +390,28 @@ internal static class ConsumerValidator
             return null;
         }
 
+        string? propertyName;
         if (attribute.ConstructorArguments.Length > 0 &&
             attribute.ConstructorArguments[0] is
                 { Kind: TypedConstantKind.Primitive, Value: string constructorValue })
         {
-            return constructorValue;
+            propertyName = constructorValue;
+        }
+        else
+        {
+            var namedArgument = attribute.NamedArguments
+                .FirstOrDefault(argument => argument.Key == "PropertyName");
+
+            propertyName = namedArgument.Value is { Kind: TypedConstantKind.Primitive, Value: string namedValue }
+                ? namedValue
+                : null;
         }
 
-        var namedArgument = attribute.NamedArguments
-            .FirstOrDefault(argument => argument.Key == "PropertyName");
-
-        return namedArgument.Value is { Kind: TypedConstantKind.Primitive, Value: string namedValue }
-            ? namedValue
+        // The provider validator has already reported a name it rejected. Reporting it again here
+        // would duplicate the diagnostic, while using it would emit a declaration that does not parse,
+        // so a rejected name resolves to the default name like no name at all.
+        return PropertyNameSyntax.Classify(propertyName) == PropertyNameKind.Valid
+            ? propertyName
             : null;
     }
 

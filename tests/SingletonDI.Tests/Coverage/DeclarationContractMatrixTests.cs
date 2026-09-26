@@ -455,5 +455,28 @@ public sealed partial class DeclarationContractMatrixTests
             new SupportedExpectation(),
             ["protected static global::App.Service " + LongName],
             []),
+        new(
+            "PNAME-15",
+            "PROPERTY_NAME",
+            "rejected name next to a consumer, the consumer falls back to the default name",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide("1Repo")]
+                public class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0013"]),
+            ["protected static global::App.Service ServiceInstance"],
+            []),
     ];
 }

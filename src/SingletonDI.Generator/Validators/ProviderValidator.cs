@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using SingletonDI.Generator.Helpers;
 using SingletonDI.Generator.Models;
@@ -108,7 +107,10 @@ internal static class ProviderValidator
             return null;
         }
 
-        if (typeSymbol.IsAbstract)
+        // A source static class reports IsAbstract and IsSealed as false, so both flags are needed to
+        // keep a static provider out of the constructor check, where DM0004 would invite a code fix
+        // that inserts an instance constructor and breaks the build with CS0710.
+        if (typeSymbol.IsAbstract || typeSymbol.IsStatic)
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProvideOnAbstractClass,
@@ -290,7 +292,8 @@ internal static class ProviderValidator
         IMethodSymbol? genericMethod = null;
         foreach (var member in typeSymbol.GetMembers())
         {
-            if (member is not IMethodSymbol { Name: "InitializeAsync", Parameters.IsEmpty: true } method)
+            if (member is not IMethodSymbol { Parameters.IsEmpty: true } method ||
+                GetSimpleMemberName(method) != "InitializeAsync")
             {
                 continue;
             }
@@ -311,11 +314,20 @@ internal static class ProviderValidator
         return genericMethod;
     }
 
+    private static string GetSimpleMemberName(IMethodSymbol method)
+    {
+        // An explicit interface implementation is named "IContract.InitializeAsync", so matching the
+        // bare name is what lets the accessibility check in Validate report DM0005 for it.
+        var name = method.Name;
+        var lastDot = name.LastIndexOf('.');
+        return lastDot < 0 ? name : name.Substring(lastDot + 1);
+    }
+
     private static bool IsSupportedInitializerReturnType(
         ITypeSymbol returnType,
         Compilation? compilation)
     {
-        var definition = returnType.OriginalDefinition;
+        var definition = UnwrapNullable(returnType).OriginalDefinition;
         if (compilation is not null)
         {
             return SymbolEqualityComparer.Default.Equals(
@@ -329,6 +341,15 @@ internal static class ProviderValidator
         var assemblyName = definition.ContainingAssembly?.Identity.Name;
         return definition.MetadataName is "Task" or "ValueTask" &&
                assemblyName is "System.Runtime" or "System.Private.CoreLib" or "netstandard";
+    }
+
+    private static ITypeSymbol UnwrapNullable(ITypeSymbol type)
+    {
+        // ValueTask? is System.Nullable<ValueTask>, whose original definition is not ValueTask. The
+        // unwrapped type has to reach the supported-return-type check for DM0033 to be reported.
+        return type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable
+            ? nullable.TypeArguments[0]
+            : type;
     }
 
     private static ImmutableArray<ServiceTypeIdentity>? GetDependencyIdentities(
@@ -455,22 +476,21 @@ internal static class ProviderValidator
         }
 
         var diagnosticLocation = propertyNameLocation ?? GetAttributeLocation(provideAttribute) ?? location;
-        if (string.IsNullOrEmpty(propertyName) || !SyntaxFacts.IsValidIdentifier(propertyName!))
+        switch (PropertyNameSyntax.Classify(propertyName))
         {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.InvalidPropertyName,
-                diagnosticLocation,
-                propertyName));
-            return (null, null);
-        }
+            case PropertyNameKind.Invalid:
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.InvalidPropertyName,
+                    diagnosticLocation,
+                    propertyName));
+                return (null, null);
 
-        if (SyntaxFacts.GetKeywordKind(propertyName!) != SyntaxKind.None)
-        {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.PropertyNameIsReservedKeyword,
-                diagnosticLocation,
-                propertyName));
-            return (null, null);
+            case PropertyNameKind.ReservedKeyword:
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.PropertyNameIsReservedKeyword,
+                    diagnosticLocation,
+                    propertyName));
+                return (null, null);
         }
 
         return (propertyName, propertyNameLocation);
@@ -596,9 +616,12 @@ internal static class ProviderValidator
         if (compilation is not null)
         {
             var conversion = compilation.ClassifyCommonConversion(provider, serviceType);
+
+            // A downcast to an interface the provider does not implement classifies as a reference
+            // conversion, so IsImplicit is what separates a usable contract from a legal cast.
             return conversion.Exists &&
                    !conversion.IsUserDefined &&
-                   (conversion.IsIdentity || conversion.IsReference || conversion.IsImplicit);
+                   (conversion.IsIdentity || conversion.IsImplicit);
         }
 
         return HasCommonConversion(provider, serviceType);
@@ -660,8 +683,8 @@ internal static class ProviderValidator
             var variance = targetType.OriginalDefinition.TypeParameters[index].Variance;
             var converted = variance switch
             {
-                VarianceKind.Out => HasCommonConversion(sourceArgument, targetArgument),
-                VarianceKind.In => HasCommonConversion(targetArgument, sourceArgument),
+                VarianceKind.Out => HasImplicitVarianceConversion(sourceArgument, targetArgument),
+                VarianceKind.In => HasImplicitVarianceConversion(targetArgument, sourceArgument),
                 _ => SymbolEqualityComparer.Default.Equals(sourceArgument, targetArgument),
             };
             if (!converted)
@@ -671,6 +694,16 @@ internal static class ProviderValidator
         }
 
         return true;
+    }
+
+    private static bool HasImplicitVarianceConversion(ITypeSymbol source, ITypeSymbol target)
+    {
+        // The language makes a variance conversion implicit only when its type arguments are related
+        // by an implicit reference conversion, so a value type on the narrowing side leaves it
+        // explicit. An explicit conversion still compiles, but the instance is not the target type at
+        // run time, so the cast in Resolve<T> would fail.
+        return SymbolEqualityComparer.Default.Equals(source, target) ||
+               (source.IsReferenceType && HasCommonConversion(source, target));
     }
 
     private static AttributeData? FindAttribute(ISymbol symbol, string metadataName)

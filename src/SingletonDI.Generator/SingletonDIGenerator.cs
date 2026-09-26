@@ -1074,6 +1074,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         key.Append('\u001f').Append(shape.ConstraintClauses);
         key.Append('\u001f').Append(shape.IsPartial);
         key.Append('\u001f').Append(shape.IsSealed);
+        key.Append('\u001f').Append(shape.IsStatic);
         foreach (var containingType in shape.ContainingTypes)
         {
             key.Append('\u001f').Append("containing");

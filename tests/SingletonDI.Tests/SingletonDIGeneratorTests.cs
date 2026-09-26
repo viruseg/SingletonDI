@@ -99,7 +99,7 @@ public class SingletonDIGeneratorTests
     }
 
     [Fact]
-    public void ProviderValidator_AcceptsGenericVarianceWithValueTypeArgument()
+    public void ProviderValidator_RejectsGenericVarianceWithValueTypeArgument()
     {
         var (compilation, declaration) = CreateCompilation("""
             using SingletonDI.Attributes;
@@ -114,16 +114,26 @@ public class SingletonDIGeneratorTests
             """, "App.IntBox");
 
         var provider = compilation.GetTypeByMetadataName("App.IntBox")!;
-        var diagnostics = new List<Diagnostic>();
-        var model = ProviderValidator.Validate(
+        var compilationDiagnostics = new List<Diagnostic>();
+        var compilationModel = ProviderValidator.Validate(
             provider,
             compilation,
             declaration.GetLocation(),
             ImmutableHashSet<string>.Empty,
-            diagnostics.Add);
+            compilationDiagnostics.Add);
+        var symbolDiagnostics = new List<Diagnostic>();
+        var symbolModel = ProviderValidator.Validate(
+            provider,
+            declaration.GetLocation(),
+            ImmutableHashSet<string>.Empty,
+            symbolDiagnostics.Add);
 
-        Assert.NotNull(model);
-        Assert.Empty(diagnostics);
+        // IBox<int> converts to IBox<object> only explicitly: the instance is not an IBox<object> at
+        // run time, so the cast in Resolve<IBox<object>> would throw.
+        Assert.Null(compilationModel);
+        Assert.Contains(compilationDiagnostics, diagnostic => diagnostic.Id == "DM0016");
+        Assert.Null(symbolModel);
+        Assert.Contains(symbolDiagnostics, diagnostic => diagnostic.Id == "DM0016");
     }
 
     [Fact]

@@ -77,4 +77,4 @@ instead of waiting silently for minutes; delete the lock file after confirming n
 - Start child `dotnet` processes only through `DotnetProcessRunner` so a stuck build cannot hang the test run.
 - Assert exact diagnostic IDs, severity, locations, messages, and generated compilation results.
 - Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 10.
-- Six tests in `SingletonDI.Tests.Coverage` fail on purpose: they are the red rows of the declaration coverage matrix, and `docs/coverage-matrix-findings.md` records what each one is waiting for. A seventh red row is a regression.
+- Every row of the declaration coverage matrix in `SingletonDI.Tests.Coverage` is green. `docs/coverage-matrix-findings.md` records the defects the matrix exposed, how each one was fixed, and the behaviours that are still undocumented; a red row is a regression.

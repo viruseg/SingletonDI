@@ -192,12 +192,12 @@ public sealed class SingletonDIProvideAttribute : Attribute
 
 **Properties and parameters:**
 - `propertyName` (optional) — custom property name for concrete access in consumers. If not specified, the default name is `{TypeName}Instance`
-- `ServiceType` (optional) — a reference type assignable to the provider and visible to its assembly; the provider is registered under both this contract and its concrete type, and both keys resolve the same instance
+- `ServiceType` (optional) — a reference type the provider converts to implicitly, that is the provider implements or derives from it, and that is visible to its assembly; the provider is registered under both this contract and its concrete type, and both keys resolve the same instance
 
 **Requirements:**
 - Applicable only to `class`
 - Class must have a public parameterless constructor
-- Class must not be `abstract`
+- Class must not be `abstract`, and a `static` class is rejected with the same diagnostic, because a static class is abstract in the language and cannot have the instance constructor a singleton needs
 - Not inherited (each class must be explicitly marked)
 - A provider can expose at most one `ServiceType`
 - Generated source requires C# 9 or later
@@ -205,7 +205,7 @@ public sealed class SingletonDIProvideAttribute : Attribute
 **Initialization:**
 - For synchronous initialization, use a parameterless constructor
 - For asynchronous initialization, implement a public, internal, or protected internal parameterless `Task InitializeAsync()` or `ValueTask InitializeAsync()` instance method
-- Generic, static, open-generic, and inaccessible initializers are rejected during generation
+- Generic, static, open-generic, and inaccessible initializers are rejected during generation; an explicit interface implementation is inaccessible, so it is rejected as well
 
 **Examples:**
 
@@ -323,7 +323,7 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - Cannot specify the consumer type itself in the dependency list (self-reference)
 - Cannot duplicate types in the dependency list
 - The attribute is inherited (`Inherited = true`), so a derived consumer receives the same generated dependencies without repeating the attribute
-- Generated properties are `protected` for an unsealed class and `private` for a sealed class, `struct`, or `record struct`
+- Generated properties are `protected` for an unsealed class and `private` for a sealed class, a `static` class, a `struct`, or a `record struct`
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
@@ -470,7 +470,7 @@ public class AnotherDatabaseService { }
 
 ### DM0002: Cannot use [SingletonDIProvide] on abstract class
 
-Occurs when the `[SingletonDIProvide]` attribute is applied to an abstract class. A singleton must be a concrete class that can be instantiated.
+Occurs when the `[SingletonDIProvide]` attribute is applied to an abstract class. A singleton must be a concrete class that can be instantiated. A `static` class is rejected with the same diagnostic: it is abstract in the language and cannot have the instance constructor a singleton needs, so the "add a constructor" code fix is not offered for it.
 
 ```csharp
 [SingletonDIProvide]  // DM0002
@@ -504,7 +504,7 @@ public class DatabaseService
 
 ### DM0005: InitializeAsync method has inaccessible access modifier
 
-Occurs when the `InitializeAsync` method is declared with an inaccessible access modifier. The method must be `public`, `internal`, or `protected internal`.
+Occurs when the `InitializeAsync` method is declared with an inaccessible access modifier. The method must be `public`, `internal`, or `protected internal`. An explicit interface implementation is private and is rejected as well, so declaring the initializer through an interface does not hide it from the generator.
 
 ```csharp
 [SingletonDIProvide]
@@ -584,7 +584,7 @@ public class DataService
 
 ### DM0013: Invalid property name
 
-Occurs when a property name in `[SingletonDIProvide]` contains invalid characters. The name must start with a letter or underscore and contain only letters, digits, or underscores.
+Occurs when a property name in `[SingletonDIProvide]` cannot be declared as a C# member: it is empty, does not start with a letter or underscore, or contains characters other than letters, digits, and underscores. A name the validator rejects is not used in consumers either, so the generated consumer falls back to the default name and stays compilable.
 
 ```csharp
 [SingletonDIProvide("invalid-name")]  // DM0013: hyphen is not allowed
@@ -593,11 +593,14 @@ public class DatabaseService { }
 
 ### DM0014: Property name is a reserved keyword
 
-Occurs when a property name in `[SingletonDIProvide]` is a reserved C# keyword.
+Occurs when a property name in `[SingletonDIProvide]` is a reserved C# keyword. Prefixing it with `@` is the supported way to name the property after a keyword, and the escaped name is emitted verbatim.
 
 ```csharp
 [SingletonDIProvide("class")]  // DM0014: reserved word
 public class DatabaseService { }
+
+[SingletonDIProvide("@class")]  // accepted, emitted as @class
+public class CachedService { }
 ```
 
 ### DM0015: Generic types are not supported for singletons
@@ -613,7 +616,7 @@ public class Repository<T>
 
 ### DM0016: Invalid ServiceType
 
-Occurs when `ServiceType` is not a reference type assignable to the provider. A provider can declare only one `ServiceType`.
+Occurs when `ServiceType` is not a reference type the provider converts to implicitly. A downward cast does not qualify: the instance would fail the cast when it is resolved, so a contract the provider does not implement or derive from is rejected. A provider can declare only one `ServiceType`.
 
 ```csharp
 public interface ICacheService { }
@@ -701,7 +704,7 @@ Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`.
 
 ## Known issues
 
-Six known generator defects are recorded in [`docs/coverage-matrix-findings.md`](docs/coverage-matrix-findings.md), which explains each one and points at the code that has to change.
+[`docs/coverage-matrix-findings.md`](docs/coverage-matrix-findings.md) records what the declaration coverage matrix found, including the generator defects it exposed and how each one was resolved. The behaviours that remain undocumented, and the branch in the generator that shipped code cannot reach, are listed there as well.
 
 ## License
 

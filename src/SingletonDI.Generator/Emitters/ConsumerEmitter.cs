@@ -211,8 +211,11 @@ internal static class ConsumerEmitter
         ConsumerDeclarationShape shape,
         ServiceReferenceModel dependency)
     {
+        // A static class cannot be inherited, and the language forbids a protected member in it, so it
+        // belongs with the sealed shapes: the property is private.
         return shape.DeclarationKind is ConsumerDeclarationKind.Struct or ConsumerDeclarationKind.RecordStruct ||
                shape.IsSealed ||
+               shape.IsStatic ||
                !dependency.CanUseProtectedProperty
             ? "private"
             : "protected";
