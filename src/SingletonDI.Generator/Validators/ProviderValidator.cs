@@ -312,17 +312,40 @@ internal static class ProviderValidator
              current is not null && current.SpecialType != SpecialType.System_Object;
              current = current.BaseType)
         {
-            IMethodSymbol? declared = null;
+            IMethodSymbol? usable = null;
+            IMethodSymbol? unsupportedReturnType = null;
+            IMethodSymbol? explicitImplementation = null;
             foreach (var member in current.GetMembers())
             {
-                if (member is IMethodSymbol { Parameters.IsEmpty: true } method &&
-                    GetSimpleMemberName(method) == "InitializeAsync")
+                if (member is not IMethodSymbol { Parameters.IsEmpty: true } method ||
+                    GetSimpleMemberName(method) != "InitializeAsync")
                 {
-                    declared = method;
-                    break;
+                    continue;
                 }
+
+                if (!IsSupportedInitializerReturnType(method.ReturnType, compilation))
+                {
+                    // Remembered instead of returned, so a usable method declared later in the type
+                    // still wins. Taking the first match decided the outcome by declaration order.
+                    unsupportedReturnType ??= method;
+                    continue;
+                }
+
+                if (method.ExplicitInterfaceImplementations.Length > 0)
+                {
+                    // Never reached by the generated call, which binds by member lookup, so a method
+                    // that is not an explicit implementation wins over it whatever the order. It
+                    // stays a candidate so a type whose only initializer is an explicit
+                    // implementation is still rejected as inaccessible.
+                    explicitImplementation ??= method;
+                    continue;
+                }
+
+                usable = method;
+                break;
             }
 
+            var declared = usable ?? unsupportedReturnType ?? explicitImplementation;
             if (declared is null)
             {
                 continue;
@@ -331,7 +354,7 @@ internal static class ProviderValidator
             // The generated call binds by member lookup, which stops at the most derived type that
             // declares the member. Returning a base declaration hidden by this one would emit a call
             // that resolves to a different method than the one registered here.
-            if (!IsSupportedInitializerReturnType(declared.ReturnType, compilation))
+            if (usable is null && unsupportedReturnType is not null)
             {
                 if (!SymbolEqualityComparer.Default.Equals(current, typeSymbol))
                 {

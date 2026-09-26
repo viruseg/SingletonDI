@@ -2086,6 +2086,39 @@ public class DiagnosticErrorTests
     }
 
     [Fact]
+    public void InitializerLookup_PrefersTheUsableOverloadOverAnExplicitInterfaceImplementation()
+    {
+        // The lookup stopped at the first member named InitializeAsync regardless of its return type,
+        // so an explicit interface implementation next to a usable parameterless method decided the
+        // outcome by declaration order. An explicit implementation is never callable through the
+        // generated call, which binds by member lookup and reaches the public method.
+        const string source = """
+            using System.Threading.Tasks;
+            using SingletonDI.Attributes;
+
+            public interface IInitializer
+            {
+                void InitializeAsync();
+            }
+
+            [SingletonDIProvide]
+            public sealed class Service : IInitializer
+            {
+                void IInitializer.InitializeAsync()
+                {
+                }
+
+                public Task InitializeAsync() => Task.CompletedTask;
+            }
+            """;
+
+        var result = RunGeneratorWithOutput(source);
+
+        Assert.Empty(result.Diagnostics);
+        Assert.Contains("static value => ToTask(value.InitializeAsync()),", result.GeneratedSource);
+    }
+
+    [Fact]
     public void DM0023_GenericInitializerStillReported()
     {
         const string source = """
