@@ -390,22 +390,11 @@ internal static class ConsumerValidator
             return null;
         }
 
-        string? propertyName;
-        if (attribute.ConstructorArguments.Length > 0 &&
-            attribute.ConstructorArguments[0] is
-                { Kind: TypedConstantKind.Primitive, Value: string constructorValue })
-        {
-            propertyName = constructorValue;
-        }
-        else
-        {
-            var namedArgument = attribute.NamedArguments
-                .FirstOrDefault(argument => argument.Key == "PropertyName");
-
-            propertyName = namedArgument.Value is { Kind: TypedConstantKind.Primitive, Value: string namedValue }
-                ? namedValue
-                : null;
-        }
+        var propertyName = attribute.ConstructorArguments.Length > 0 &&
+                           attribute.ConstructorArguments[0] is
+                               { Kind: TypedConstantKind.Primitive, Value: string constructorValue }
+            ? constructorValue
+            : null;
 
         // The provider validator has already reported a name it rejected. Reporting it again here
         // would duplicate the diagnostic, while using it would emit a declaration that does not parse,

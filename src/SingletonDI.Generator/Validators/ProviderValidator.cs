@@ -498,20 +498,6 @@ internal static class ProviderValidator
 
         if (!propertyNameWasSpecified)
         {
-            var namedArgument = provideAttribute.NamedArguments
-                .FirstOrDefault(argument => argument.Key == "PropertyName");
-
-            if (!string.IsNullOrEmpty(namedArgument.Key) &&
-                namedArgument.Value is { Kind: TypedConstantKind.Primitive, Value: string namedValue })
-            {
-                propertyName = namedValue;
-                propertyNameWasSpecified = true;
-                propertyNameLocation = GetNamedArgumentLocation(provideAttribute, "PropertyName");
-            }
-        }
-
-        if (!propertyNameWasSpecified)
-        {
             return (null, null);
         }
 
@@ -802,19 +788,6 @@ internal static class ProviderValidator
     {
         var syntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
         return syntax?.ArgumentList?.Arguments.FirstOrDefault()?.GetLocation();
-    }
-
-    private static Location? GetNamedArgumentLocation(AttributeData attribute, string argumentName)
-    {
-        var syntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
-        if (syntax?.ArgumentList == null)
-        {
-            return null;
-        }
-
-        var argument = syntax.ArgumentList.Arguments.FirstOrDefault(candidate =>
-            candidate.NameColon?.Name.Identifier.ValueText == argumentName);
-        return argument?.GetLocation();
     }
 
     private static AttributeSyntax? GetAttributeSyntax(AttributeData attribute)

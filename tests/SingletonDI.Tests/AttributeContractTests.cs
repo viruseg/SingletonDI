@@ -18,6 +18,19 @@ public sealed class AttributeContractTests
     }
 
     [Fact]
+    public void PropertyName_HasNoSetter_SoItCannotBeANamedAttributeArgument()
+    {
+        // A named attribute argument must target a field without readonly or an open non-static
+        // property with a setter. A get-only PropertyName makes the named form a CS0617, which is
+        // why the generator's named-argument branch is unreachable through the shipped attribute.
+        var property = typeof(SingletonDIProvideAttribute)
+            .GetProperty(nameof(SingletonDIProvideAttribute.PropertyName))!;
+
+        Assert.NotNull(property.GetMethod);
+        Assert.Null(property.SetMethod);
+    }
+
+    [Fact]
     public void ProviderModuleMarker_TargetsAssembly()
     {
         var usage = typeof(SingletonDIProviderModuleAttribute)
