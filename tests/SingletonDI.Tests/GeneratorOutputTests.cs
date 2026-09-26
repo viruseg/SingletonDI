@@ -92,6 +92,9 @@ public sealed class GeneratorOutputTests
         var claimIndex = generated.IndexOf(claim, StringComparison.Ordinal);
         var releaseIndex = generated.IndexOf(release, StringComparison.Ordinal);
         var firstRegistration = generated.IndexOf("__SingletonDIHost__.RegisterProvider", StringComparison.Ordinal);
+        var rollbackIndex = generated.IndexOf(
+            "__SingletonDIHost__.RollbackRegistrations()",
+            StringComparison.Ordinal);
         var rethrowIndex = generated.IndexOf("throw;", StringComparison.Ordinal);
 
         Assert.True(claimIndex >= 0, "The bootstrap guard is missing.");
@@ -99,6 +102,10 @@ public sealed class GeneratorOutputTests
         Assert.True(
             firstRegistration > claimIndex && firstRegistration < releaseIndex,
             "Registrations must run inside the guarded region.");
+        Assert.True(
+            rollbackIndex > firstRegistration && rollbackIndex < releaseIndex,
+            "A failed bootstrap must undo the registrations that already succeeded, or the retry " +
+            "reports a duplicate key instead of the original error.");
         Assert.True(rethrowIndex > releaseIndex, "The original error must be rethrown after releasing.");
     }
 

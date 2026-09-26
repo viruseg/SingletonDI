@@ -77,8 +77,9 @@ internal static class ProviderModuleEmitter
         source.AppendLine("        /// Registers generated providers exactly once.");
         source.AppendLine("        /// </summary>");
         source.AppendLine("        /// <remarks>");
-        source.AppendLine("        /// A failure part-way through releases the guard and rethrows, so the caller sees the");
-        source.AppendLine("        /// original error at the bootstrap site instead of a later missing-dependency failure");
+        source.AppendLine("        /// A failure part-way through undoes the registrations that already succeeded,");
+        source.AppendLine("        /// releases the guard, and rethrows, so a retry sees the original error at the");
+        source.AppendLine("        /// bootstrap site instead of a duplicate key or a later missing-dependency failure");
         source.AppendLine("        /// over a half-registered graph.");
         source.AppendLine("        /// </remarks>");
         source.AppendLine("        public static void Bootstrap()");
@@ -94,6 +95,7 @@ internal static class ProviderModuleEmitter
         source.AppendLine("            }");
         source.AppendLine("            catch");
         source.AppendLine("            {");
+        source.AppendLine("                global::SingletonDI.Generated.__SingletonDIHost__.RollbackRegistrations();");
         source.AppendLine("                global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 0);");
         source.AppendLine("                throw;");
         source.AppendLine("            }");

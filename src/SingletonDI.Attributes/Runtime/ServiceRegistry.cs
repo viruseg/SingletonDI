@@ -11,6 +11,7 @@ internal sealed class ServiceRegistry
     private readonly AsyncLocal<ProviderCallbackScope?> _providerCallbackContext = new();
     private readonly Dictionary<Type, ProviderRegistration> _registrations = new();
     private readonly List<ProviderRegistration> _orderedRegistrations = new();
+    private readonly List<ProviderRegistration> _uncommittedRegistrations = new();
     private Task? _initializationTask;
     private Task? _disposeTask;
     private Task? _queuedInitializationTask;
@@ -70,6 +71,34 @@ internal sealed class ServiceRegistry
             }
 
             _orderedRegistrations.Add(registration);
+            _uncommittedRegistrations.Add(registration);
+        }
+    }
+
+    /// <summary>
+    /// Removes every registration made since the last initialization, so a batch that failed
+    /// part-way through can be attempted again from a clean registry.
+    /// </summary>
+    /// <remarks>
+    /// A generated module releases its bootstrap guard and rethrows when registration fails, which
+    /// only helps if the registrations that already succeeded are undone first. Without this the
+    /// retry reported a duplicate key for a provider the caller had never managed to register.
+    /// Registrations that initialization has already committed are kept, because instances may
+    /// have been resolved from them.
+    /// </remarks>
+    internal void RollbackRegistrations()
+    {
+        lock (_sync)
+        {
+            for (var index = _uncommittedRegistrations.Count - 1; index >= 0; index--)
+            {
+                var registration = _uncommittedRegistrations[index];
+                _registrations.Remove(registration.ServiceType);
+                _registrations.Remove(registration.ImplementationType);
+                _orderedRegistrations.Remove(registration);
+            }
+
+            _uncommittedRegistrations.Clear();
         }
     }
 
@@ -102,6 +131,7 @@ internal sealed class ServiceRegistry
                     break;
                 default:
                     _state = LifecycleState.Initializing;
+                    _uncommittedRegistrations.Clear();
                     var completion = new TaskCompletionSource<object?>(
                         TaskCreationOptions.RunContinuationsAsynchronously);
                     _initializationTask = completion.Task;

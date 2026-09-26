@@ -40,6 +40,15 @@ public static class __SingletonDIHost__
     }
 
     /// <summary>
+    /// Removes the registrations made since initialization last committed them, so a module whose
+    /// bootstrap failed part-way through can be attempted again.
+    /// </summary>
+    public static void RollbackRegistrations()
+    {
+        SingletonDIInitializer.RollbackRegistrations();
+    }
+
+    /// <summary>
     /// Resolves an initialized provider by its service key.
     /// </summary>
     /// <typeparam name="TService">The service key to resolve.</typeparam>

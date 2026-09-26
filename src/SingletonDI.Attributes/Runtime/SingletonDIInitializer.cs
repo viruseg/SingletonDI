@@ -179,11 +179,15 @@ public static class SingletonDIInitializer
             disposeAsync);
     }
 
+    internal static void RollbackRegistrations()
+    {
+        Registry.RollbackRegistrations();
+    }
+
     internal static T Resolve<T>()
     {
         return Registry.Resolve<T>();
     }
-
     private static async Task CompleteQueuedInitializationAsync(
         Task disposalTask,
         QueuedInitialization queuedInitialization)

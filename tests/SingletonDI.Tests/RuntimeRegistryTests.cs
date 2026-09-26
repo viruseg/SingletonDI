@@ -451,6 +451,55 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public void Registry_RollbackUndoesAFailedRegistrationBatchSoItCanBeRetried()
+    {
+        // A bootstrap that fails part-way through released its guard and invited a retry, but the
+        // registrations that already succeeded stayed in the registry, so the retry reported a
+        // duplicate key for a provider the caller had never managed to register.
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IRollbackFirst, RollbackFirst>(
+            static () => new RollbackFirst(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+
+        Assert.Throws<InvalidOperationException>(
+            () => registry.RegisterProvider<IRollbackFirst, RollbackFirst>(
+                static () => new RollbackFirst(),
+                Array.Empty<Type>(),
+                null,
+                null,
+                null));
+
+        registry.RollbackRegistrations();
+
+        registry.RegisterProvider<IRollbackFirst, RollbackFirst>(
+            static () => new RollbackFirst(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+    }
+
+    [Fact]
+    public async Task Registry_RollbackKeepsRegistrationsThatInitializationAlreadyCommitted()
+    {
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IWorkingService, WorkingService>(
+            static () => new WorkingService(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+
+        await registry.InitializeAsync();
+        registry.RollbackRegistrations();
+
+        Assert.NotNull(registry.Resolve<IWorkingService>());
+    }
+
+    [Fact]
     public async Task Registry_NamesTheProviderWhoseCreationFailed()
     {
         var registry = new ServiceRegistry();
@@ -1154,6 +1203,14 @@ public sealed class RuntimeRegistryTests
     }
 
     private sealed class CanceledDisposable : ICanceledDisposable
+    {
+    }
+
+    private interface IRollbackFirst
+    {
+    }
+
+    private sealed class RollbackFirst : IRollbackFirst
     {
     }
 }
