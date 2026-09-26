@@ -302,7 +302,7 @@ public sealed partial class DeclarationContextMatrixTests
         "global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::App.IRepository<global::System.String>, global::App.Repository>(";
 
     private const string CovariantContractRegistration =
-        "global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::System.Collections.Generic.IEnumerable<global::System.Object>, global::App.Service>(";
+        "global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::System.Collections.Generic.IEnumerable<global::System.Object>, global::App.StringService>(";
 
     private const string ContravariantContractRegistration =
         "global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::System.Collections.Generic.IComparer<global::System.String>, global::App.Service>(";
@@ -436,7 +436,7 @@ public sealed partial class DeclarationContextMatrixTests
         new(
             "SVC-07",
             "SERVICE_TYPE",
-            "covariant variance",
+            "covariant variance through a narrower type argument",
             """
             using System;
             using System.Collections;
@@ -446,9 +446,9 @@ public sealed partial class DeclarationContextMatrixTests
             namespace App
             {
                 [SingletonDIProvide(ServiceType = typeof(IEnumerable<object>))]
-                public class Service : IEnumerable<object>
+                public class StringService : IEnumerable<string>
                 {
-                    public IEnumerator<object> GetEnumerator() =>
+                    public IEnumerator<string> GetEnumerator() =>
                         throw new NotSupportedException();
 
                     IEnumerator IEnumerable.GetEnumerator() =>
@@ -633,6 +633,28 @@ public sealed partial class DeclarationContextMatrixTests
             new RejectedExpectation(["DM0019"]),
             [],
             []),
+        new(
+            "SVC-16",
+            "SERVICE_TYPE",
+            "interface the provider does not implement, sealed provider",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                public interface IContract
+                {
+                }
+
+                [SingletonDIProvide(ServiceType = typeof(IContract))]
+                public sealed class Service
+                {
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0016"]),
+            [],
+            []),
     ];
 
     public static IEnumerable<object[]> ConditionalCompilationCases =>
@@ -723,7 +745,7 @@ public sealed partial class DeclarationContextMatrixTests
         new(
             "COND-04",
             "CONDITIONAL_COMPILATION",
-            "two providers, one in #if and one in #else",
+            "two providers, one in #if and one in #else, symbol defined",
             """
             using SingletonDI.Attributes;
 
@@ -731,20 +753,20 @@ public sealed partial class DeclarationContextMatrixTests
             {
                 #if FEATURE
                 [SingletonDIProvide]
-                public class Service
+                public class FeatureService
                 {
                 }
                 #else
                 [SingletonDIProvide]
-                public class Service
+                public class DefaultService
                 {
                 }
                 #endif
             }
             """,
             new SupportedExpectation(),
-            [SelfRegistration],
-            [],
+            ["global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::App.FeatureService, global::App.FeatureService>("],
+            ["global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<global::App.DefaultService, global::App.DefaultService>("],
             PreprocessorSymbols: ["FEATURE"]),
     ];
 }
