@@ -430,6 +430,27 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
+    public async Task Registry_ReportsADisposerThatWasCanceled()
+    {
+        // A cancelled task is not a fault, so the failure read-back after WhenAll never saw it and
+        // the container reported a shutdown that had not actually released the provider.
+        var registry = new ServiceRegistry();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        registry.RegisterProvider<ICanceledDisposable, CanceledDisposable>(
+            static () => new CanceledDisposable(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            _ => Task.FromCanceled(cancellation.Token));
+
+        await registry.InitializeAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            async () => await registry.DisposeAsync());
+    }
+
+    [Fact]
     public async Task Registry_NamesTheProviderWhoseCreationFailed()
     {
         var registry = new ServiceRegistry();
@@ -1125,6 +1146,14 @@ public sealed class RuntimeRegistryTests
     }
 
     private sealed class ThirdFailingDisposable : IThirdFailingDisposable
+    {
+    }
+
+    private interface ICanceledDisposable
+    {
+    }
+
+    private sealed class CanceledDisposable : ICanceledDisposable
     {
     }
 }

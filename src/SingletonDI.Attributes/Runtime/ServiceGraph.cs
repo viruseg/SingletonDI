@@ -173,12 +173,17 @@ internal sealed class ServiceGraph
                         // WhenAll surfaces a single fault and drops the rest, so a second failing
                         // disposer in the same level was never observed at all. Read the faults back
                         // off the tasks: which providers failed to release their resources is the
-                        // information needed when diagnosing a bad shutdown.
+                        // information needed when diagnosing a bad shutdown. A cancellation is not a
+                        // fault, so it needs its own read-back or the disposer stays silent.
                         foreach (var disposal in disposals)
                         {
                             if (disposal.IsFaulted && disposal.Exception is { } fault)
                             {
                                 failures.AddRange(fault.InnerExceptions);
+                            }
+                            else if (disposal.IsCanceled)
+                            {
+                                failures.Add(new TaskCanceledException(disposal));
                             }
                         }
                     }
