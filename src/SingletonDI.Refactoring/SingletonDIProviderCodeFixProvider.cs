@@ -106,10 +106,14 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         TypeDeclarationSyntax typeDeclaration,
         CancellationToken cancellationToken)
     {
-        // Check if there's an existing parameterless constructor with non-public accessibility
+        // A static constructor has no parameters either, but it is not the constructor DM0004 is
+        // about and it may not carry an access modifier, so it is excluded by keyword rather than
+        // by parameter count.
         var existingParameterlessCtor = typeDeclaration.Members
             .OfType<ConstructorDeclarationSyntax>()
-            .FirstOrDefault(c => c.ParameterList.Parameters.Count == 0);
+            .FirstOrDefault(c =>
+                c.ParameterList.Parameters.Count == 0 &&
+                !c.Modifiers.Any(SyntaxKind.StaticKeyword));
 
         if (existingParameterlessCtor is not null)
         {

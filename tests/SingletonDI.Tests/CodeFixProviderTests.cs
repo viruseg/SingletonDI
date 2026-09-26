@@ -227,6 +227,39 @@ public class CodeFixProviderTests
     }
 
     [Fact]
+    public async Task DM0004_MakeTheInstanceConstructorPublic_NotTheStaticConstructor()
+    {
+        // Both constructors have no parameters, so taking the first one by parameter count made the
+        // fix prepend an access modifier to the static constructor, which may not carry one, and
+        // left the private instance constructor, the actual subject of DM0004, untouched.
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   class MyService
+                   {
+                       static MyService() { }
+
+                       private MyService() { }
+                   }
+                   """;
+
+        var expected = """
+                        using SingletonDI.Attributes;
+
+                        [SingletonDIProvide]
+                        class MyService
+                        {
+                            static MyService() { }
+
+                            public MyService() { }
+                        }
+                        """;
+
+        await VerifyProviderCodeFixAsync(test, expected, "DM0004");
+    }
+
+    [Fact]
     public async Task DM0005_MakeMethodPublic_Private()
     {
         var test = """
