@@ -426,16 +426,102 @@ public sealed class GeneratorIncrementalTests
         return MetadataReference.CreateFromImage(stream.ToArray());
     }
 
+    [Fact]
+    public void ConsumerDeclarationMoveInvalidatesConsumerOutput()
+    {
+        // The declaration location anchors the diagnostics reported from the consumer model, but
+        // ConsumerCandidate compares its cache key alone, so a candidate whose key carries no
+        // location compared equal after the declaration moved and the diagnostics kept pointing at
+        // the previous span.
+        var parseOptions = new CSharpParseOptions(
+            LanguageVersion.Latest,
+            preprocessorSymbols: ["NET10_0_OR_GREATER", "NET5_0_OR_GREATER"]);
+        var providerSource = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+
+                public interface IUnmapped
+                {
+                }
+            }
+            """;
+        var consumerBody = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIConsume(typeof(IUnmapped))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+        var providerTree = CSharpSyntaxTree.ParseText(providerSource, parseOptions);
+        var firstCompilation = CreateCompilation(
+            [providerTree, CSharpSyntaxTree.ParseText(consumerBody, parseOptions)],
+            parseOptions,
+            outputKind: OutputKind.ConsoleApplication);
+        var shiftedCompilation = CreateCompilation(
+            [
+                providerTree,
+                CSharpSyntaxTree.ParseText(
+                    "// shifted" + Environment.NewLine + consumerBody,
+                    parseOptions)
+            ],
+            parseOptions,
+            outputKind: OutputKind.ConsoleApplication);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            new ISourceGenerator[] { new SingletonDIGenerator().AsSourceGenerator() },
+            additionalTexts: Array.Empty<AdditionalText>(),
+            parseOptions: parseOptions,
+            optionsProvider: null,
+            driverOptions: new GeneratorDriverOptions(
+                IncrementalGeneratorOutputKind.None,
+                trackIncrementalGeneratorSteps: true,
+                baseDirectory: null));
+
+        driver = driver.RunGenerators(firstCompilation);
+        var firstDiagnostic = Assert.Single(
+            driver.GetRunResult().Diagnostics,
+            diagnostic => diagnostic.Id == "DM0017");
+        driver = driver.RunGenerators(shiftedCompilation);
+        var runResult = driver.GetRunResult();
+        var secondDiagnostic = Assert.Single(
+            runResult.Diagnostics,
+            diagnostic => diagnostic.Id == "DM0017");
+        var consumerSteps = runResult.Results
+            .SelectMany(result => result.TrackedSteps)
+            .Concat(runResult.Results.SelectMany(result => result.TrackedOutputSteps))
+            .Where(pair => pair.Key == "ConsumerOutput")
+            .SelectMany(pair => pair.Value)
+            .ToList();
+
+        var consumerStep = Assert.Single(consumerSteps);
+        Assert.DoesNotContain(
+            consumerStep.Outputs,
+            output => output.Reason == IncrementalStepRunReason.Cached);
+        Assert.Equal(
+            firstDiagnostic.Location.SourceSpan.Start + "// shifted".Length + Environment.NewLine.Length,
+            secondDiagnostic.Location.SourceSpan.Start);
+    }
+
     private static CSharpCompilation CreateCompilation(
         IEnumerable<SyntaxTree> syntaxTrees,
         CSharpParseOptions parseOptions,
-        IEnumerable<MetadataReference>? references = null)
+        IEnumerable<MetadataReference>? references = null,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         return CSharpCompilation.Create(
             "GeneratorIncrementalTests",
             syntaxTrees,
             references ?? CreateMetadataReferences(),
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(outputKind));
     }
 
     private static MetadataReference[] CreateMetadataReferences()

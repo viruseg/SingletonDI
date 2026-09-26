@@ -1043,16 +1043,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             AppendLocationKey(key, diagnostic.Location);
         }
 
+        // The declaration location anchors the diagnostics reported from the consumer model, so it
+        // is part of what the output depends on and cannot be left out of the key conditionally. A
+        // cached candidate kept a Location whose SyntaxTree belonged to the compilation that produced
+        // it, which pointed the diagnostics at the previous span and made reading the run result
+        // fail outright.
         key.Append('\u001f').Append("declaration");
-        if (diagnostics.Length > 0 ||
-            existingMemberLocations.Values.Any(location => location.IsInSource))
-        {
-            AppendLocationKey(key, declarationLocation);
-        }
-        else
-        {
-            key.Append("\u001f").Append("none");
-        }
+        AppendLocationKey(key, declarationLocation);
 
         foreach (var member in existingMemberLocations.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
