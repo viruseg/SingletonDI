@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
+using SingletonDI.Generator.Helpers;
 using SingletonDI.Generator.Models;
 
 namespace SingletonDI.Generator.Emitters;
@@ -41,83 +42,83 @@ internal static class ProviderModuleEmitter
             : GetProviderModuleTypeName(orderedLocalProviders[0].AssemblyIdentity);
 
         var source = new StringBuilder();
-        source.AppendLine("#nullable enable");
+        GeneratedSource.AppendLine(source, "#nullable enable");
 
         if (hasLocalProviders)
         {
-            source.AppendLine("[assembly: global::SingletonDI.Attributes.SingletonDIProviderModuleAttribute]");
+            GeneratedSource.AppendLine(source, "[assembly: global::SingletonDI.Attributes.SingletonDIProviderModuleAttribute]");
         }
 
-        source.AppendLine("#if !NET5_0_OR_GREATER");
-        source.AppendLine("namespace System.Runtime.CompilerServices");
-        source.AppendLine("{");
-        source.AppendLine("    [global::System.AttributeUsage(global::System.AttributeTargets.Method, Inherited = false)]");
-        source.AppendLine("    internal sealed class ModuleInitializerAttribute : global::System.Attribute");
-        source.AppendLine("    {");
-        source.AppendLine("    }");
-        source.AppendLine("}");
-        source.AppendLine("#endif");
-        source.AppendLine();
-        source.AppendLine("namespace SingletonDI.Generated");
-        source.AppendLine("{");
-        source.AppendLine("    /// <summary>");
-        source.AppendLine("    /// Provides generated provider registrations for this assembly.");
-        source.AppendLine("    /// </summary>");
-        source.AppendLine("    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
-        source.AppendLine($"    public static class {moduleTypeName}");
-        source.AppendLine("    {");
-        source.AppendLine("        private static int _bootstrapState;");
-        source.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializerAttribute]");
-        source.AppendLine("        internal static void Initialize()");
-        source.AppendLine("        {");
-        source.AppendLine("            Bootstrap();");
-        source.AppendLine("        }");
-        source.AppendLine();
-        source.AppendLine("        /// <summary>");
-        source.AppendLine("        /// Registers generated providers exactly once.");
-        source.AppendLine("        /// </summary>");
-        source.AppendLine("        /// <remarks>");
-        source.AppendLine("        /// A failure part-way through undoes the registrations that already succeeded,");
-        source.AppendLine("        /// releases the guard, and rethrows, so a retry sees the original error at the");
-        source.AppendLine("        /// bootstrap site instead of a duplicate key or a later missing-dependency failure");
-        source.AppendLine("        /// over a half-registered graph.");
-        source.AppendLine("        /// </remarks>");
-        source.AppendLine("        public static void Bootstrap()");
-        source.AppendLine("        {");
-        source.AppendLine("            if (global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 1) != 0)");
-        source.AppendLine("            {");
-        source.AppendLine("                return;");
-        source.AppendLine("            }");
-        source.AppendLine();
-        source.AppendLine("            try");
-        source.AppendLine("            {");
+        GeneratedSource.AppendLine(source, "#if !NET5_0_OR_GREATER");
+        GeneratedSource.AppendLine(source, "namespace System.Runtime.CompilerServices");
+        GeneratedSource.AppendLine(source, "{");
+        GeneratedSource.AppendLine(source, "    [global::System.AttributeUsage(global::System.AttributeTargets.Method, Inherited = false)]");
+        GeneratedSource.AppendLine(source, "    internal sealed class ModuleInitializerAttribute : global::System.Attribute");
+        GeneratedSource.AppendLine(source, "    {");
+        GeneratedSource.AppendLine(source, "    }");
+        GeneratedSource.AppendLine(source, "}");
+        GeneratedSource.AppendLine(source, "#endif");
+        GeneratedSource.AppendLine(source, string.Empty);
+        GeneratedSource.AppendLine(source, "namespace SingletonDI.Generated");
+        GeneratedSource.AppendLine(source, "{");
+        GeneratedSource.AppendLine(source, "    /// <summary>");
+        GeneratedSource.AppendLine(source, "    /// Provides generated provider registrations for this assembly.");
+        GeneratedSource.AppendLine(source, "    /// </summary>");
+        GeneratedSource.AppendLine(source, "    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        GeneratedSource.AppendLine(source, $"    public static class {moduleTypeName}");
+        GeneratedSource.AppendLine(source, "    {");
+        GeneratedSource.AppendLine(source, "        private static int _bootstrapState;");
+        GeneratedSource.AppendLine(source, "        [global::System.Runtime.CompilerServices.ModuleInitializerAttribute]");
+        GeneratedSource.AppendLine(source, "        internal static void Initialize()");
+        GeneratedSource.AppendLine(source, "        {");
+        GeneratedSource.AppendLine(source, "            Bootstrap();");
+        GeneratedSource.AppendLine(source, "        }");
+        GeneratedSource.AppendLine(source, string.Empty);
+        GeneratedSource.AppendLine(source, "        /// <summary>");
+        GeneratedSource.AppendLine(source, "        /// Registers generated providers exactly once.");
+        GeneratedSource.AppendLine(source, "        /// </summary>");
+        GeneratedSource.AppendLine(source, "        /// <remarks>");
+        GeneratedSource.AppendLine(source, "        /// A failure part-way through undoes the registrations that already succeeded,");
+        GeneratedSource.AppendLine(source, "        /// releases the guard, and rethrows, so a retry sees the original error at the");
+        GeneratedSource.AppendLine(source, "        /// bootstrap site instead of a duplicate key or a later missing-dependency failure");
+        GeneratedSource.AppendLine(source, "        /// over a half-registered graph.");
+        GeneratedSource.AppendLine(source, "        /// </remarks>");
+        GeneratedSource.AppendLine(source, "        public static void Bootstrap()");
+        GeneratedSource.AppendLine(source, "        {");
+        GeneratedSource.AppendLine(source, "            if (global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 1) != 0)");
+        GeneratedSource.AppendLine(source, "            {");
+        GeneratedSource.AppendLine(source, "                return;");
+        GeneratedSource.AppendLine(source, "            }");
+        GeneratedSource.AppendLine(source, string.Empty);
+        GeneratedSource.AppendLine(source, "            try");
+        GeneratedSource.AppendLine(source, "            {");
         AppendBootstrapBody(source, externalAssemblies, orderedLocalProviders);
-        source.AppendLine("            }");
-        source.AppendLine("            catch");
-        source.AppendLine("            {");
-        source.AppendLine("                global::SingletonDI.Generated.__SingletonDIHost__.RollbackRegistrations();");
-        source.AppendLine("                global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 0);");
-        source.AppendLine("                throw;");
-        source.AppendLine("            }");
-        source.AppendLine("        }");
-        source.AppendLine();
+        GeneratedSource.AppendLine(source, "            }");
+        GeneratedSource.AppendLine(source, "            catch");
+        GeneratedSource.AppendLine(source, "            {");
+        GeneratedSource.AppendLine(source, "                global::SingletonDI.Generated.__SingletonDIHost__.RollbackRegistrations();");
+        GeneratedSource.AppendLine(source, "                global::System.Threading.Interlocked.Exchange(ref _bootstrapState, 0);");
+        GeneratedSource.AppendLine(source, "                throw;");
+        GeneratedSource.AppendLine(source, "            }");
+        GeneratedSource.AppendLine(source, "        }");
+        GeneratedSource.AppendLine(source, string.Empty);
 
         if (hasLocalProviders && orderedLocalProviders.Any(provider => provider.HasInitializeAsyncMethod))
         {
-            source.AppendLine("        private static global::System.Threading.Tasks.Task ToTask(global::System.Threading.Tasks.Task task)");
-            source.AppendLine("        {");
-            source.AppendLine("            return task;");
-            source.AppendLine("        }");
-            source.AppendLine();
-            source.AppendLine("        private static global::System.Threading.Tasks.Task ToTask(global::System.Threading.Tasks.ValueTask valueTask)");
-            source.AppendLine("        {");
-            source.AppendLine("            return valueTask.AsTask();");
-            source.AppendLine("        }");
-            source.AppendLine();
+            GeneratedSource.AppendLine(source, "        private static global::System.Threading.Tasks.Task ToTask(global::System.Threading.Tasks.Task task)");
+            GeneratedSource.AppendLine(source, "        {");
+            GeneratedSource.AppendLine(source, "            return task;");
+            GeneratedSource.AppendLine(source, "        }");
+            GeneratedSource.AppendLine(source, string.Empty);
+            GeneratedSource.AppendLine(source, "        private static global::System.Threading.Tasks.Task ToTask(global::System.Threading.Tasks.ValueTask valueTask)");
+            GeneratedSource.AppendLine(source, "        {");
+            GeneratedSource.AppendLine(source, "            return valueTask.AsTask();");
+            GeneratedSource.AppendLine(source, "        }");
+            GeneratedSource.AppendLine(source, string.Empty);
         }
 
-        source.AppendLine("    }");
-        source.AppendLine("}");
+        GeneratedSource.AppendLine(source, "    }");
+        GeneratedSource.AppendLine(source, "}");
         return source.ToString();
     }
 
@@ -169,12 +170,12 @@ internal static class ProviderModuleEmitter
         foreach (var externalAssembly in externalAssemblies)
         {
             var bootstrapType = externalAssembly.BootstrapTypeIdentity!.Value.ToGlobalTypeName();
-            source.AppendLine($"                {bootstrapType}.Bootstrap();");
+            GeneratedSource.AppendLine(source, $"                {bootstrapType}.Bootstrap();");
         }
 
         if (externalAssemblies.Count > 0)
         {
-            source.AppendLine();
+            GeneratedSource.AppendLine(source, string.Empty);
         }
 
         foreach (var provider in orderedLocalProviders)
@@ -192,15 +193,15 @@ internal static class ProviderModuleEmitter
                 ? ToGlobalTypeName(serviceTypeName)
                 : implementationType;
 
-        source.AppendLine(
+        GeneratedSource.AppendLine(source, 
             $"                global::SingletonDI.Generated.__SingletonDIHost__.RegisterProvider<{serviceType}, {implementationType}>(");
-        source.AppendLine($"                    () => new {implementationType}(),");
+        GeneratedSource.AppendLine(source, $"                    () => new {implementationType}(),");
         AppendDependencies(source, provider.DependencyIdentities);
-        source.AppendLine(provider.HasInitializeAsyncMethod
+        GeneratedSource.AppendLine(source, provider.HasInitializeAsyncMethod
             ? "                    static value => ToTask(value.InitializeAsync()),"
             : "                    null,");
         AppendDisposeDelegates(source, provider);
-        source.AppendLine();
+        GeneratedSource.AppendLine(source, string.Empty);
     }
 
     private static void AppendDependencies(
@@ -209,7 +210,7 @@ internal static class ProviderModuleEmitter
     {
         if (dependencies.IsDefault || dependencies.IsEmpty)
         {
-            source.AppendLine("                    global::System.Array.Empty<global::System.Type>(),");
+            GeneratedSource.AppendLine(source, "                    global::System.Array.Empty<global::System.Type>(),");
             return;
         }
 
@@ -218,20 +219,20 @@ internal static class ProviderModuleEmitter
             .ToImmutableArray();
         if (distinctDependencies.IsEmpty)
         {
-            source.AppendLine("                    global::System.Array.Empty<global::System.Type>(),");
+            GeneratedSource.AppendLine(source, "                    global::System.Array.Empty<global::System.Type>(),");
             return;
         }
 
-        source.AppendLine("                    new global::System.Type[]");
-        source.AppendLine("                    {");
+        GeneratedSource.AppendLine(source, "                    new global::System.Type[]");
+        GeneratedSource.AppendLine(source, "                    {");
         for (var index = 0; index < distinctDependencies.Length; index++)
         {
             var separator = index == distinctDependencies.Length - 1 ? string.Empty : ",";
-            source.AppendLine(
+            GeneratedSource.AppendLine(source, 
                 $"                        typeof({distinctDependencies[index].ToGlobalTypeName()}){separator}");
         }
 
-        source.AppendLine("                    },");
+        GeneratedSource.AppendLine(source, "                    },");
     }
 
     private static void AppendDisposeDelegates(
@@ -240,22 +241,22 @@ internal static class ProviderModuleEmitter
     {
         if (provider.IsAsyncDisposable)
         {
-            source.AppendLine("                    null,");
-            source.AppendLine(
+            GeneratedSource.AppendLine(source, "                    null,");
+            GeneratedSource.AppendLine(source, 
                 $"                    static value => ((global::System.IAsyncDisposable)value).DisposeAsync().AsTask());");
             return;
         }
 
         if (provider.IsDisposable)
         {
-            source.AppendLine(
+            GeneratedSource.AppendLine(source, 
                 $"                    static value => ((global::System.IDisposable)value).Dispose(),");
-            source.AppendLine("                    null);");
+            GeneratedSource.AppendLine(source, "                    null);");
             return;
         }
 
-        source.AppendLine("                    null,");
-        source.AppendLine("                    null);");
+        GeneratedSource.AppendLine(source, "                    null,");
+        GeneratedSource.AppendLine(source, "                    null);");
     }
 
     private static string ToGlobalTypeName(string fullyQualifiedName)

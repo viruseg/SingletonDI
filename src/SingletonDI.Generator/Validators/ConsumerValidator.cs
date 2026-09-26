@@ -304,7 +304,7 @@ internal static class ConsumerValidator
         SemanticModel? semanticModel)
     {
         return string.Join(
-            Environment.NewLine,
+            "\n",
             typeDeclaration.ConstraintClauses.Select(constraint =>
             {
                 if (semanticModel is null)

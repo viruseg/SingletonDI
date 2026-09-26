@@ -110,6 +110,44 @@ public sealed class GeneratorOutputTests
     }
 
     [Fact]
+    public void Generator_EmitsLineFeedsRegardlessOfTheHostNewline()
+    {
+        // The emitters built their text with StringBuilder.AppendLine, which follows the host newline,
+        // so the same generator produced different bytes for the same input on Windows and on Linux.
+        // That shows up in an EmitCompilerGeneratedFiles dump and defeats any text snapshot of the
+        // generated output.
+        const string source = """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public sealed class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """;
+        var compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new SingletonDIGenerator());
+
+        driver = driver.RunGenerators(compilation);
+        var generatedSources = driver.GetRunResult().Results
+            .SelectMany(result => result.GeneratedSources)
+            .Select(generated => generated.SourceText.ToString())
+            .ToArray();
+
+        Assert.NotEmpty(generatedSources);
+        Assert.All(
+            generatedSources,
+            text => Assert.DoesNotContain("\r", text, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Generator_EmitsFileScopedConsumerNamespace()
     {
         var compilation = CreateCompilation(
