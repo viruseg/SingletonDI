@@ -285,11 +285,9 @@ internal static class ConsumerValidator
         return new ConsumerContainingTypeShape(
             typeDeclaration.Identifier.ToString(),
             GetDeclarationKind(typeDeclaration),
-            typeParameters.Length,
             typeParameters,
             typeDeclaration.TypeParameterList?.ToString() ?? string.Empty,
-            GetConstraintClauses(typeDeclaration, semanticModel),
-            typeDeclaration.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)));
+            GetConstraintClauses(typeDeclaration, semanticModel));
     }
 
     private static ImmutableArray<string> GetTypeParameters(TypeDeclarationSyntax typeDeclaration)

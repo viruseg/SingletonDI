@@ -111,11 +111,9 @@ internal static class ConsumerEmitter
             new ConsumerContainingTypeShape(
                 shape.Name,
                 shape.DeclarationKind,
-                shape.Arity,
                 shape.TypeParameters,
                 shape.TypeParameterList,
-                shape.ConstraintClauses,
-                shape.IsPartial),
+                shape.ConstraintClauses),
             indentLevel);
         indentLevel++;
 

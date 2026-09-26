@@ -33,19 +33,15 @@ public enum ConsumerDeclarationKind
 /// </summary>
 /// <param name="Name">The escaped containing type identifier.</param>
 /// <param name="DeclarationKind">The containing type declaration kind.</param>
-/// <param name="Arity">The number of containing type parameters.</param>
 /// <param name="TypeParameters">The escaped containing type parameter names.</param>
 /// <param name="TypeParameterList">The source type parameter list, including variance and attributes.</param>
 /// <param name="ConstraintClauses">The source constraint clauses.</param>
-/// <param name="IsPartial">Whether the containing declaration is partial.</param>
 public readonly record struct ConsumerContainingTypeShape(
     string Name,
     ConsumerDeclarationKind DeclarationKind,
-    int Arity,
     ImmutableArray<string> TypeParameters,
     string TypeParameterList,
-    string ConstraintClauses,
-    bool IsPartial);
+    string ConstraintClauses);
 
 /// <summary>
 /// Describes the complete declaration shape required to reopen a consumer type.

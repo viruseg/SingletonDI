@@ -1092,10 +1092,11 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         key.Append('\u001f').Append(shape.IsStatic);
         foreach (var containingType in shape.ContainingTypes)
         {
+            // The type parameter list and the type parameter names are both in the key, so the arity
+            // they imply is covered, and a containing type of a validated consumer is always partial.
             key.Append('\u001f').Append("containing");
             key.Append('\u001f').Append(containingType.Name);
             key.Append('\u001f').Append(containingType.DeclarationKind);
-            key.Append('\u001f').Append(containingType.Arity);
             foreach (var typeParameter in containingType.TypeParameters)
             {
                 key.Append('\u001f').Append(typeParameter);
@@ -1103,7 +1104,6 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
             key.Append('\u001f').Append(containingType.TypeParameterList);
             key.Append('\u001f').Append(containingType.ConstraintClauses);
-            key.Append('\u001f').Append(containingType.IsPartial);
         }
 
         key.Append('\u001f').Append(shape.IsFileScoped);

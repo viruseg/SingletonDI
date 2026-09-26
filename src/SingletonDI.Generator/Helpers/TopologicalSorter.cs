@@ -122,10 +122,10 @@ internal static class TopologicalSorter
         ImmutableArray<string> nodeKeys,
         GraphData graph)
     {
+        // Every node key came out of the same graph that filled the map, so a missing entry is a
+        // broken invariant rather than an input to handle, and the indexer says so.
         return nodeKeys
-            .Select(nodeKey => graph.ProviderIdentityByNodeKey.TryGetValue(nodeKey, out var identity)
-                ? identity
-                : new ServiceTypeIdentity(nodeKey, string.Empty))
+            .Select(nodeKey => graph.ProviderIdentityByNodeKey[nodeKey])
             .ToImmutableArray();
     }
 

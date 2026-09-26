@@ -200,9 +200,7 @@ internal static class ProviderValidator
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.InvalidServiceType,
                 GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
-                serviceType == null
-                    ? "<invalid>"
-                    : GetTypeDisplayName(serviceType, location),
+                "<invalid>",
                 providerDisplayName));
             return null;
         }

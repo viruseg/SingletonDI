@@ -270,7 +270,7 @@ internal static class PropertyNameResolver
     /// </summary>
     private static string GetNamespacePrefix(string namespaceName)
     {
-        if (string.IsNullOrEmpty(namespaceName) || namespaceName == "<global namespace>")
+        if (string.IsNullOrEmpty(namespaceName))
         {
             return string.Empty;
         }
