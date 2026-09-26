@@ -6,7 +6,6 @@ namespace SingletonDI.Generator.Helpers;
 
 internal readonly record struct ConsumerPropertyNameConflict(
     string PropertyName,
-    ServiceReferenceModel FirstReference,
     ServiceReferenceModel SecondReference);
 
 /// <summary>
@@ -79,7 +78,6 @@ internal static class PropertyNameResolver
         }
 
         var result = ImmutableDictionary.CreateBuilder<string, string>();
-        var propertyOwners = new Dictionary<string, ServiceReferenceModel>(StringComparer.Ordinal);
         var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal);
         var conflictBuilder = ImmutableArray.CreateBuilder<ConsumerPropertyNameConflict>();
 
@@ -88,18 +86,12 @@ internal static class PropertyNameResolver
             var propertyName = preferredPropertyNames[reference.FullyQualifiedName];
             if (usedPropertyNames.Add(propertyName))
             {
-                propertyOwners[propertyName] = reference;
                 result[reference.FullyQualifiedName] = propertyName;
                 continue;
             }
 
-            conflictBuilder.Add(new ConsumerPropertyNameConflict(
-                propertyName,
-                propertyOwners[propertyName],
-                reference));
-            var fallbackName = GetUniqueFallbackPropertyName(reference, usedPropertyNames);
-            result[reference.FullyQualifiedName] = fallbackName;
-            propertyOwners[fallbackName] = reference;
+            conflictBuilder.Add(new ConsumerPropertyNameConflict(propertyName, reference));
+            result[reference.FullyQualifiedName] = GetUniqueFallbackPropertyName(reference, usedPropertyNames);
         }
 
         conflicts = conflictBuilder.ToImmutable();
@@ -133,7 +125,6 @@ internal static class PropertyNameResolver
         }
 
         var result = ImmutableDictionary.CreateBuilder<ServiceTypeIdentity, string>();
-        var propertyOwners = new Dictionary<string, ServiceReferenceModel>(StringComparer.Ordinal);
         var usedPropertyNames = new HashSet<string>(StringComparer.Ordinal);
         var conflictBuilder = ImmutableArray.CreateBuilder<ConsumerPropertyNameConflict>();
 
@@ -143,18 +134,12 @@ internal static class PropertyNameResolver
             var propertyName = preferredPropertyNames[identity];
             if (usedPropertyNames.Add(propertyName))
             {
-                propertyOwners[propertyName] = reference;
                 result[identity] = propertyName;
                 continue;
             }
 
-            conflictBuilder.Add(new ConsumerPropertyNameConflict(
-                propertyName,
-                propertyOwners[propertyName],
-                reference));
-            var fallbackName = GetUniqueFallbackPropertyName(reference, usedPropertyNames);
-            result[identity] = fallbackName;
-            propertyOwners[fallbackName] = reference;
+            conflictBuilder.Add(new ConsumerPropertyNameConflict(propertyName, reference));
+            result[identity] = GetUniqueFallbackPropertyName(reference, usedPropertyNames);
         }
 
         conflicts = conflictBuilder.ToImmutable();
