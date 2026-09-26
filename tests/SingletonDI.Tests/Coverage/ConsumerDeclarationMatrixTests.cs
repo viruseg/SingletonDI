@@ -322,7 +322,7 @@ public sealed partial class ConsumerDeclarationMatrixTests
             }
             """,
             new SupportedExpectation(),
-            ["partial class Consumer<T>"],
+            ["partial class Consumer<T>", ConsumerProperty],
             []),
     ];
 
