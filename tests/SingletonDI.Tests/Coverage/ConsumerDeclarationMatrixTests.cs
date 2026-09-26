@@ -5,7 +5,7 @@ namespace SingletonDI.Tests.Coverage;
 
 public sealed partial class ConsumerDeclarationMatrixTests
 {
-    internal const string ProviderSource = """
+    private const string ProviderSource = """
         using SingletonDI.Attributes;
 
         namespace App
@@ -125,7 +125,7 @@ public sealed partial class ConsumerDeclarationMatrixTests
         new(
             "CONS-SHP-06",
             "CONSUMER_SHAPE",
-            "static class",
+            "static class, sentinel that cannot go green until the generator either handles static consumers or reports a diagnostic for one",
             ProviderSource + """
 
             namespace App
@@ -138,7 +138,7 @@ public sealed partial class ConsumerDeclarationMatrixTests
             """,
             new SupportedExpectation(),
             ["protected static global::App.Service ServiceInstance"],
-            []),
+            ["private static global::App.Service ServiceInstance"]),
         new(
             "CONS-SHP-07",
             "CONSUMER_SHAPE",

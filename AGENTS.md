@@ -15,6 +15,8 @@ SingletonDI/
 │   ├── SingletonDI.Generator/     # Incremental source generator
 │   ├── SingletonDI.Refactoring/   # Code fixes and refactorings
 │   └── SingletonDI.SampleApp/     # Executable sample
+├── docs/
+│   └── coverage-matrix-findings.md  # Prose record of what the declaration coverage matrix found
 └── tests/
     ├── SingletonDI.Tests/         # xUnit and Roslyn test harnesses
     ├── InterProjectFixtures/      # Provider, consumer, and root scenarios
@@ -75,3 +77,4 @@ instead of waiting silently for minutes; delete the lock file after confirming n
 - Start child `dotnet` processes only through `DotnetProcessRunner` so a stuck build cannot hang the test run.
 - Assert exact diagnostic IDs, severity, locations, messages, and generated compilation results.
 - Keep package smoke tests isolated from the repository NuGet cache and verify the packed package on SDK 10.
+- Six tests in `SingletonDI.Tests.Coverage` fail on purpose: they are the red rows of the declaration coverage matrix, and `docs/coverage-matrix-findings.md` records what each one is waiting for. A seventh red row is a regression.

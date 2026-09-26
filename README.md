@@ -699,6 +699,10 @@ Occurs when a provider `InitializeAsync` method returns `Task?` or `ValueTask?`.
 - **Shared contracts for reverse dependencies** — a library that consumes an app-owned implementation must depend on a lower-level contract assembly, not on the app
 - **`struct` not allowed** — only `class` can be a provider
 
+## Known issues
+
+Six known generator defects are recorded in [`docs/coverage-matrix-findings.md`](docs/coverage-matrix-findings.md), which explains each one and points at the code that has to change.
+
 ## License
 
 MIT License

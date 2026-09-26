@@ -31,7 +31,7 @@ internal sealed record MatrixRunResult(
     internal ImmutableArray<Diagnostic> GeneratorDiagnostics { get; init; } =
         ImmutableArray<Diagnostic>.Empty;
 
-    internal CSharpCompilation OutputCompilation { get; init; } = null!;
+    internal required CSharpCompilation OutputCompilation { get; init; }
 }
 
 internal static class DeclarationMatrixHarness
@@ -145,21 +145,6 @@ internal static class DeclarationMatrixHarness
         return new CSharpParseOptions(
             options.LanguageVersion,
             preprocessorSymbols: symbols.ToImmutable());
-    }
-
-    internal static byte[] EmitAssembly(CSharpCompilation compilation)
-    {
-        using var stream = new MemoryStream();
-        var emitResult = compilation.Emit(stream);
-        if (!emitResult.Success)
-        {
-            var diagnostics = string.Join(
-                Environment.NewLine,
-                emitResult.Diagnostics.Select(diagnostic => diagnostic.ToString()));
-            throw new InvalidOperationException($"Compilation failed:{Environment.NewLine}{diagnostics}");
-        }
-
-        return stream.ToArray();
     }
 
     private static ImmutableArray<MetadataReference> BuildDefaultReferences()

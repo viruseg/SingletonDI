@@ -279,7 +279,10 @@ public sealed class DeclarationMatrixAnchorTests
             string.Join(
                 Environment.NewLine,
                 result.CompilerErrors.Select(error => error.ToString())));
-        Assert.True(result.EmitSucceeded);
+        Assert.True(
+            result.EmitSucceeded,
+            $"The output compilation failed to emit. Generated:{Environment.NewLine}" +
+            $"{result.GeneratedSource}");
 
         var lines = TrimLines(result.GeneratedSource);
         var sourceLines = source.Split('\n').Select(line => line.Trim()).ToArray();
@@ -293,7 +296,7 @@ public sealed class DeclarationMatrixAnchorTests
             .Where(file => !file.Contains("namespace SingletonDI.Generated", StringComparison.Ordinal))
             .Select(TrimLines)
             .ToImmutableArray();
-        Assert.Equal(20, consumerFiles.Length);
+        Assert.Equal(coexistenceCases.Length, consumerFiles.Length);
 
         // Собственное объявление консьюмера — последнее парциальное объявление его файла:
         // содержащие типы эмиттер печатает от внешнего к внутреннему, и последним идёт консьюмер.
@@ -303,6 +306,10 @@ public sealed class DeclarationMatrixAnchorTests
             var consumerDeclarations = consumerFile
                 .Where(line => line.StartsWith("partial ", StringComparison.Ordinal))
                 .ToArray();
+            Assert.True(
+                consumerDeclarations.Length > 0,
+                $"A generated consumer file declares nothing. Generated:{Environment.NewLine}" +
+                $"{string.Join(Environment.NewLine, consumerFile)}");
             var properties = consumerFile.Where(IsPropertyDeclaration).ToArray();
             Assert.True(
                 resolvedProperties.TryAdd(consumerDeclarations[^1], properties),
@@ -328,23 +335,24 @@ public sealed class DeclarationMatrixAnchorTests
 
         Assert.Equal(coexistenceCases.Length, resolvedProperties.Count);
 
-        // Двадцать собственных потребителей в исходнике, у каждого ровно одно сгенерированное
-        // свойство, своя документация и своё разрешение. Счётчики смотрят только на файлы
-        // потребителей, поэтому документация модуля провайдеров в них не смешивается.
+        // Собственных потребителей в исходнике ровно столько же, сколько записей в
+        // `coexistenceCases`, у каждого ровно одно сгенерированное свойство, своя документация
+        // и своё разрешение. Счётчики смотрят только на файлы потребителей, поэтому
+        // документация модуля провайдеров в них не смешивается.
         var consumerDocComments = consumerFiles.Sum(file => file.Count(line => line == "/// <summary>"));
-        Assert.Equal(20, consumerDocComments);
+        Assert.Equal(coexistenceCases.Length, consumerDocComments);
         var consumerResolutions = consumerFiles.Sum(file => file.Count(line => line.Contains("__SingletonDIHost__.Resolve<", StringComparison.Ordinal)));
-        Assert.Equal(20, consumerResolutions);
+        Assert.Equal(coexistenceCases.Length, consumerResolutions);
 
-        // Двадцать четыре строки объявления: двадцать консьюмеров плюс четыре содержащих типа —
-        // `Host` и `RecordHost` по одному разу за консьюмер, который в них вложен, и `Middle<TItem>`
+        // Строк объявления на четыре больше, чем консьюмеров: четыре содержащих типа — `Host`
+        // и `RecordHost` по одному разу за консьюмер, который в них вложен, и `Middle<TItem>`
         // один раз. `Host` печатается дважды — по разу в файле вложенного консьюмера `Nested` и в
         // файле вложенного консьюмера `Deep`. Содержащий тип эмиттер печатает тем же кодом, что и
         // сам консьюмер, поэтому здесь же закреплена и форма содержащей записи.
         var declarations = lines
             .Where(line => line.StartsWith("partial ", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(24, declarations.Length);
+        Assert.Equal(coexistenceCases.Length + 4, declarations.Length);
         Assert.Equal(2, declarations.Count(line => line == "partial class Host"));
         Assert.Contains("partial class Middle<TItem>", declarations);
         Assert.Contains("partial record class RecordHost", declarations);

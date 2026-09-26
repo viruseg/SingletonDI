@@ -151,10 +151,12 @@ internal static class DeclarationCaseVerifier
                         $"{declarationCase.Id}: a Supported row must assert something.");
                     break;
                 case RejectedExpectation rejected:
-                    Assert.NotEmpty(rejected.Ids);
-                    Assert.Equal(
-                        rejected.Ids.Distinct(StringComparer.Ordinal).Count(),
-                        rejected.Ids.Length);
+                    Assert.True(
+                        !rejected.Ids.IsEmpty,
+                        $"{declarationCase.Id}: a Rejected row must name at least one diagnostic id.");
+                    Assert.True(
+                        rejected.Ids.Distinct(StringComparer.Ordinal).Count() == rejected.Ids.Length,
+                        $"{declarationCase.Id}: a Rejected row must not repeat a diagnostic id.");
                     break;
                 case SilentlyIgnoredExpectation:
                     Assert.NotEmpty(declarationCase.AbsentFragments);
