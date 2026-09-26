@@ -26,7 +26,8 @@ internal sealed record DeclarationCase(
     string[] AbsentFragments,
     OutputKind OutputKind = OutputKind.DynamicallyLinkedLibrary,
     ImmutableArray<string> PreprocessorSymbols = default,
-    LanguageVersion LanguageVersion = LanguageVersion.Latest)
+    LanguageVersion LanguageVersion = LanguageVersion.Latest,
+    bool NullableContextProviderEnabled = true)
 {
     internal ImmutableArray<string> ResolvedPreprocessorSymbols =>
         PreprocessorSymbols.IsDefault ? ImmutableArray<string>.Empty : PreprocessorSymbols;
@@ -43,6 +44,7 @@ internal static class DeclarationCaseVerifier
                 OutputKind = declarationCase.OutputKind,
                 LanguageVersion = declarationCase.LanguageVersion,
                 AdditionalPreprocessorSymbols = declarationCase.ResolvedPreprocessorSymbols,
+                NullableContextProviderEnabled = declarationCase.NullableContextProviderEnabled,
             });
 
         var expectedIds = (declarationCase.Expectation as RejectedExpectation)?.Ids

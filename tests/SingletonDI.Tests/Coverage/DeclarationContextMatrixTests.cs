@@ -248,6 +248,16 @@ public sealed partial class DeclarationContextMatrixTests
             [],
             LanguageVersion: Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp10),
         new(
+            "LANG-04",
+            "LANGUAGE_VERSION",
+            "C# 7.3",
+            ProviderOnlySource,
+            new RejectedExpectation(["DM0027"]),
+            [],
+            [ServiceFactory],
+            LanguageVersion: Microsoft.CodeAnalysis.CSharp.LanguageVersion.CSharp7_3,
+            NullableContextProviderEnabled: false),
+        new(
             "LANG-05",
             "LANGUAGE_VERSION",
             "C# 8",
