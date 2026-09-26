@@ -1201,9 +1201,9 @@ public sealed partial class ProviderDeclarationMatrixTests
                 }
             }
             """,
-            new SilentlyIgnoredExpectation(),
-            [ServiceFactory],
-            [InitializerCall]),
+            new SupportedExpectation(),
+            [ServiceFactory, InitializerCall],
+            []),
         new(
             "PROV-INI-16",
             "PROVIDER_INITIALIZER",

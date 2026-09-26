@@ -14,8 +14,6 @@ internal sealed record RejectedExpectation(string[] DiagnosticIds) : MatrixExpec
     internal ImmutableArray<string> Ids => DiagnosticIds.ToImmutableArray();
 }
 
-internal sealed record SilentlyIgnoredExpectation : MatrixExpectation;
-
 internal sealed record DeclarationCase(
     string Id,
     string Axis,
@@ -157,9 +155,6 @@ internal static class DeclarationCaseVerifier
                     Assert.True(
                         rejected.Ids.Distinct(StringComparer.Ordinal).Count() == rejected.Ids.Length,
                         $"{declarationCase.Id}: a Rejected row must not repeat a diagnostic id.");
-                    break;
-                case SilentlyIgnoredExpectation:
-                    Assert.NotEmpty(declarationCase.AbsentFragments);
                     break;
                 default:
                     throw new InvalidOperationException(

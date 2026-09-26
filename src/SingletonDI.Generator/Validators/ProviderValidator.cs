@@ -292,30 +292,35 @@ internal static class ProviderValidator
     {
         IMethodSymbol? genericMethod = null;
         IMethodSymbol? rejected = null;
-        foreach (var member in typeSymbol.GetMembers())
+        for (INamedTypeSymbol? current = typeSymbol;
+             current is not null && current.SpecialType != SpecialType.System_Object;
+             current = current.BaseType)
         {
-            if (member is not IMethodSymbol { Parameters.IsEmpty: true } method ||
-                GetSimpleMemberName(method) != "InitializeAsync")
+            foreach (var member in current.GetMembers())
             {
-                continue;
-            }
+                if (member is not IMethodSymbol { Parameters.IsEmpty: true } method ||
+                    GetSimpleMemberName(method) != "InitializeAsync")
+                {
+                    continue;
+                }
 
-            if (!IsSupportedInitializerReturnType(method.ReturnType, compilation))
-            {
-                // Dropping the method silently left the provider registered with no initializer
-                // and no diagnostic, so the rejection is reported instead. A usable overload still
-                // wins, because an explicit interface implementation can sit next to a parameterless
-                // method of the same name.
-                rejected ??= method;
-                continue;
-            }
+                if (!IsSupportedInitializerReturnType(method.ReturnType, compilation))
+                {
+                    // Dropping the method silently left the provider registered with no initializer
+                    // and no diagnostic, so the rejection is reported instead. A usable overload still
+                    // wins, because an explicit interface implementation can sit next to a parameterless
+                    // method of the same name.
+                    rejected ??= method;
+                    continue;
+                }
 
-            if (method.Arity == 0)
-            {
-                return method;
-            }
+                if (method.Arity == 0)
+                {
+                    return method;
+                }
 
-            genericMethod ??= method;
+                genericMethod ??= method;
+            }
         }
 
         if (rejected is not null)
