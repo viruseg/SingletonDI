@@ -206,6 +206,8 @@ public sealed class SingletonDIProvideAttribute : Attribute
 - For synchronous initialization, use a parameterless constructor
 - For asynchronous initialization, implement a public, internal, or protected internal parameterless `Task InitializeAsync()` or `ValueTask InitializeAsync()` instance method
 - Generic, static, open-generic, and inaccessible initializers are rejected during generation; an explicit interface implementation is inaccessible, so it is rejected as well
+- The initializer is bound by C# member lookup, so one inherited from a base type is used, and several overloads can coexist: a usable parameterless one always wins, whichever order they are declared in
+- An unsupported declaration in a *base* type is not reported, because the provider's author does not own it and cannot rename it. The provider then registers with no initializer and no diagnostic, so a base member that looks like an initializer but cannot be one, such as a `protected` or `static` one, is silently not called. Override it on the provider to make it count.
 
 **Examples:**
 
