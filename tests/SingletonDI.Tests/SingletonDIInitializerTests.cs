@@ -220,14 +220,14 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
-    public async Task InitializeAsync_ConcurrentTrueRequestRegistersShutdownHandlers()
+    public async Task InitializeAsync_TrueRequestRegistersShutdownHandlers()
     {
         await TestGate.WaitAsync();
         var releaseInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             var initializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             __SingletonDIHost__.RegisterProvider<IInitializerService, InitializerService>(
                 static () => new InitializerService(),
@@ -240,17 +240,17 @@ public sealed class SingletonDIInitializerTests
                 null,
                 null);
 
-            var withoutHandlers = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+            var initialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: true);
             await initializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var withHandlers = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: true);
-            releaseInitializer.TrySetResult(true);
-            await Task.WhenAll(withoutHandlers, withHandlers);
-
             var shutdownManagerField = typeof(SingletonDIInitializer).GetField(
                 "_shutdownManager",
                 BindingFlags.NonPublic | BindingFlags.Static);
+
             Assert.NotNull(shutdownManagerField);
             Assert.NotNull(shutdownManagerField!.GetValue(null));
+
+            releaseInitializer.TrySetResult(true);
+            await initialization;
         }
         finally
         {
@@ -275,7 +275,7 @@ public sealed class SingletonDIInitializerTests
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             var initializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             __SingletonDIHost__.RegisterProvider<IInitializationHandlerService, InitializationHandlerService>(
                 static () => new InitializationHandlerService(),
@@ -315,18 +315,17 @@ public sealed class SingletonDIInitializerTests
     }
 
     [Fact]
-    public async Task InitializeAsync_QueuesReinitializationUntilDisposalCompletes()
+    public async Task InitializeAsync_RejectsEveryCallAfterTheFirst()
     {
+        // A singleton exists for the lifetime of the application. A second initialization would
+        // build a second graph over the same registrations, and returning a task instead of
+        // throwing would let the caller believe the container was rebuilt.
         await TestGate.WaitAsync();
-        var initializationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseInitialization = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var createCount = 0;
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             __SingletonDIHost__.RegisterProvider<IOverlapService, OverlapService>(
                 () =>
                 {
@@ -334,98 +333,27 @@ public sealed class SingletonDIInitializerTests
                     return new OverlapService();
                 },
                 Array.Empty<Type>(),
-                async _ =>
-                {
-                    initializationStarted.TrySetResult(true);
-                    await releaseInitialization.Task;
-                },
-                _ =>
-                {
-                    disposalStarted.TrySetResult(true);
-                    releaseDisposal.Task.GetAwaiter().GetResult();
-                },
+                null,
+                null,
                 null);
 
-            var initialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-            await initializationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var disposal = SingletonDIInitializer.DisposeAsync().AsTask();
-            var reinitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-
-            Assert.False(reinitialization.IsCompleted);
-            releaseInitialization.TrySetResult(true);
-            await initialization;
-            Assert.False(reinitialization.IsCompleted);
-
-            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            releaseDisposal.TrySetResult(true);
-            await disposal;
-            await reinitialization;
-
-            Assert.Equal(2, createCount);
-        }
-        finally
-        {
-            releaseInitialization.TrySetResult(true);
-            releaseDisposal.TrySetResult(true);
-            try
-            {
-                await SingletonDIInitializer.DisposeAsync();
-            }
-            catch
-            {
-            }
-
-            TestGate.Release();
-        }
-    }
-
-    [Fact]
-    public async Task DisposeAsync_SupersedesReinitializationQueuedBehindActiveDisposal()
-    {
-        await TestGate.WaitAsync();
-        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var createCount = 0;
-        var disposeCount = 0;
-
-        try
-        {
-            await SingletonDIInitializer.DisposeAsync();
-            __SingletonDIHost__.RegisterProvider<ISupersededService, SupersededService>(
-                () =>
-                {
-                    Interlocked.Increment(ref createCount);
-                    return new SupersededService();
-                },
-                Array.Empty<Type>(),
-                null,
-                null,
-                async _ =>
-                {
-                    disposalStarted.TrySetResult(true);
-                    await releaseDisposal.Task;
-                    Interlocked.Increment(ref disposeCount);
-                });
-
             await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-            var firstDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
-            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var queuedInitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-            var secondDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
+            var afterSuccess = Record.Exception(
+                () => { _ = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false); });
+            Assert.IsType<InvalidOperationException>(afterSuccess);
+            Assert.Equal("The singleton container has already been initialized.", afterSuccess!.Message);
 
-            releaseDisposal.TrySetResult(true);
-            await Task.WhenAll(firstDisposal, secondDisposal);
-            var supersededException = await Assert.ThrowsAsync<InvalidOperationException>(
-                async () => await queuedInitialization);
+            await SingletonDIInitializer.DisposeAsync();
+            var afterDisposal = Record.Exception(
+                () => { _ = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false); });
+            Assert.IsType<InvalidOperationException>(afterDisposal);
+            Assert.Equal("The singleton container has already been initialized.", afterDisposal!.Message);
 
-            Assert.Equal("Initialization was superseded by a disposal request.", supersededException.Message);
             Assert.Equal(1, Volatile.Read(ref createCount));
-            Assert.Equal(1, Volatile.Read(ref disposeCount));
-            Assert.Throws<InvalidOperationException>(() => __SingletonDIHost__.Resolve<ISupersededService>());
+            Assert.Throws<InvalidOperationException>(() => __SingletonDIHost__.Resolve<IOverlapService>());
         }
         finally
         {
-            releaseDisposal.TrySetResult(true);
             try
             {
                 await SingletonDIInitializer.DisposeAsync();
@@ -434,67 +362,7 @@ public sealed class SingletonDIInitializerTests
             {
             }
 
-            TestGate.Release();
-        }
-    }
-
-    [Fact]
-    public async Task InitializeAsync_AfterSupersededQueueWaitsForLatestDisposalAndSucceeds()
-    {
-        await TestGate.WaitAsync();
-        var disposalStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseDisposal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var createCount = 0;
-        var disposeCount = 0;
-
-        try
-        {
-            await SingletonDIInitializer.DisposeAsync();
-            __SingletonDIHost__.RegisterProvider<IReplacementSupersededService, ReplacementSupersededService>(
-                () =>
-                {
-                    Interlocked.Increment(ref createCount);
-                    return new ReplacementSupersededService();
-                },
-                Array.Empty<Type>(),
-                null,
-                null,
-                async _ =>
-                {
-                    if (Interlocked.Increment(ref disposeCount) == 1)
-                    {
-                        disposalStarted.TrySetResult(true);
-                        await releaseDisposal.Task;
-                    }
-                });
-
-            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-            var firstDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
-            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            var supersededInitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-            var secondDisposal = SingletonDIInitializer.DisposeAsync().AsTask();
-            var replacementInitialization = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-
-            releaseDisposal.TrySetResult(true);
-            await Task.WhenAll(firstDisposal, secondDisposal);
-            await Assert.ThrowsAsync<InvalidOperationException>(async () => await supersededInitialization);
-            await replacementInitialization;
-
-            Assert.Equal(2, Volatile.Read(ref createCount));
-            Assert.Equal(1, Volatile.Read(ref disposeCount));
-            Assert.NotNull(__SingletonDIHost__.Resolve<IReplacementSupersededService>());
-        }
-        finally
-        {
-            releaseDisposal.TrySetResult(true);
-            try
-            {
-                await SingletonDIInitializer.DisposeAsync();
-            }
-            catch
-            {
-            }
-
+            __SingletonDIHost__.ResetForTesting();
             TestGate.Release();
         }
     }
@@ -507,7 +375,7 @@ public sealed class SingletonDIInitializerTests
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             __SingletonDIHost__.RegisterProvider<IReentrantInitializerService, ReentrantInitializerService>(
                 static () => new ReentrantInitializerService(),
                 Array.Empty<Type>(),
@@ -556,7 +424,7 @@ public sealed class SingletonDIInitializerTests
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             __SingletonDIHost__.RegisterProvider<IReentrantInitializeService, ReentrantInitializeService>(
                 static () => new ReentrantInitializeService(),
                 Array.Empty<Type>(),
@@ -599,22 +467,26 @@ public sealed class SingletonDIInitializerTests
         }
     }
 
+    // Registrations survive ResetForTesting because a generated module fills them once per process,
+// so a provider whose initializer fails has to be armed only while the test that wants it runs.
+    private static int _retryFailureArmed;
+
     [Fact]
-    public async Task InitializeAsync_FailedInitializationCanRetry()
+    public async Task InitializeAsync_FailedInitializationCannotBeRetried()
     {
         await TestGate.WaitAsync();
         var attempts = 0;
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             __SingletonDIHost__.RegisterProvider<IRetryPublicService, RetryPublicService>(
                 static () => new RetryPublicService(),
                 Array.Empty<Type>(),
                 async _ =>
                 {
                     Interlocked.Increment(ref attempts);
-                    if (attempts == 1)
+                    if (Volatile.Read(ref _retryFailureArmed) != 0)
                     {
                         throw new InvalidOperationException("first initialization failed");
                     }
@@ -622,17 +494,21 @@ public sealed class SingletonDIInitializerTests
                 null,
                 null);
 
+            Volatile.Write(ref _retryFailureArmed, 1);
             var firstException = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false));
             Assert.Contains("failed to initialize", firstException.Message);
             Assert.Equal("first initialization failed", firstException.InnerException?.Message);
 
-            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
-
-            Assert.Equal(2, attempts);
+            var retryException = Record.Exception(
+                () => { _ = SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false); });
+            Assert.IsType<InvalidOperationException>(retryException);
+            Assert.Equal("Initialization failed and cannot be retried.", retryException!.Message);
+            Assert.Equal(1, attempts);
         }
         finally
         {
+            Volatile.Write(ref _retryFailureArmed, 0);
             try
             {
                 await SingletonDIInitializer.DisposeAsync();
@@ -641,6 +517,7 @@ public sealed class SingletonDIInitializerTests
             {
             }
 
+            __SingletonDIHost__.ResetForTesting();
             TestGate.Release();
         }
     }
@@ -780,7 +657,7 @@ public sealed class SingletonDIInitializerTests
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             SetShutdownSignalSource(new FailingShutdownSignalSource(PosixSignal.SIGINT));
             __SingletonDIHost__.RegisterProvider<ISignalSubscriptionService, SignalSubscriptionService>(
                 static () => new SignalSubscriptionService(),
@@ -791,9 +668,6 @@ public sealed class SingletonDIInitializerTests
 
             // The graph is already built by the time the handlers are subscribed, so failing here
             // would report a failed initialization for a container that is serving instances.
-            await SingletonDIInitializer.InitializeAsync();
-            Assert.NotNull(SingletonDIInitializer.Resolve<ISignalSubscriptionService>());
-
             await SingletonDIInitializer.InitializeAsync();
             Assert.NotNull(SingletonDIInitializer.Resolve<ISignalSubscriptionService>());
 
@@ -858,7 +732,7 @@ public sealed class SingletonDIInitializerTests
 
         try
         {
-            await SingletonDIInitializer.DisposeAsync();
+            __SingletonDIHost__.ResetForTesting();
             __SingletonDIHost__.RegisterProvider<IBlockedFactoryService, BlockedFactoryService>(
                 () =>
                 {
@@ -913,22 +787,6 @@ public sealed class SingletonDIInitializerTests
     }
 
     private sealed class OverlapService : IOverlapService
-    {
-    }
-
-    private interface ISupersededService
-    {
-    }
-
-    private sealed class SupersededService : ISupersededService
-    {
-    }
-
-    private interface IReplacementSupersededService
-    {
-    }
-
-    private sealed class ReplacementSupersededService : IReplacementSupersededService
     {
     }
 

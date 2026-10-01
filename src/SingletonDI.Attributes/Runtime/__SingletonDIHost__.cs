@@ -57,4 +57,13 @@ public static class __SingletonDIHost__
     {
         return SingletonDIInitializer.Resolve<TService>();
     }
+
+    /// <summary>
+    /// Returns the container to its pre-initialization state so a later test can initialize it
+    /// again. Test-only; a released container never accepts a second initialization.
+    /// </summary>
+    internal static void ResetForTesting()
+    {
+        SingletonDIInitializer.ResetForTesting();
+    }
 }

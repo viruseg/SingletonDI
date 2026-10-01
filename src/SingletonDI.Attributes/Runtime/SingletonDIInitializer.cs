@@ -12,8 +12,6 @@ public static class SingletonDIInitializer
     private static readonly object Sync = new();
     private static IShutdownSignalSource _signalSource = PlatformShutdownSignalSource.Instance;
     private static ShutdownManager? _shutdownManager;
-    private static Task? _disposeTask;
-    private static QueuedInitialization? _queuedInitialization;
     private static long _lifecycleVersion;
 
     /// <summary>
@@ -36,11 +34,13 @@ public static class SingletonDIInitializer
     /// <returns>
     /// A task that completes after every provider instance has been created and every
     /// <c>InitializeAsync</c> method returning <see cref="Task"/> or <see cref="ValueTask"/> has completed.
-    /// A request queued behind an active disposal fails with <see cref="InvalidOperationException"/>
-    /// when a later disposal request supersedes it.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// The method is called reentrantly from a provider factory, initializer, or disposer.
+    /// The container has already been initialized, an initialization is already in progress, or an
+    /// earlier initialization failed and cannot be retried. A singleton exists for the lifetime of
+    /// the application, so the first call is the only one. The rejection is thrown by the call
+    /// itself rather than delivered through the returned task. The method also throws when it is
+    /// called reentrantly from a provider factory, initializer, or disposer.
     /// </exception>
     /// <exception cref="OperationCanceledException">
     /// <paramref name="cancellationToken"/> was cancelled before the request was accepted.
@@ -49,61 +49,37 @@ public static class SingletonDIInitializer
         bool registerShutdownHandlers = true,
         CancellationToken cancellationToken = default)
     {
-        Task? pendingDisposal;
-        QueuedInitialization? queuedInitialization = null;
         long lifecycleVersion;
 
         lock (Sync)
         {
-            pendingDisposal = _disposeTask;
             lifecycleVersion = _lifecycleVersion;
-            if (pendingDisposal is not null)
-            {
-                queuedInitialization = _queuedInitialization ??= new QueuedInitialization();
-            }
         }
 
         // Deliberately outside the lock. This call creates every provider instance and runs the
         // synchronous prefix of every initializer, so holding a process-wide lock across it would
         // block every other lifecycle call in the process for the duration, stall the main thread
         // inside AppDomain.ProcessExit, and deadlock against a factory that starts a thread which
-        // does not flow the execution context. The registry serializes the start on its own state.
-        var initializationTask = queuedInitialization is not null
-            ? queuedInitialization.Task
-            : Registry.InitializeAsync(cancellationToken);
-
-        if (queuedInitialization is not null)
-        {
-            _ = CompleteQueuedInitializationAsync(pendingDisposal!, queuedInitialization);
-        }
-
-        if (registerShutdownHandlers && pendingDisposal is null)
-        {
-            lock (Sync)
-            {
-                if (lifecycleVersion == _lifecycleVersion)
-                {
-                    RegisterShutdownHandlers();
-                }
-            }
-        }
+        // does not flow the execution context. The registry serializes the start on its own state,
+        // and rejects every repeat at the call site.
+        var initializationTask = Registry.InitializeAsync(cancellationToken);
 
         if (!registerShutdownHandlers)
         {
             return initializationTask;
         }
 
+        lock (Sync)
+        {
+            if (lifecycleVersion == _lifecycleVersion)
+            {
+                RegisterShutdownHandlers();
+            }
+        }
+
         if (initializationTask.Status == TaskStatus.RanToCompletion)
         {
-            lock (Sync)
-            {
-                if (lifecycleVersion == _lifecycleVersion && Registry.IsInitialized)
-                {
-                    RegisterShutdownHandlers();
-                }
-            }
-
-            return Task.CompletedTask;
+            return initializationTask;
         }
 
         return RegisterShutdownHandlersAfterInitializationAsync(initializationTask, lifecycleVersion);
@@ -134,55 +110,28 @@ public static class SingletonDIInitializer
     /// </exception>
     public static ValueTask DisposeAsync(CancellationToken cancellationToken = default)
     {
-        TaskCompletionSource<object?> completion;
         long lifecycleVersion;
 
         lock (Sync)
         {
-            if (_queuedInitialization is not null)
-            {
-                _queuedInitialization.IsInvalidated = true;
-                _queuedInitialization = null;
-            }
-
-            if (_disposeTask is not null)
-            {
-                return new ValueTask(_disposeTask);
-            }
-
             lifecycleVersion = ++_lifecycleVersion;
-            completion = new TaskCompletionSource<object?>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            _disposeTask = completion.Task;
         }
 
         // Outside the lock for the same reason as InitializeAsync: this invokes provider disposers.
-        // A disposal that starts in between is handled by the registry, which queues an
-        // initialization behind it rather than running concurrently.
-        Task registryDisposalTask;
+        // The registry serializes the disposal on its own state and hands every concurrent caller
+        // the same task, so a repeated or parallel disposal still runs exactly once.
         try
         {
-            registryDisposalTask = Registry.DisposeAsync(cancellationToken).AsTask();
+            return new ValueTask(CompleteDisposalAsync(
+                Registry.DisposeAsync(cancellationToken).AsTask(),
+                lifecycleVersion));
         }
         catch (Exception exception)
         {
-            // The registry rejects reentrant lifecycle calls synchronously. Release the state
-            // claimed above, and fault the task rather than leaving it pending forever, so a
-            // caller that already took it fails fast instead of waiting on a task nothing completes.
-            lock (Sync)
-            {
-                if (ReferenceEquals(_disposeTask, completion.Task))
-                {
-                    _disposeTask = null;
-                }
-            }
-
-            completion.TrySetException(exception);
-            return new ValueTask(completion.Task);
+            // The registry rejects reentrant lifecycle calls synchronously. Fault the task rather
+            // than leaving a caller that already took it waiting on a task nothing completes.
+            return new ValueTask(Task.FromException(exception));
         }
-
-        _ = CompleteDisposalAsync(registryDisposalTask, completion, lifecycleVersion);
-        return new ValueTask(completion.Task);
     }
 
     internal static void RegisterProvider<TService, TImplementation>(
@@ -210,43 +159,16 @@ public static class SingletonDIInitializer
     {
         return Registry.Resolve<T>();
     }
-    private static async Task CompleteQueuedInitializationAsync(
-        Task disposalTask,
-        QueuedInitialization queuedInitialization)
+
+    internal static void ResetForTesting()
     {
-        try
+        lock (Sync)
         {
-            await disposalTask.ConfigureAwait(false);
-
-            bool invalidated;
-            lock (Sync)
-            {
-                invalidated = queuedInitialization.IsInvalidated;
-            }
-
-            if (invalidated)
-            {
-                throw new InvalidOperationException(
-                    "Initialization was superseded by a disposal request.");
-            }
-
-            await Registry.InitializeAsync().ConfigureAwait(false);
-            queuedInitialization.Completion.TrySetResult(null);
+            _shutdownManager?.Dispose();
+            _shutdownManager = null;
         }
-        catch (Exception exception)
-        {
-            queuedInitialization.Completion.TrySetException(exception);
-        }
-        finally
-        {
-            lock (Sync)
-            {
-                if (ReferenceEquals(_queuedInitialization, queuedInitialization))
-                {
-                    _queuedInitialization = null;
-                }
-            }
-        }
+
+        Registry.ResetForTesting();
     }
 
     private static async Task RegisterShutdownHandlersAfterInitializationAsync(
@@ -282,7 +204,6 @@ public static class SingletonDIInitializer
 
     private static async Task CompleteDisposalAsync(
         Task registryDisposalTask,
-        TaskCompletionSource<object?> completion,
         long lifecycleVersion)
     {
         Exception? exception = null;
@@ -302,20 +223,11 @@ public static class SingletonDIInitializer
                 _shutdownManager?.Dispose();
                 _shutdownManager = null;
             }
-
-            if (ReferenceEquals(_disposeTask, completion.Task))
-            {
-                _disposeTask = null;
-            }
         }
 
         if (exception is not null)
         {
-            completion.TrySetException(exception);
-        }
-        else
-        {
-            completion.TrySetResult(null);
+            throw exception;
         }
     }
 
@@ -338,20 +250,5 @@ public static class SingletonDIInitializer
             _shutdownManager?.Dispose();
             _shutdownManager = null;
         }
-    }
-
-    private sealed class QueuedInitialization
-    {
-        internal QueuedInitialization()
-        {
-            Completion = new TaskCompletionSource<object?>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        internal TaskCompletionSource<object?> Completion { get; }
-
-        internal bool IsInvalidated { get; set; }
-
-        internal Task Task => Completion.Task;
     }
 }
