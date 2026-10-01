@@ -5,6 +5,7 @@ internal sealed record ProcessScenarioResult(
     bool ServiceDisposedBeforeDispose,
     bool ServiceDisposedAfterDispose,
     bool ExternalServiceDisposedAfterDispose,
+    string? ExternalStartupDataValue,
     IReadOnlyList<string> LifecycleEvents);
 
 internal static class ProcessScenarioRunner
@@ -51,6 +52,9 @@ internal static class ProcessScenarioRunner
         var resultLine = output
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Single(line => line.StartsWith("RESULT|", StringComparison.Ordinal));
+        var startupDataLine = output
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Single(line => line.StartsWith("STARTUPDATA|", StringComparison.Ordinal));
         var identityParts = identityLine[9..].Split(',');
         var resultParts = resultLine[7..].Split(',');
         if (identityParts.Length != 1 || resultParts.Length != 3)
@@ -58,11 +62,14 @@ internal static class ProcessScenarioRunner
             throw new InvalidOperationException("RootApp fixture returned malformed scenario data.");
         }
 
+        var startupDataValue = startupDataLine["STARTUPDATA|".Length..];
+
         return new ProcessScenarioResult(
             bool.Parse(identityParts[0]),
             bool.Parse(resultParts[0]),
             bool.Parse(resultParts[1]),
             bool.Parse(resultParts[2]),
+            startupDataValue == "<null>" ? null : startupDataValue,
             lifecycleEvents);
     }
 }

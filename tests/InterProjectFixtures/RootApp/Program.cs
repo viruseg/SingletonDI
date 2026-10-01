@@ -43,6 +43,7 @@ public static class Program
     public static async Task<ScenarioResult> RunScenarioAsync()
     {
         LifecycleLog.Clear();
+        SingletonDIStartupData.Set(ExternalService.StartupDataName, "hello-from-root");
         await SingletonDIInitializer.InitializeAsync(false).ConfigureAwait(false);
 
         try
@@ -63,6 +64,7 @@ public static class Program
                 serviceDisposedBeforeDispose,
                 DatabaseService.IsDisposed,
                 ExternalService.IsDisposed,
+                ExternalService.StartupDataValue,
                 lifecycleEvents);
 
             if (lifecycleEventsBeforeDispose.Count == 0)
@@ -73,6 +75,12 @@ public static class Program
             if (!ExternalService.IsInitialized)
             {
                 throw new InvalidOperationException("The external provider was not bootstrapped and initialized.");
+            }
+
+            if (ExternalService.StartupDataValue != "hello-from-root")
+            {
+                throw new InvalidOperationException(
+                    "The external provider did not read the startup data passed by the composition root.");
             }
 
             return scenarioResult;
@@ -102,6 +110,7 @@ public static class Program
             result.ServiceDisposedBeforeDispose + "," +
             result.ServiceDisposedAfterDispose + "," +
             result.ExternalServiceDisposedAfterDispose);
+        Console.WriteLine("STARTUPDATA|" + (result.ExternalStartupDataValue ?? "<null>"));
     }
 }
 
@@ -119,6 +128,7 @@ public sealed class ScenarioResult
     /// <param name="serviceDisposedBeforeDispose">Whether disposal had occurred before container disposal.</param>
     /// <param name="serviceDisposedAfterDispose">Whether disposal occurred after container disposal.</param>
     /// <param name="externalServiceDisposedAfterDispose">Whether the external service was disposed after container disposal.</param>
+    /// <param name="externalStartupDataValue">The startup data the external provider read during initialization.</param>
     /// <param name="lifecycleEvents">The ordered lifecycle events observed by the scenario.</param>
     public ScenarioResult(
         IDatabaseService contractService,
@@ -127,6 +137,7 @@ public sealed class ScenarioResult
         bool serviceDisposedBeforeDispose,
         bool serviceDisposedAfterDispose,
         bool externalServiceDisposedAfterDispose,
+        string? externalStartupDataValue,
         IReadOnlyList<string> lifecycleEvents)
     {
         ContractService = contractService;
@@ -135,6 +146,7 @@ public sealed class ScenarioResult
         ServiceDisposedBeforeDispose = serviceDisposedBeforeDispose;
         ServiceDisposedAfterDispose = serviceDisposedAfterDispose;
         ExternalServiceDisposedAfterDispose = externalServiceDisposedAfterDispose;
+        ExternalStartupDataValue = externalStartupDataValue;
         LifecycleEvents = lifecycleEvents;
     }
 
@@ -167,6 +179,11 @@ public sealed class ScenarioResult
     /// Gets whether the external service was disposed after container disposal.
     /// </summary>
     public bool ExternalServiceDisposedAfterDispose { get; }
+
+    /// <summary>
+    /// Gets the startup data the external provider read during initialization.
+    /// </summary>
+    public string? ExternalStartupDataValue { get; }
 
     /// <summary>
     /// Gets the ordered lifecycle events observed by the scenario.

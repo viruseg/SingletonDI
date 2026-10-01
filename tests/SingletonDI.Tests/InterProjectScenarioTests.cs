@@ -26,6 +26,14 @@ public sealed class InterProjectScenarioTests
     }
 
     [Fact]
+    public async Task StartupDataPassedByTheRootReachesAProviderInAnotherAssembly()
+    {
+        var scenario = await ProcessScenarioRunner.RunAsync();
+
+        Assert.Equal("hello-from-root", scenario.ExternalStartupDataValue);
+    }
+
+    [Fact]
     public async Task RootResolvesContractAndConcreteProviderAndDisposesInOrder()
     {
         string[] expectedLifecycleOrder =
