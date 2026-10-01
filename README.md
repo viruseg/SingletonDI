@@ -373,7 +373,7 @@ When `InitializeAsync` returns, the [startup data](#startup-data) handed to the 
 
 When shutdown handlers are enabled, `Ctrl+C`/`SIGINT`, `SIGTERM`, and `SIGQUIT` cancel default termination, await one disposal operation, and then exit with codes `130`, `143`, and `131` respectively. Repeated signals do not start another disposal. On a POSIX platform `Ctrl+C` is handled by the signal registration alone, so one interrupt starts one disposal. Subscribing the handlers can fail on a host that does not allow it; initialization still succeeds and the container stays usable, but shutdown then depends on an explicit `DisposeAsync`. `ProcessExit` is best-effort because the host may terminate the process before asynchronous cleanup finishes; await `SingletonDIInitializer.DisposeAsync()` explicitly when cleanup must be guaranteed.
 
-Ordinary access to a generated property or hidden host resolution before successful initialization and outside the active initialization context throws `InvalidOperationException`. During the active initialization context, a provider factory or constructor may resolve already-created dependencies; the SampleApp uses this pattern in provider constructors.
+Ordinary access to a generated property or hidden host resolution before successful initialization and outside the active initialization context throws `InvalidOperationException`. After disposal it throws an exception that says the container was disposed, because disposal is terminal and the two situations are not the same. During the active initialization context, a provider factory or constructor may resolve already-created dependencies; the SampleApp uses this pattern in provider constructors.
 
 **Examples:**
 

@@ -177,9 +177,7 @@ internal sealed class ServiceRegistry
                                                   ReferenceEquals(initializationScope.Graph, _graph);
             if (_graph is null || (!_state.Equals(LifecycleState.Initialized) && !canResolveDuringInitialization))
             {
-                throw new InvalidOperationException(
-                    "Singleton container has not been initialized. " +
-                    "Call SingletonDIInitializer.InitializeAsync() before accessing singletons.");
+                throw NotResolvableException();
             }
 
             if (!_registrations.TryGetValue(typeof(T), out var registration))
@@ -344,6 +342,19 @@ internal sealed class ServiceRegistry
             throw new InvalidOperationException(
                 "Lifecycle operations cannot be called from provider callbacks.");
         }
+    }
+
+    private InvalidOperationException NotResolvableException()
+    {
+        // Disposal is terminal, so "not initialized yet" and "already disposed" are two different
+        // situations for the caller and must not read the same.
+        return _state is LifecycleState.Disposing or LifecycleState.Disposed
+            ? new InvalidOperationException(
+                "The singleton container has been disposed. Its providers were released when disposal " +
+                "completed.")
+            : new InvalidOperationException(
+                "Singleton container has not been initialized. " +
+                "Call SingletonDIInitializer.InitializeAsync() before accessing singletons.");
     }
 
     private static InvalidOperationException RepeatInitializationException(LifecycleState state)

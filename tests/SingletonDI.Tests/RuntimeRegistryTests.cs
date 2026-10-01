@@ -323,7 +323,7 @@ public sealed class RuntimeRegistryTests
         Assert.Equal(1, successfulDisposeCount);
         var resolveException = Assert.Throws<InvalidOperationException>(
             () => registry.Resolve<IFailingDisposable>());
-        Assert.Contains("InitializeAsync", resolveException.Message);
+        Assert.Contains("disposed", resolveException.Message, StringComparison.OrdinalIgnoreCase);
 
         await registry.DisposeAsync();
         Assert.Equal(1, successfulDisposeCount);
@@ -941,7 +941,9 @@ public sealed class RuntimeRegistryTests
 
         Assert.Equal("The singleton container has already been initialized.", exception.Message);
         Assert.Equal(1, createCount);
-        Assert.Throws<InvalidOperationException>(() => registry.Resolve<IQueuedService>());
+        var resolveException = Assert.Throws<InvalidOperationException>(
+            () => registry.Resolve<IQueuedService>());
+        Assert.Contains("disposed", resolveException.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private interface ICleanupLevelOne
