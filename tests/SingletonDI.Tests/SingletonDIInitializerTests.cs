@@ -468,8 +468,222 @@ public sealed class SingletonDIInitializerTests
     }
 
     // Registrations survive ResetForTesting because a generated module fills them once per process,
-// so a provider whose initializer fails has to be armed only while the test that wants it runs.
+    // so a provider that reads startup data or fails on purpose is registered once and armed only
+    // while the test that wants it runs.
     private static int _retryFailureArmed;
+    private static int _probeRegistered;
+    private static int _probeReadsStartupData;
+    private static int _probeInitializerFailure;
+    private static string? _valueSeenInFactory;
+    private static string? _valueSeenInInitializer;
+
+    private static void EnsureStartupDataProbe()
+    {
+        if (Interlocked.Exchange(ref _probeRegistered, 1) != 0)
+        {
+            return;
+        }
+
+        __SingletonDIHost__.RegisterProvider<IStartupDataProbeService, StartupDataProbeService>(
+            static () => new StartupDataProbeService(),
+            Array.Empty<Type>(),
+            async probe => await probe.InitializeAsync(),
+            null,
+            null);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_LetsAProviderReadStartupDataFromItsFactoryAndInitializer()
+    {
+        await TestGate.WaitAsync();
+
+        try
+        {
+            __SingletonDIHost__.ResetForTesting();
+            EnsureStartupDataProbe();
+            Volatile.Write(ref _probeReadsStartupData, 1);
+            SingletonDIStartupData.Set("connection", "server=db");
+
+            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+
+            Assert.NotNull(SingletonDIInitializer.Resolve<IStartupDataProbeService>());
+            Assert.Equal("server=db", _valueSeenInFactory);
+            Assert.Equal("server=db", _valueSeenInInitializer);
+        }
+        finally
+        {
+            Volatile.Write(ref _probeReadsStartupData, 0);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            __SingletonDIHost__.ResetForTesting();
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ReleasesStartupDataAndDisposesItsValuesWhenItCompletes()
+    {
+        await TestGate.WaitAsync();
+        var synchronous = new StartupDataDisposable();
+        var asynchronous = new StartupDataAsyncDisposable();
+
+        try
+        {
+            __SingletonDIHost__.ResetForTesting();
+            EnsureStartupDataProbe();
+            SingletonDIStartupData.Set("sync", synchronous);
+            SingletonDIStartupData.Set("async", asynchronous);
+            SingletonDIStartupData.Set("plain", 42);
+
+            await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
+
+            Assert.Equal(1, synchronous.DisposeCount);
+            Assert.Equal(1, asynchronous.AsyncDisposeCount);
+            Assert.Equal(0, asynchronous.DisposeCount);
+            Assert.Throws<InvalidOperationException>(() => SingletonDIStartupData.Get<int>("plain"));
+        }
+        finally
+        {
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            __SingletonDIHost__.ResetForTesting();
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsync_ReleasesStartupDataWhenInitializationFails()
+    {
+        await TestGate.WaitAsync();
+        var startupValue = new StartupDataDisposable();
+
+        try
+        {
+            __SingletonDIHost__.ResetForTesting();
+            EnsureStartupDataProbe();
+            SingletonDIStartupData.Set("value", startupValue);
+            Volatile.Write(ref _probeInitializerFailure, 1);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false));
+
+            Assert.Contains("failed to initialize", exception.Message);
+            Assert.Equal(1, startupValue.DisposeCount);
+            Assert.Throws<InvalidOperationException>(
+                () => SingletonDIStartupData.Get<StartupDataDisposable>("value"));
+        }
+        finally
+        {
+            Volatile.Write(ref _probeInitializerFailure, 0);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            __SingletonDIHost__.ResetForTesting();
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsync_KeepsTheInitializationFailureWhenReleasingStartupDataFails()
+    {
+        await TestGate.WaitAsync();
+
+        try
+        {
+            __SingletonDIHost__.ResetForTesting();
+            EnsureStartupDataProbe();
+            SingletonDIStartupData.Set("value", new StartupDataDisposable(failOnDispose: true));
+            Volatile.Write(ref _probeInitializerFailure, 1);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false));
+
+            Assert.Contains("failed to initialize", exception.Message);
+            var cleanupFailure = Assert.IsType<InvalidOperationException>(
+                exception.Data[SingletonDIStartupData.CleanupFailureKey]);
+            Assert.Contains("boom", cleanupFailure.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Volatile.Write(ref _probeInitializerFailure, 0);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            __SingletonDIHost__.ResetForTesting();
+            TestGate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsync_RejectsSetWhileProviderCodeIsRunning()
+    {
+        await TestGate.WaitAsync();
+        var factoryEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFactory = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            __SingletonDIHost__.ResetForTesting();
+            __SingletonDIHost__.RegisterProvider<ILateWriteFactoryService, LateWriteFactoryService>(
+                () =>
+                {
+                    factoryEntered.TrySetResult(true);
+                    releaseFactory.Task.GetAwaiter().GetResult();
+                    return new LateWriteFactoryService();
+                },
+                Array.Empty<Type>(),
+                null,
+                null,
+                null);
+
+            var initialization = Task.Run(
+                () => SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false));
+            await factoryEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => SingletonDIStartupData.Set("late", 1));
+            Assert.Contains("initialization", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+            releaseFactory.TrySetResult(true);
+            await initialization.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            releaseFactory.TrySetResult(true);
+            try
+            {
+                await SingletonDIInitializer.DisposeAsync();
+            }
+            catch
+            {
+            }
+
+            __SingletonDIHost__.ResetForTesting();
+            TestGate.Release();
+        }
+    }
 
     [Fact]
     public async Task InitializeAsync_FailedInitializationCannotBeRetried()
@@ -812,5 +1026,86 @@ public sealed class SingletonDIInitializerTests
 
     private sealed class RetryPublicService : IRetryPublicService
     {
+    }
+
+    private interface IStartupDataProbeService
+    {
+    }
+
+    private sealed class StartupDataProbeService : IStartupDataProbeService
+    {
+        internal StartupDataProbeService()
+        {
+            // A factory reads the data before the graph has finished creating instances, which is
+            // exactly the case the channel exists for. A registration outlives a single test, so
+            // the read only happens while a test armed it.
+            if (Volatile.Read(ref _probeReadsStartupData) == 0)
+            {
+                return;
+            }
+
+            _valueSeenInFactory = SingletonDIStartupData.Get<string>("connection");
+        }
+
+        internal async Task InitializeAsync()
+        {
+            await Task.Yield();
+            if (Volatile.Read(ref _probeReadsStartupData) != 0)
+            {
+                _valueSeenInInitializer = SingletonDIStartupData.Get<string>("connection");
+            }
+
+            if (Volatile.Read(ref _probeInitializerFailure) != 0)
+            {
+                throw new InvalidOperationException("initializer failed");
+            }
+        }
+    }
+
+    private interface ILateWriteFactoryService
+    {
+    }
+
+    private sealed class LateWriteFactoryService : ILateWriteFactoryService
+    {
+    }
+
+    private sealed class StartupDataDisposable : IDisposable
+    {
+        private readonly bool _failOnDispose;
+
+        internal StartupDataDisposable(bool failOnDispose = false)
+        {
+            _failOnDispose = failOnDispose;
+        }
+
+        internal int DisposeCount { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+            if (_failOnDispose)
+            {
+                throw new InvalidOperationException("boom");
+            }
+        }
+    }
+
+    private sealed class StartupDataAsyncDisposable : IDisposable, IAsyncDisposable
+    {
+        internal int DisposeCount { get; private set; }
+
+        internal int AsyncDisposeCount { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            AsyncDisposeCount++;
+            return default;
+        }
     }
 }

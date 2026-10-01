@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 
 namespace SingletonDI.Generated;
@@ -33,7 +34,9 @@ public static class SingletonDIInitializer
     /// </param>
     /// <returns>
     /// A task that completes after every provider instance has been created and every
-    /// <c>InitializeAsync</c> method returning <see cref="Task"/> or <see cref="ValueTask"/> has completed.
+    /// <c>InitializeAsync</c> method returning <see cref="Task"/> or <see cref="ValueTask"/> has
+    /// completed, and after the startup data has been released. Whether the call succeeds or fails,
+    /// nothing is left in <see cref="SingletonDIStartupData"/> once this task completes.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// The container has already been initialized, an initialization is already in progress, or an
@@ -49,6 +52,10 @@ public static class SingletonDIInitializer
         bool registerShutdownHandlers = true,
         CancellationToken cancellationToken = default)
     {
+        // Before the claim, so a rejected repeat can never release the data an accepted
+        // initialization is still reading.
+        SingletonDIStartupData.Seal();
+
         long lifecycleVersion;
 
         lock (Sync)
@@ -66,7 +73,7 @@ public static class SingletonDIInitializer
 
         if (!registerShutdownHandlers)
         {
-            return initializationTask;
+            return ReleaseStartupDataWhenCompletedAsync(initializationTask);
         }
 
         lock (Sync)
@@ -79,10 +86,50 @@ public static class SingletonDIInitializer
 
         if (initializationTask.Status == TaskStatus.RanToCompletion)
         {
-            return initializationTask;
+            return ReleaseStartupDataWhenCompletedAsync(initializationTask);
         }
 
-        return RegisterShutdownHandlersAfterInitializationAsync(initializationTask, lifecycleVersion);
+        return ReleaseStartupDataWhenCompletedAsync(
+            RegisterShutdownHandlersAfterInitializationAsync(initializationTask, lifecycleVersion));
+    }
+
+    /// <summary>
+    /// Releases the startup data once the initialization it belongs to has finished, whatever the
+    /// outcome, so a provider cannot read it after the container has disposed of it.
+    /// </summary>
+    private static async Task ReleaseStartupDataWhenCompletedAsync(Task initializationTask)
+    {
+        Exception? initializationFailure = null;
+
+        try
+        {
+            await initializationTask.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            initializationFailure = exception;
+        }
+
+        try
+        {
+            await SingletonDIStartupData.ClearAndDisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception cleanupFailure)
+        {
+            // The application is going down either way, so the initialization failure stays what
+            // propagates and the release failure is recorded where it can still be found.
+            if (initializationFailure is null)
+            {
+                throw;
+            }
+
+            initializationFailure.Data[SingletonDIStartupData.CleanupFailureKey] = cleanupFailure;
+        }
+
+        if (initializationFailure is not null)
+        {
+            ExceptionDispatchInfo.Capture(initializationFailure).Throw();
+        }
     }
 
     /// <summary>

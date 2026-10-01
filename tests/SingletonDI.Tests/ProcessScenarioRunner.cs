@@ -1,5 +1,3 @@
-using SingletonDI.InterProjectFixtures.RootApp;
-
 namespace SingletonDI.Tests;
 
 internal sealed record ProcessScenarioResult(
@@ -11,10 +9,21 @@ internal sealed record ProcessScenarioResult(
 
 internal static class ProcessScenarioRunner
 {
+    private const string FixtureAssemblyName = "RootApp.dll";
+
     internal static async Task<ProcessScenarioResult> RunAsync()
     {
-        var assemblyPath = typeof(Program).Assembly.Location;
-        var workingDirectory = Path.GetDirectoryName(assemblyPath)!;
+        // The fixture is located by file name rather than through typeof(Program). Touching the type
+        // would run the composition root's module initializer inside the test host, where the
+        // process-wide container may already be initialized or disposed by an earlier test.
+        var workingDirectory = AppContext.BaseDirectory;
+        var assemblyPath = Path.Combine(workingDirectory, FixtureAssemblyName);
+        if (!File.Exists(assemblyPath))
+        {
+            throw new FileNotFoundException(
+                $"{FixtureAssemblyName} was not found next to the test assembly.", assemblyPath);
+        }
+
         var result = await DotnetProcessRunner.RunAsync(
             workingDirectory,
             [assemblyPath],
