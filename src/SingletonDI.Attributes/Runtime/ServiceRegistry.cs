@@ -14,7 +14,6 @@ internal sealed class ServiceRegistry
     private readonly List<ProviderRegistration> _uncommittedRegistrations = new();
     private Task? _initializationTask;
     private Task? _disposeTask;
-    private Task? _queuedInitializationTask;
     private ServiceGraph? _graph;
     private LifecycleState _state;
 
@@ -48,7 +47,7 @@ internal sealed class ServiceRegistry
 
         lock (_sync)
         {
-            if (_state is LifecycleState.Initializing or LifecycleState.Initialized or LifecycleState.Disposing)
+            if (_state != LifecycleState.NotInitialized)
             {
                 throw new InvalidOperationException(
                     "Providers cannot be registered after initialization has started.");
@@ -107,67 +106,66 @@ internal sealed class ServiceRegistry
         // Rejected before the graph is built, so a cancelled request never leaves providers created
         // behind an initialization the caller no longer wants.
         cancellationToken.ThrowIfCancellationRequested();
-        Task task;
-        TaskCompletionSource<object?>? startCompletion = null;
-        Task? queuedDisposalTask = null;
-        ServiceGraph? graph = null;
+        TaskCompletionSource<object?> startCompletion;
+        ServiceGraph graph;
 
         lock (_sync)
         {
             ThrowIfProviderCallbackIsActive();
-            switch (_state)
+
+            // A singleton exists for the lifetime of the application, so the one initialization is
+            // the only one. Rejecting the repeat at the call site rather than handing back a task
+            // keeps a caller from believing a second graph is on its way.
+            if (_state != LifecycleState.NotInitialized)
             {
-                case LifecycleState.Initialized:
-                    return Task.CompletedTask;
-                case LifecycleState.Initializing:
-                    return _initializationTask!;
-                case LifecycleState.Disposing:
-                    if (_queuedInitializationTask is null)
-                    {
-                        startCompletion = new TaskCompletionSource<object?>(
-                            TaskCreationOptions.RunContinuationsAsynchronously);
-                        _queuedInitializationTask = startCompletion.Task;
-                        queuedDisposalTask = _disposeTask!;
-                    }
+                throw RepeatInitializationException(_state);
+            }
 
-                    task = _queuedInitializationTask!;
-                    break;
-                default:
-                    _state = LifecycleState.Initializing;
-                    _uncommittedRegistrations.Clear();
-                    var completion = new TaskCompletionSource<object?>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
-                    _initializationTask = completion.Task;
+            _state = LifecycleState.Initializing;
+            _uncommittedRegistrations.Clear();
+            var completion = new TaskCompletionSource<object?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _initializationTask = completion.Task;
+            startCompletion = completion;
 
-                    try
-                    {
-                        graph = new ServiceGraph(_orderedRegistrations, _registrations);
-                        _graph = graph;
-                        startCompletion = completion;
-                    }
-                    catch (Exception exception)
-                    {
-                        _state = LifecycleState.NotInitialized;
-                        _initializationTask = null;
-                        completion.TrySetException(exception);
-                    }
-
-                    task = completion.Task;
-                    break;
+            try
+            {
+                graph = new ServiceGraph(_orderedRegistrations, _registrations);
+                _graph = graph;
+            }
+            catch (Exception exception)
+            {
+                // An invalid graph is reported through the returned task, the way it always has
+                // been, so the caller sees it at the await it already has.
+                _state = LifecycleState.InitializationFailed;
+                _initializationTask = null;
+                completion.TrySetException(exception);
+                return completion.Task;
             }
         }
 
-        if (graph is not null)
-        {
-            _ = InitializeCoreAsync(graph, startCompletion!);
-        }
+        _ = InitializeCoreAsync(graph, startCompletion);
+        return startCompletion.Task;
+    }
 
-        if (queuedDisposalTask is not null)
+    /// <summary>
+    /// Returns the container to its pre-initialization state so a later test can initialize it
+    /// again.
+    /// </summary>
+    /// <remarks>
+    /// Registrations survive on purpose: a generated module fills them once per process from its
+    /// module initializer, and clearing them would leave every later test with an empty graph.
+    /// </remarks>
+    internal void ResetForTesting()
+    {
+        lock (_sync)
         {
-            _ = CompleteQueuedInitializationAsync(queuedDisposalTask, startCompletion!);
+            _state = LifecycleState.NotInitialized;
+            _graph = null;
+            _initializationTask = null;
+            _disposeTask = null;
+            _uncommittedRegistrations.Clear();
         }
-
-        return task;
     }
 
     internal T Resolve<T>()
@@ -207,7 +205,11 @@ internal sealed class ServiceRegistry
                 return new ValueTask(_disposeTask!);
             }
 
-            if (_state == LifecycleState.NotInitialized)
+            // Disposal is idempotent and safe before anything exists, which keeps a shutdown path
+            // that runs regardless of what the application managed to start from having to know
+            // whether initialization happened.
+            if (_state is LifecycleState.NotInitialized or LifecycleState.Disposed or
+                LifecycleState.InitializationFailed)
             {
                 return default;
             }
@@ -252,7 +254,9 @@ internal sealed class ServiceRegistry
                 _graph = null;
                 if (_state == LifecycleState.Initializing)
                 {
-                    _state = LifecycleState.NotInitialized;
+                    // Terminal: the graph disposed every instance it had created, and a second
+                    // attempt would build a second graph over the same registrations.
+                    _state = LifecycleState.InitializationFailed;
                     _initializationTask = null;
                 }
             }
@@ -264,22 +268,6 @@ internal sealed class ServiceRegistry
             callbackScope.IsActive = false;
             _providerCallbackContext.Value = null;
             _initializationContext.Value = null;
-        }
-    }
-
-    private async Task CompleteQueuedInitializationAsync(
-        Task disposalTask,
-        TaskCompletionSource<object?> completion)
-    {
-        try
-        {
-            await disposalTask.ConfigureAwait(false);
-            await InitializeAsync().ConfigureAwait(false);
-            completion.TrySetResult(null);
-        }
-        catch (Exception exception)
-        {
-            completion.TrySetException(exception);
         }
     }
 
@@ -324,10 +312,9 @@ internal sealed class ServiceRegistry
 
             lock (_sync)
             {
-                _state = LifecycleState.NotInitialized;
+                _state = LifecycleState.Disposed;
                 _initializationTask = null;
                 _disposeTask = null;
-                _queuedInitializationTask = null;
             }
 
             completion.TrySetResult(null);
@@ -336,10 +323,9 @@ internal sealed class ServiceRegistry
         {
             lock (_sync)
             {
-                _state = LifecycleState.NotInitialized;
+                _state = LifecycleState.Disposed;
                 _initializationTask = null;
                 _disposeTask = null;
-                _queuedInitializationTask = null;
             }
 
             completion.TrySetException(exception);
@@ -358,6 +344,19 @@ internal sealed class ServiceRegistry
             throw new InvalidOperationException(
                 "Lifecycle operations cannot be called from provider callbacks.");
         }
+    }
+
+    private static InvalidOperationException RepeatInitializationException(LifecycleState state)
+    {
+        return state switch
+        {
+            LifecycleState.Initializing => new InvalidOperationException(
+                "Initialization is already in progress."),
+            LifecycleState.InitializationFailed => new InvalidOperationException(
+                "Initialization failed and cannot be retried."),
+            _ => new InvalidOperationException(
+                "The singleton container has already been initialized.")
+        };
     }
 
     private static InvalidOperationException DuplicateKeyException(
@@ -391,6 +390,8 @@ internal sealed class ServiceRegistry
         NotInitialized,
         Initializing,
         Initialized,
-        Disposing
+        Disposing,
+        Disposed,
+        InitializationFailed
     }
 }

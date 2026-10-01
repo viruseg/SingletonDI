@@ -89,77 +89,6 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
-    public async Task Registry_RejectsResolveFromPreviousInitializationGeneration()
-    {
-        var releaseStaleResolve = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var staleResolveSucceeded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var currentInitializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseCurrentInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var spawnerInitializationCount = 0;
-        var blockerInitializationCount = 0;
-        Task? staleResolveTask = null;
-        var registry = new ServiceRegistry();
-
-        registry.RegisterProvider<IStaleContextSpawner, StaleContextSpawner>(
-            static () => new StaleContextSpawner(),
-            Array.Empty<Type>(),
-            async _ =>
-            {
-                if (Interlocked.Increment(ref spawnerInitializationCount) == 1)
-                {
-                    staleResolveTask = Task.Run(
-                        async () =>
-                        {
-                            await releaseStaleResolve.Task;
-                            try
-                            {
-                                registry.Resolve<IStaleContextTarget>();
-                                staleResolveSucceeded.TrySetResult(true);
-                            }
-                            catch (InvalidOperationException)
-                            {
-                                staleResolveSucceeded.TrySetResult(false);
-                            }
-                        });
-                }
-            },
-            null,
-            null);
-        registry.RegisterProvider<IStaleContextTarget, StaleContextTarget>(
-            static () => new StaleContextTarget(),
-            Array.Empty<Type>(),
-            null,
-            null,
-            null);
-        registry.RegisterProvider<ICurrentGenerationBlocker, CurrentGenerationBlocker>(
-            static () => new CurrentGenerationBlocker(),
-            Array.Empty<Type>(),
-            async _ =>
-            {
-                if (Interlocked.Increment(ref blockerInitializationCount) == 2)
-                {
-                    currentInitializerStarted.TrySetResult(true);
-                    await releaseCurrentInitializer.Task;
-                }
-            },
-            null,
-            null);
-
-        await registry.InitializeAsync();
-        await registry.DisposeAsync();
-        var currentInitialization = registry.InitializeAsync();
-        await currentInitializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        releaseStaleResolve.TrySetResult(true);
-        Assert.False(await staleResolveSucceeded.Task.WaitAsync(TimeSpan.FromSeconds(5)));
-        Assert.NotNull(staleResolveTask);
-
-        releaseCurrentInitializer.TrySetResult(true);
-        await currentInitialization;
-        await registry.DisposeAsync();
-    }
-
-    [Fact]
     public async Task Registry_AllowsFactoryToResolveDependencyDuringInitialization()
     {
         var events = new List<string>();
@@ -695,20 +624,19 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
-    public async Task Registry_CanRetryAfterFailedInitialization()
+    public async Task Registry_FailedInitializationIsTerminal()
     {
+        // A singleton exists for the lifetime of the application. An initialization that failed
+        // already disposed the instances it had created, and a second attempt would build a second
+        // graph over the same registrations, so the failure ends the container rather than waiting
+        // for a retry.
         var attempts = 0;
         var registry = new ServiceRegistry();
         registry.RegisterProvider<IRetryService, RetryService>(
             () =>
             {
                 attempts++;
-                if (attempts == 1)
-                {
-                    throw new InvalidOperationException("first attempt");
-                }
-
-                return new RetryService();
+                throw new InvalidOperationException("first attempt");
             },
             Array.Empty<Type>(),
             null,
@@ -716,10 +644,11 @@ public sealed class RuntimeRegistryTests
             null);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => registry.InitializeAsync());
-        await registry.InitializeAsync();
+        var exception = Record.Exception(() => { _ = registry.InitializeAsync(); });
+        Assert.IsType<InvalidOperationException>(exception);
 
-        Assert.Equal(2, attempts);
-        Assert.IsType<RetryService>(registry.Resolve<IRetryService>());
+        Assert.Equal("Initialization failed and cannot be retried.", exception.Message);
+        Assert.Equal(1, attempts);
     }
 
     [Fact]
@@ -747,7 +676,7 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
-    public async Task Registry_AllowsRegistrationAfterFailedInitialization()
+    public async Task Registry_RejectsRegistrationAfterFailedInitialization()
     {
         var registry = new ServiceRegistry();
         registry.RegisterProvider<IMissingDependencyConsumer, MissingDependencyConsumer>(
@@ -759,20 +688,19 @@ public sealed class RuntimeRegistryTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => registry.InitializeAsync());
 
-        registry.RegisterProvider<IMissingDependency, MissingDependency>(
-            static () => new MissingDependency(),
-            Array.Empty<Type>(),
-            null,
-            null,
-            null);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            registry.RegisterProvider<IMissingDependency, MissingDependency>(
+                static () => new MissingDependency(),
+                Array.Empty<Type>(),
+                null,
+                null,
+                null));
 
-        await registry.InitializeAsync();
-
-        Assert.IsType<MissingDependencyConsumer>(registry.Resolve<IMissingDependencyConsumer>());
+        Assert.Contains("initializ", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Registry_FailedInitializationCleansEveryCreatedInstanceInReverseOrderAndCanRetry()
+    public async Task Registry_FailedInitializationCleansEveryCreatedInstanceInReverseOrderAndStaysTerminal()
     {
         var events = new List<string>();
         var attempts = 0;
@@ -822,9 +750,22 @@ public sealed class RuntimeRegistryTests
 
         await registry.DisposeAsync();
         await registry.DisposeAsync();
-        await registry.InitializeAsync();
+        var retryException = Record.Exception(() => { _ = registry.InitializeAsync(); });
+        Assert.IsType<InvalidOperationException>(retryException);
 
-        Assert.Equal(2, attempts);
+        Assert.Equal("Initialization failed and cannot be retried.", retryException.Message);
+        Assert.Equal(1, attempts);
+        Assert.Equal(
+            new[]
+            {
+                "create:LevelOne",
+                "create:LevelTwo",
+                "create:LevelThree",
+                "dispose:LevelThree",
+                "dispose:LevelTwo",
+                "dispose:LevelOne"
+            },
+            events);
         await registry.DisposeAsync();
     }
 
@@ -892,7 +833,58 @@ public sealed class RuntimeRegistryTests
     }
 
     [Fact]
-    public async Task Registry_ReinitializationWaitsForInProgressDisposal()
+    public async Task Registry_RejectsInitializationWhileItIsAlreadyRunning()
+    {
+        // A second call while the first is still running would either duplicate the graph or hand
+        // back a task nobody is waiting for, so it is rejected at the call site instead.
+        var initializerStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitializer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IQueuedService, QueuedService>(
+            static () => new QueuedService(),
+            Array.Empty<Type>(),
+            async _ =>
+            {
+                initializerStarted.TrySetResult(true);
+                await releaseInitializer.Task;
+            },
+            null,
+            null);
+
+        var initialization = registry.InitializeAsync();
+        await initializerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var exception = Record.Exception(() => { _ = registry.InitializeAsync(); });
+        Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Equal("Initialization is already in progress.", exception.Message);
+
+        releaseInitializer.TrySetResult(true);
+        await initialization;
+        await registry.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Registry_RejectsInitializationAfterSuccessfulInitialization()
+    {
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IQueuedService, QueuedService>(
+            static () => new QueuedService(),
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+
+        await registry.InitializeAsync();
+        var exception = Record.Exception(() => { _ = registry.InitializeAsync(); });
+        Assert.IsType<InvalidOperationException>(exception);
+
+        Assert.Equal("The singleton container has already been initialized.", exception.Message);
+        Assert.IsType<QueuedService>(registry.Resolve<IQueuedService>());
+        await registry.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Registry_RejectsInitializationDuringDisposal()
     {
         var disposeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseDispose = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -916,40 +908,40 @@ public sealed class RuntimeRegistryTests
         await registry.InitializeAsync();
         var disposal = registry.DisposeAsync().AsTask();
         await disposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var reinitialization = registry.InitializeAsync();
+        var exception = Record.Exception(() => { _ = registry.InitializeAsync(); });
+        Assert.IsType<InvalidOperationException>(exception);
 
-        Assert.False(reinitialization.IsCompleted);
+        Assert.Equal("The singleton container has already been initialized.", exception.Message);
 
         releaseDispose.TrySetResult(true);
         await disposal;
-        await reinitialization;
+        Assert.Equal(1, createCount);
+    }
 
-        Assert.Equal(2, createCount);
+    [Fact]
+    public async Task Registry_RejectsInitializationAfterDisposal()
+    {
+        var createCount = 0;
+        var registry = new ServiceRegistry();
+        registry.RegisterProvider<IQueuedService, QueuedService>(
+            () =>
+            {
+                createCount++;
+                return new QueuedService();
+            },
+            Array.Empty<Type>(),
+            null,
+            null,
+            null);
+
+        await registry.InitializeAsync();
         await registry.DisposeAsync();
-    }
+        var exception = Record.Exception(() => { _ = registry.InitializeAsync(); });
+        Assert.IsType<InvalidOperationException>(exception);
 
-    private interface IStaleContextSpawner
-    {
-    }
-
-    private sealed class StaleContextSpawner : IStaleContextSpawner
-    {
-    }
-
-    private interface IStaleContextTarget
-    {
-    }
-
-    private sealed class StaleContextTarget : IStaleContextTarget
-    {
-    }
-
-    private interface ICurrentGenerationBlocker
-    {
-    }
-
-    private sealed class CurrentGenerationBlocker : ICurrentGenerationBlocker
-    {
+        Assert.Equal("The singleton container has already been initialized.", exception.Message);
+        Assert.Equal(1, createCount);
+        Assert.Throws<InvalidOperationException>(() => registry.Resolve<IQueuedService>());
     }
 
     private interface ICleanupLevelOne
