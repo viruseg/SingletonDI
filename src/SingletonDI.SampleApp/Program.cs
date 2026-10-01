@@ -15,12 +15,17 @@ public sealed class ConfigService : IDisposable
 {
     private bool _disposed;
 
-    public string ConnectionString { get; } = "Server=localhost;Database=SampleDb";
-
     public ConfigService()
     {
+        // The startup data is a hand-off from the code that starts the application to a provider
+        // that cannot construct the value itself. It is readable from the constructor as well as
+        // from InitializeAsync, and the container releases it once initialization completes.
+        ConnectionString = SingletonDIStartupData.Get<string>("connection-string");
         Console.WriteLine("[INIT] Level 0: ConfigService initializing...");
+        Console.WriteLine($"  -> Using connection: {ConnectionString}");
     }
+
+    public string ConnectionString { get; }
 
     public void Dispose()
     {
@@ -281,6 +286,13 @@ public static class Program
             Console.WriteLine("========================================\n");
 
             Console.WriteLine("--- INITIALIZATION PHASE ---");
+
+            // Hand the connection string to the providers that need it. Writing is refused from the
+            // first InitializeAsync call on, and everything written here is released when that call
+            // completes.
+            var connectionString = args.Length > 0 ? args[0] : "Server=localhost;Database=SampleDb";
+            SingletonDIStartupData.Set("connection-string", connectionString);
+            Console.WriteLine($"[SET] connection-string = {connectionString}");
 
             // Initialize all singletons in dependency order
             await SingletonDIInitializer.InitializeAsync();

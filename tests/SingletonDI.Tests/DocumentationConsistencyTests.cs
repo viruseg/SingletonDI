@@ -170,6 +170,36 @@ public sealed class DocumentationConsistencyTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void EveryReadmeDocumentsStartupDataAndASingleInitialization()
+    {
+        var root = FindRepositoryRoot();
+        // The generator has no say over this channel: a provider reads it with a plain static call.
+        // If a readme stops documenting it, the documented contract and the code diverge silently.
+        var removedClaims = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["README.md"] =
+            [
+                "reinitialization requested during disposal waits",
+                "so a later call can retry"
+            ],
+            ["README.RU.md"] =
+            [
+                "повторная инициализация, запрошенная во время disposal, ждёт его завершения",
+                "сохраняется для следующей попытки"
+            ]
+        };
+
+        foreach (var (file, claims) in removedClaims)
+        {
+            var text = File.ReadAllText(Path.Combine(root, file));
+
+            Assert.Contains("SingletonDIStartupData", text, StringComparison.Ordinal);
+            Assert.All(claims, claim =>
+                Assert.DoesNotContain(claim, text, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

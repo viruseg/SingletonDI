@@ -365,7 +365,11 @@ Initializes all singletons in the correct order (topological sorting by dependen
 
 **Returns:** `Task` that completes only after provider creation and all initializers finish.
 
-Provider instances are created level by level, with dependencies before dependents, before any `InitializeAsync` methods run. Initializers for providers in the same level then run in parallel. Both `Task` and `ValueTask` initializer return types are supported. Concurrent lifecycle calls are serialized with disposal: a reinitialization requested during disposal waits for disposal to finish and receives a new task, never the previous successful task. A failed initialization disposes every created instance in reverse dependency order, continues after individual disposer failures, clears state, and preserves the original initialization exception so a later call can retry. When the cleanup itself also fails, that failure is attached to the rethrown initialization exception under the `Data` key `SingletonDI.InitializationCleanupFailure`, which is the only place it can be observed, so an application that logs only `ex.Message` will not see it. Registering a new provider after initialization has started is rejected.
+Provider instances are created level by level, with dependencies before dependents, before any `InitializeAsync` methods run. Initializers for providers in the same level then run in parallel. Both `Task` and `ValueTask` initializer return types are supported.
+
+Initialization happens exactly once per process, because a singleton exists for the lifetime of the application. Any later call throws `InvalidOperationException` from the call itself rather than handing back a task: a call while the first is still running, a call after it completed, and a call after disposal are all rejected, and the message says which case it was. A failed initialization is terminal as well — it disposes every created instance in reverse dependency order, continues after individual disposer failures, and keeps the original exception. When the cleanup itself also fails, that failure is attached to the rethrown initialization exception under the `Data` key `SingletonDI.InitializationCleanupFailure`, which is the only place it can be observed, so an application that logs only `ex.Message` will not see it. Registering a new provider after initialization has started is rejected.
+
+When `InitializeAsync` returns, the [startup data](#startup-data) handed to the providers has been released: references are dropped and values that implement `IDisposable` or `IAsyncDisposable` are disposed. That happens on failure too, so nothing is left behind either way. A release failure while initialization is failing is attached to the initialization exception under the `Data` key `SingletonDI.StartupDataCleanupFailure`.
 
 When shutdown handlers are enabled, `Ctrl+C`/`SIGINT`, `SIGTERM`, and `SIGQUIT` cancel default termination, await one disposal operation, and then exit with codes `130`, `143`, and `131` respectively. Repeated signals do not start another disposal. On a POSIX platform `Ctrl+C` is handled by the signal registration alone, so one interrupt starts one disposal. Subscribing the handlers can fail on a host that does not allow it; initialization still succeeds and the container stays usable, but shutdown then depends on an explicit `DisposeAsync`. `ProcessExit` is best-effort because the host may terminate the process before asynchronous cleanup finishes; await `SingletonDIInitializer.DisposeAsync()` explicitly when cleanup must be guaranteed.
 
@@ -385,6 +389,50 @@ await SingletonDIInitializer.InitializeAsync(registerShutdownHandlers: false);
 // Explicit resource disposal call
 await SingletonDIInitializer.DisposeAsync();
 ```
+
+### Startup data
+
+```csharp
+public static class SingletonDIStartupData
+{
+    public static void Set<T>(string name, T value);
+    public static T Get<T>(string name);
+}
+```
+
+Some providers need a value that only the code starting the application knows: a configuration section read from a file, credentials from environment variables, a connection string from the command line. `SingletonDIStartupData` is the optional channel for handing such a value over. It is a static class in `SingletonDI.Generated`, it needs no attribute and no generator support, and a provider reads it with a plain call from its constructor or from `InitializeAsync`.
+
+```csharp
+// Anywhere before initialization, including from code that runs before the composition root.
+SingletonDIStartupData.Set("connection", "Host=db;Database=app");
+
+await SingletonDIInitializer.InitializeAsync();
+```
+
+```csharp
+[SingletonDIProvide]
+public sealed class DatabaseService : IDatabaseService
+{
+    private readonly string _connection;
+
+    public DatabaseService()
+    {
+        _connection = SingletonDIStartupData.Get<string>("connection");
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+}
+```
+
+**Contract:**
+- A name is unique. `Set` on a name that is already taken throws `InvalidOperationException`, whatever type the earlier call used, so one name means exactly one type.
+- `Get<T>` requires the same type argument as `Set<T>`. A base or derived type argument throws `InvalidCastException`, because a name that means whatever the reader asks for is not a contract. A name that was never set throws `KeyNotFoundException`.
+- A `null` name throws `ArgumentNullException`; an empty or blank name throws `ArgumentException`. A `null` value is stored like any other value, and a missing name is still reported as a missing name.
+- Writing stops at the first `InitializeAsync` call. A `Set` after that throws `InvalidOperationException`, whether or not the initialization has completed, so nothing can join an initialization that is already running.
+- Reading is safe from anywhere while the data exists, including from the parallel initializers of one dependency level.
+- When `InitializeAsync` completes, successfully or not, every value is released: references are dropped and each value that implements `IAsyncDisposable` or `IDisposable` is disposed. Reading afterwards throws `InvalidOperationException`. Cleanup continues after an individual failure; one release failure is rethrown as it is, several are reported as an `AggregateException`.
+
+**Ownership:** the container always disposes the values it holds. A provider that keeps a disposable value for longer than its own initialization must copy what it needs or build its own resource from it, otherwise the container disposes an object the provider is still using. A provider that wants a missing value or a wrong type should let the exception end the application rather than continue with a default, which is what `KeyNotFoundException` and `InvalidCastException` do here.
 
 ### DisposeAsync
 
