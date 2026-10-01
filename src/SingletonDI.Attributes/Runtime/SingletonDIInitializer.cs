@@ -168,6 +168,7 @@ public static class SingletonDIInitializer
             _shutdownManager = null;
         }
 
+        SingletonDIStartupData.ResetForTesting();
         Registry.ResetForTesting();
     }
 
