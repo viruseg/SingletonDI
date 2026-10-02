@@ -121,7 +121,8 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
             // Preserve the leading trivia (comments, XML docs) from the original constructor
             var leadingTrivia = existingParameterlessCtor.GetLeadingTrivia();
 
-            var newModifiers = AnnotateModifiers(MakePublicModifiers(existingParameterlessCtor.Modifiers));
+            var newModifiers = CodeFixFormatting.AnnotateFirstModifier(
+                MakePublicModifiers(existingParameterlessCtor.Modifiers));
 
             var newConstructor = existingParameterlessCtor
                 .WithModifiers(newModifiers)
@@ -159,17 +160,6 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
     /// Builds a public parameterless constructor for a type that has none.
     /// </summary>
     /// <remarks>
-    /// A type with a primary constructor requires the added constructor to initialize it, and
-    /// leaving that out makes the added line a compile error, so the fix would only trade DM0004 for
-    /// a compiler diagnostic. Each primary constructor parameter receives <c>default!</c>, which keeps
-    /// the provider constructible without inventing values for it. A record is assigned in the
-    /// constructor body instead, because a record also has a compiler-supplied copy constructor and
-    /// chaining to <c>this(default!)</c> is then ambiguous between the two.
-    /// </remarks>
-    /// <summary>
-    /// Builds a public parameterless constructor for a type that has none.
-    /// </summary>
-    /// <remarks>
     /// A type with a primary constructor requires every constructor it declares to chain to that
     /// constructor, and leaving the initializer out makes the added line a compile error, so the fix
     /// would only trade DM0004 for a compiler diagnostic. Each primary constructor parameter
@@ -194,9 +184,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
 
         if (primaryParameterList is not { Parameters.Count: > 0 })
         {
-            return constructor
-                .WithBody(SyntaxFactory.Block())
-                .WithAdditionalAnnotations(Formatter.Annotation);
+            return AnnotateGenerated(constructor.WithBody(SyntaxFactory.Block()));
         }
 
         var arguments = primaryParameterList.Parameters
@@ -204,12 +192,26 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
                 SyntaxFactory.ParseExpression(FormatDefaultArgument(parameter))))
             .ToList();
 
-        return constructor
+        return AnnotateGenerated(constructor
             .WithInitializer(SyntaxFactory.ConstructorInitializer(
                 SyntaxKind.ThisConstructorInitializer,
                 SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments))))
-            .WithBody(SyntaxFactory.Block())
-            .WithAdditionalAnnotations(Formatter.Annotation);
+            .WithBody(SyntaxFactory.Block()));
+    }
+
+    /// <summary>
+    /// Marks a node the fix built from scratch for formatting.
+    /// </summary>
+    /// <remarks>
+    /// The formatter re-lays out everything inside an annotated range, so this is only sound while
+    /// the annotated node contains nothing but generated tokens - which a node built here always does,
+    /// unlike the declaration it gets inserted into. Should that ever stop holding, the annotation
+    /// would start rewriting the user's formatting, so the invariant belongs next to the annotation
+    /// rather than in a comment elsewhere.
+    /// </remarks>
+    private static T AnnotateGenerated<T>(T generated) where T : SyntaxNode
+    {
+        return generated.WithAdditionalAnnotations(Formatter.Annotation);
     }
 
     /// <summary>
@@ -244,30 +246,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         }
 
         // Insert public at the beginning
-        newModifiers = newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
-
-        return newModifiers;
-    }
-
-    /// <summary>
-    /// Marks a rewritten modifier list for formatting.
-    /// </summary>
-    /// <remarks>
-    /// The formatter re-lays out every token inside an annotated range. Annotating the enclosing
-    /// declaration or method instead would reformat the whole type or method body, so a fix that
-    /// changes one modifier produced a diff across hundreds of unrelated lines. The first modifier
-    /// is the token that needs spacing, because a freshly inserted one carries no trivia.
-    /// </remarks>
-    private static SyntaxTokenList AnnotateModifiers(SyntaxTokenList modifiers)
-    {
-        if (modifiers.Count == 0)
-        {
-            return modifiers;
-        }
-
-        return modifiers.Replace(
-            modifiers[0],
-            modifiers[0].WithAdditionalAnnotations(Formatter.Annotation));
+        return newModifiers.Insert(0, SyntaxFactory.Token(SyntaxKind.PublicKeyword));
     }
 
     private static async Task<Document> MakeMethodPublicAsync(
@@ -310,7 +289,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         }
 
         var newMethodDeclaration = methodDeclaration
-            .WithModifiers(AnnotateModifiers(newModifiers))
+            .WithModifiers(CodeFixFormatting.AnnotateFirstModifier(newModifiers))
             .WithLeadingTrivia(leadingTrivia);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
@@ -330,7 +309,7 @@ public class SingletonDIProviderCodeFixProvider : CodeFixProvider
         var leadingTrivia = methodDeclaration.GetLeadingTrivia();
 
         // Remove static modifier from the method
-        var newModifiers = AnnotateModifiers(SyntaxFactory.TokenList(
+        var newModifiers = CodeFixFormatting.AnnotateFirstModifier(SyntaxFactory.TokenList(
             methodDeclaration.Modifiers.Where(m => !m.IsKind(SyntaxKind.StaticKeyword))));
 
         var newMethodDeclaration = methodDeclaration

@@ -1264,6 +1264,105 @@ public class CodeFixProviderTests
         await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
     }
 
+    [Fact]
+    public async Task DM0007_AddPartialModifier_LeavesUserFormattedMethodBodyAlone()
+    {
+        // Annotating the type declaration for formatting made the IDE re-lay out the whole class,
+        // so the reported diff also contained the body below: 'public  uint TestMethod (' lost its
+        // spacing and '(uint) (i +' lost the space after the cast.
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class DbPaths
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(DbPaths))]
+                   public class Test
+                   {
+                       public  uint TestMethod (
+                          int i,
+                             byte b)
+                       {
+                               i += 1;
+                           return (uint) (i +
+                                           (int)  b);
+                       }
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class DbPaths
+                       {
+                       }
+
+                       [SingletonDIConsume(typeof(DbPaths))]
+                       public partial class Test
+                       {
+                           public  uint TestMethod (
+                              int i,
+                                 byte b)
+                           {
+                                   i += 1;
+                               return (uint) (i +
+                                               (int)  b);
+                           }
+                       }
+                       """;
+
+        await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
+    }
+
+    [Fact]
+    public async Task DM0007_AddPartialModifier_JoinsASplitModifierList()
+    {
+        // The modifier list is the one region the fix owns, so the formatter is free to lay it out
+        // as a unit: a modifier separated from the keyword by a line break ends up on the same line
+        // as the keyword. Everything past the keyword keeps the user's own spacing.
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class MyService
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(MyService))]
+                   public sealed
+                   class MyConsumer
+                   {
+                       public  int  GetValue ( )
+                       {
+                           return  ( 1 )  -  1;
+                       }
+                   }
+                   """;
+
+        var expected = """
+                       using SingletonDI.Attributes;
+
+                       [SingletonDIProvide]
+                       public class MyService
+                       {
+                       }
+
+                       [SingletonDIConsume(typeof(MyService))]
+                       public sealed partial class MyConsumer
+                       {
+                           public  int  GetValue ( )
+                           {
+                               return  ( 1 )  -  1;
+                           }
+                       }
+                       """;
+
+        await VerifyPartialCodeFixExactlyAsync(test, expected, "DM0007");
+    }
+
     #endregion
 
     #region Helper Methods

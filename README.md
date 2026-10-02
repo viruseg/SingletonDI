@@ -512,6 +512,12 @@ The generator reports errors at compile time:
 
 Cross-project service and provider identities include the containing assembly. Repeated references to the same assembly are deduplicated, while equal type names from different assemblies remain distinct. `DM0019` is also emitted for conflicting local `ServiceType` mappings, not only in a composition root, and reports all conflicting provider identities. It also reports ambiguity when the same fully qualified name is associated with multiple identities, for example a local `App.Service` and a referenced `App.Service`; the diagnostic keeps their assembly identities separate.
 
+### Code fixes
+
+The analyzer ships a code fix for `DM0004`, `DM0005`, `DM0007`, `DM0010` and `DM0012`, and a refactoring that adds an `InitializeAsync` initializer to a provider. Every one of them changes only the text it is responsible for. Applying a fix never reformats the surrounding code: spacing inside method signatures and bodies, casts, parameter lists and attribute arguments survives the fix exactly as written, and a document formatted against the project's own style rules comes out of the fix unchanged.
+
+The one region a fix may lay out is its own: the modifier list it writes into, and the whitespace that separates a member it adds from the member above it.
+
 ### DM0001: Duplicate property name
 
 Occurs when multiple `[SingletonDIProvide]` attributes that can participate in the same consumer dependency set specify the same `propertyName` value. A composition root scopes this validation to providers actually referenced by consumers; unrelated providers do not block a valid root.

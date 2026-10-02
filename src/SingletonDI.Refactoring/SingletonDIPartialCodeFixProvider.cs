@@ -8,7 +8,6 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Formatting;
 
 namespace SingletonDI.Refactoring;
 
@@ -70,16 +69,14 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
 
         // 'partial' goes last in the modifier list so the conventional
         // 'public sealed partial class' ordering is preserved.
-        var partialToken = SyntaxFactory.Token(SyntaxKind.PartialKeyword)
-            .WithTrailingTrivia(SyntaxFactory.Space);
         var newTypeDeclaration = typeDeclaration.WithModifiers(
-            modifiers.Insert(modifiers.Count, partialToken));
+            CodeFixFormatting.AppendModifier(modifiers, SyntaxKind.PartialKeyword));
 
         // A declaration's leading trivia - documentation comments, #region - hangs off its first
         // token. With no modifiers the inserted 'partial' token ends up in front of the keyword,
         // so the trivia has to follow it; leaving it behind strands the documentation between the
         // modifier and the keyword, detaches it from the type, and pushes a #region off the start
-        // of its line, which the workspace formatter cannot repair.
+        // of its line.
         if (modifiers.Count == 0)
         {
             var keyword = newTypeDeclaration.Modifiers[0].GetNextToken();
@@ -92,8 +89,6 @@ public class SingletonDIPartialCodeFixProvider : CodeFixProvider
                 insertedPartial,
                 insertedPartial.WithLeadingTrivia(declarationTrivia));
         }
-
-        newTypeDeclaration = newTypeDeclaration.WithAdditionalAnnotations(Formatter.Annotation);
 
         var root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
         if (root is null)

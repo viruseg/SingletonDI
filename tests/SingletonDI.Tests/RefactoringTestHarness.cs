@@ -3,7 +3,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Text;
+using Xunit;
 
 namespace SingletonDI.Tests;
 
@@ -67,6 +69,31 @@ internal static class RefactoringTestHarness
 
         operations[0].Apply(context.Workspace, cancellationToken);
         return context.Workspace.CurrentSolution.GetDocument(context.Document.Id)!;
+    }
+
+    /// <summary>
+    /// Applies the only refactoring offered at <paramref name="span"/> and then runs the workspace
+    /// formatter over the annotated ranges, the same way the IDE does when the refactoring is
+    /// committed.
+    /// </summary>
+    /// <remarks>
+    /// The formatting step is not optional: a refactoring that marks an enclosing node for
+    /// formatting changes nothing until the IDE reformats that node, so skipping it would hide the
+    /// very difference the assertion is meant to catch.
+    /// </remarks>
+    internal static async Task<Document> ApplyOnlyAndFormatAsync(
+        string source,
+        TextSpan span,
+        CodeRefactoringProvider provider,
+        string expectedTitle)
+    {
+        var context = await CreateAsync(source);
+        var action = Assert.Single(await GetActionsAsync(context, span, provider));
+        Assert.Equal(expectedTitle, action.Title);
+        var changedDocument = await ApplyAsync(context, action);
+        var formatted = await Formatter.FormatAsync(changedDocument, Formatter.Annotation);
+        return formatted ?? throw new InvalidOperationException(
+            "Formatting the refactored document produced no result.");
     }
 
     private static IReadOnlyList<MetadataReference> CreateReferences()

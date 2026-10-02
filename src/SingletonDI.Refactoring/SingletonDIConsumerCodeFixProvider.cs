@@ -8,7 +8,6 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Formatting;
 
 namespace SingletonDI.Refactoring;
 
@@ -88,12 +87,9 @@ public class SingletonDIConsumerCodeFixProvider : CodeFixProvider
 
         // DM0010 is reported for every duplicate after the first one, so at least one
         // argument always survives and the attribute itself is never removed.
-        var newAttributeList = argumentList
-            .WithArguments(argumentList.Arguments.Remove(argumentToRemove))
-            .WithAdditionalAnnotations(Formatter.Annotation);
+        var newAttributeList = CodeFixFormatting.RemoveArgument(argumentList, argumentToRemove);
 
-        var newAttribute = attributeSyntax.WithArgumentList(newAttributeList)
-            .WithAdditionalAnnotations(Formatter.Annotation);
+        var newAttribute = attributeSyntax.WithArgumentList(newAttributeList);
 
         var newRoot2 = root.ReplaceNode(attributeSyntax, newAttribute);
         return document.WithSyntaxRoot(newRoot2);

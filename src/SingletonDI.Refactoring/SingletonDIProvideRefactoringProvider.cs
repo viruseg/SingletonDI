@@ -121,7 +121,10 @@ public class SingletonDIProvideRefactoringProvider : CodeRefactoringProvider
                                       "InitializeAsync")
                                   .AddModifiers(SyntaxFactory.Token(SyntaxKind.PublicKeyword))
                                   .WithBody(body)
-                                  // ВАЖНО: Добавляем аннотацию форматирования
+                                  // Annotating the generated method is sound because the node holds
+                                  // nothing but generated tokens, and it is what gives the new member
+                                  // its layout and its separation from the preceding one. Annotating
+                                  // the class instead would reformat the whole type.
                                   .WithAdditionalAnnotations(Formatter.Annotation);
 
         var newClassDeclaration = classDeclaration.AddMembers(method);
