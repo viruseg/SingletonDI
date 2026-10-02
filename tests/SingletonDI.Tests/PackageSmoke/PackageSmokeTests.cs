@@ -7,7 +7,7 @@ namespace SingletonDI.Tests;
 [Trait("Category", "Packaging")]
 public sealed class PackageSmokeTests
 {
-    private const string PackageVersion = "1.2.0";
+    private const string PackageVersion = "1.2.1";
     private static readonly (string Directory, string Version)[] SdkDirectories =
     [
         ("Sdk10", "10.0.401"),

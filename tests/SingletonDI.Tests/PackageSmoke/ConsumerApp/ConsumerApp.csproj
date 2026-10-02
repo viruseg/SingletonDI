@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SingletonDI" Version="1.2.0" />
+    <PackageReference Include="SingletonDI" Version="1.2.1" />
   </ItemGroup>
 
 </Project>

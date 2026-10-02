@@ -16,9 +16,9 @@ public sealed class PackageMetadataTests
             "SingletonDI.Attributes.csproj");
         var document = XDocument.Load(projectPath);
 
-        Assert.Equal("1.2.0", ReadProperty(document, "Version"));
-        Assert.Equal("1.2.0", ReadProperty(document, "AssemblyVersion"));
-        Assert.Contains("1.2.0", ReadProperty(document, "PackageReleaseNotes"));
+        Assert.Equal("1.2.1", ReadProperty(document, "Version"));
+        Assert.Equal("1.2.1", ReadProperty(document, "AssemblyVersion"));
+        Assert.Contains("1.2.1", ReadProperty(document, "PackageReleaseNotes"));
         Assert.Equal("true", ReadProperty(document, "IncludeSymbols"));
         Assert.Equal("snupkg", ReadProperty(document, "SymbolPackageFormat"));
 
