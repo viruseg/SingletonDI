@@ -303,7 +303,7 @@ public partial class Repository
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, 
-                AllowMultiple = false, Inherited = true)]
+                AllowMultiple = true, Inherited = true)]
 public sealed class SingletonDIConsumeAttribute : Attribute
 {
     public Type[] Dependencies { get; }
@@ -319,11 +319,20 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - Класс должен быть объявлен как `partial`
 - Каждая зависимость должна быть видимым `[SingletonDIProvide]`-типом или поддерживаемым interface/abstract contract; composition root проверяет, что для запрошенного контракта существует ровно один провайдер
 - Нельзя указывать сам класс в списке зависимостей (self-reference)
-- Нельзя дублировать типы в списке зависимостей
+- Нельзя дублировать типы в списке зависимостей; повтор между разными атрибутами считается дубликатом и даёт DM0010
+- Атрибут можно применять несколько раз (`AllowMultiple = true`). Каждое вхождение добавляет свои зависимости в порядке объявления, поэтому несколько атрибутов эквивалентны одному атрибуту со всеми их типами
 - Наследуется (`Inherited = true`) — производный потребитель читает те же сгенерированные зависимости через базовый тип, не повторяя атрибут; само производное объявление не проверяется и не получает собственных сгенерированных членов, поэтому DM0007, DM0026 и DM0029 к нему не применяются. Провайдерская сторона действительно наследует атрибут для проверки
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
+public partial class OrderController { }
+```
+
+Несколько атрибутов дают тот же результат:
+
+```csharp
+[SingletonDIConsume(typeof(DatabaseService))]
+[SingletonDIConsume(typeof(UserService))]
 public partial class OrderController { }
 ```
 
@@ -628,6 +637,10 @@ public partial class ServiceB { }
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]  // DM0010
+public partial class OrderController { }
+
+[SingletonDIConsume(typeof(DatabaseService))]
+[SingletonDIConsume(typeof(DatabaseService))]  // DM0010 на втором вхождении
 public partial class OrderController { }
 ```
 

@@ -306,7 +306,7 @@ Marks a class as a consumer of singleton dependencies. The generator will create
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, 
-                AllowMultiple = false, Inherited = true)]
+                AllowMultiple = true, Inherited = true)]
 public sealed class SingletonDIConsumeAttribute : Attribute
 {
     public Type[] Dependencies { get; }
@@ -323,12 +323,21 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - File-scoped consumer declarations require C# 10 or later; other generated source requires C# 9 or later
 - Each dependency must be a visible `[SingletonDIProvide]` type or a supported interface/abstract contract; the composition root verifies that a requested contract has exactly one provider
 - Cannot specify the consumer type itself in the dependency list (self-reference)
-- Cannot duplicate types in the dependency list
+- Cannot duplicate types in the dependency list; a repeat across two attributes is a duplicate and reports DM0010
+- The attribute can be applied several times (`AllowMultiple = true`). Every occurrence adds its dependencies in declaration order, so several attributes are equivalent to a single attribute listing all of their types
 - The attribute is inherited (`Inherited = true`), so a derived consumer reads the same generated dependencies through the base type without repeating the attribute; a derived declaration is not itself validated and receives no generated members, so DM0007, DM0026, and DM0029 do not apply to it. The provider side does inherit the attribute for validation
 - Generated properties are `protected` for an unsealed class and `private` for a sealed class, a `static` class, a `struct`, or a `record struct`
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(UserService))]
+public partial class OrderController { }
+```
+
+Several attributes produce the same result:
+
+```csharp
+[SingletonDIConsume(typeof(DatabaseService))]
+[SingletonDIConsume(typeof(UserService))]
 public partial class OrderController { }
 ```
 
@@ -629,6 +638,10 @@ Occurs when the same type is specified multiple times in `[SingletonDIConsume]`.
 
 ```csharp
 [SingletonDIConsume(typeof(DatabaseService), typeof(DatabaseService))]  // DM0010
+public partial class OrderController { }
+
+[SingletonDIConsume(typeof(DatabaseService))]
+[SingletonDIConsume(typeof(DatabaseService))]  // DM0010 on the second occurrence
 public partial class OrderController { }
 ```
 
