@@ -427,45 +427,48 @@ internal static class ProviderValidator
         Location location,
         Action<Diagnostic> reportDiagnostic)
     {
-        var consumeAttribute = FindAttributeIncludingBaseTypes(typeSymbol, ConsumeAttributeName);
-        if (consumeAttribute == null)
+        var consumeAttributes = FindConsumeAttributesIncludingBaseTypes(typeSymbol);
+        if (consumeAttributes.IsEmpty)
         {
             return ImmutableArray<ServiceTypeIdentity>.Empty;
         }
 
-        var consumeAttributeSyntax = GetAttributeSyntax(consumeAttribute);
-        var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
         var dependencies = ImmutableArray.CreateBuilder<ServiceTypeIdentity>();
         var hasInvalidDependency = false;
 
-        foreach (var (dependencyType, dependencyLocation) in GetTypeArguments(
-                     consumeAttribute,
-                     argumentLocations))
+        foreach (var consumeAttribute in consumeAttributes)
         {
-            var diagnosticLocation = dependencyLocation ??
-                                    GetAttributeLocation(consumeAttribute) ??
-                                    location;
-            if (dependencyType is INamedTypeSymbol { IsUnboundGenericType: true })
+            var consumeAttributeSyntax = GetAttributeSyntax(consumeAttribute);
+            var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
+            foreach (var (dependencyType, dependencyLocation) in GetTypeArguments(
+                         consumeAttribute,
+                         argumentLocations))
             {
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.OpenGenericDependencyNotSupported,
-                    diagnosticLocation,
-                    GetTypeDisplayName(dependencyType, diagnosticLocation)));
-                hasInvalidDependency = true;
-                continue;
-            }
+                var diagnosticLocation = dependencyLocation ??
+                                        GetAttributeLocation(consumeAttribute) ??
+                                        location;
+                if (dependencyType is INamedTypeSymbol { IsUnboundGenericType: true })
+                {
+                    reportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.OpenGenericDependencyNotSupported,
+                        diagnosticLocation,
+                        GetTypeDisplayName(dependencyType, diagnosticLocation)));
+                    hasInvalidDependency = true;
+                    continue;
+                }
 
-            if (!IsAccessibleFromGeneratedCode(dependencyType, typeSymbol.ContainingAssembly))
-            {
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.ProviderTypeNotAccessible,
-                    diagnosticLocation,
-                    GetTypeDisplayName(dependencyType, diagnosticLocation)));
-                hasInvalidDependency = true;
-                continue;
-            }
+                if (!IsAccessibleFromGeneratedCode(dependencyType, typeSymbol.ContainingAssembly))
+                {
+                    reportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.ProviderTypeNotAccessible,
+                        diagnosticLocation,
+                        GetTypeDisplayName(dependencyType, diagnosticLocation)));
+                    hasInvalidDependency = true;
+                    continue;
+                }
 
-            dependencies.Add(ServiceTypeIdentity.FromSymbol(dependencyType));
+                dependencies.Add(ServiceTypeIdentity.FromSymbol(dependencyType));
+            }
         }
 
         return hasInvalidDependency
@@ -791,31 +794,33 @@ internal static class ProviderValidator
     }
 
     /// <summary>
-    /// Finds an attribute that is declared on the symbol or inherited from a base type.
+    /// Reads every consume attribute declared on the type itself, or on the nearest base type that
+    /// declares any.
     /// </summary>
     /// <remarks>
     /// <see cref="ISymbol.GetAttributes"/> only reports directly declared attributes, so an
     /// attribute declared with <c>Inherited = true</c> is invisible on a derived symbol even though
-    /// the runtime applies it. A declaration on the most derived type wins, and the returned data
-    /// still points at the declaration site, so diagnostics land on the attribute the dependency
+    /// the runtime applies it. A declaration on the most derived type wins, and every attribute it
+    /// declares is returned, so the returned data still points at the declaration sites a dependency
     /// was actually written on.
     /// </remarks>
-    private static AttributeData? FindAttributeIncludingBaseTypes(
-        INamedTypeSymbol typeSymbol,
-        string metadataName)
+    private static ImmutableArray<AttributeData> FindConsumeAttributesIncludingBaseTypes(
+        INamedTypeSymbol typeSymbol)
     {
         for (INamedTypeSymbol? current = typeSymbol;
              current is not null && current.SpecialType != SpecialType.System_Object;
              current = current.BaseType)
         {
-            var declared = FindAttribute(current, metadataName);
-            if (declared is not null)
+            var declared = current.GetAttributes()
+                .Where(attribute => IsAttribute(attribute, ConsumeAttributeName))
+                .ToImmutableArray();
+            if (!declared.IsEmpty)
             {
                 return declared;
             }
         }
 
-        return null;
+        return ImmutableArray<AttributeData>.Empty;
     }
 
     private static Location? GetAttributeLocation(AttributeData attribute)

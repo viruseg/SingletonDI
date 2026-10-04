@@ -90,8 +90,8 @@ internal static class ConsumerValidator
             }
         }
 
-        var consumeAttribute = FindAttribute(typeSymbol, ConsumeAttributeName);
-        if (consumeAttribute == null)
+        var consumeAttributes = FindConsumeAttributes(typeSymbol);
+        if (consumeAttributes.Length == 0)
         {
             return null;
         }
@@ -117,25 +117,27 @@ internal static class ConsumerValidator
             return null;
         }
 
-        var consumeAttributeSyntax = consumeAttribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
-        var aliasQualifiedType = consumeAttributeSyntax?
-            .DescendantNodes()
-            .OfType<TypeOfExpressionSyntax>()
-            .FirstOrDefault(typeOfExpression => typeOfExpression.Type
-                .DescendantNodesAndSelf()
-                .OfType<AliasQualifiedNameSyntax>()
-                .Any());
-        if (aliasQualifiedType is not null)
+        foreach (var consumeAttribute in consumeAttributes)
         {
-            reportDiagnostic(Diagnostic.Create(
-                DiagnosticDescriptors.AliasedServiceTypeNotSupported,
-                aliasQualifiedType.GetLocation(),
-                aliasQualifiedType.Type.ToString()));
-            return null;
+            var consumeAttributeSyntax = consumeAttribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+            var aliasQualifiedType = consumeAttributeSyntax?
+                .DescendantNodes()
+                .OfType<TypeOfExpressionSyntax>()
+                .FirstOrDefault(typeOfExpression => typeOfExpression.Type
+                    .DescendantNodesAndSelf()
+                    .OfType<AliasQualifiedNameSyntax>()
+                    .Any());
+            if (aliasQualifiedType is not null)
+            {
+                reportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.AliasedServiceTypeNotSupported,
+                    aliasQualifiedType.GetLocation(),
+                    aliasQualifiedType.Type.ToString()));
+                return null;
+            }
         }
 
-        var argumentLocations = GetArgumentLocations(consumeAttributeSyntax);
-        var dependencyTypes = GetTypeArguments(consumeAttribute, argumentLocations);
+        var dependencyTypes = GetTypeArguments(consumeAttributes);
 
         var seenTypes = new HashSet<ServiceTypeIdentity>();
         var duplicateTypes = new HashSet<ServiceTypeIdentity>();
@@ -382,6 +384,21 @@ internal static class ConsumerValidator
             .FirstOrDefault(attribute => IsAttribute(attribute, metadataName));
     }
 
+    /// <summary>
+    /// Reads every consume attribute declared on the symbol, in declaration order.
+    /// </summary>
+    /// <remarks>
+    /// The attribute allows several occurrences on one type, and each of them contributes
+    /// dependencies. Merging them here is what makes a type that splits its dependencies across
+    /// attributes behave like one attribute that lists every type.
+    /// </remarks>
+    private static ImmutableArray<AttributeData> FindConsumeAttributes(ISymbol symbol)
+    {
+        return symbol.GetAttributes()
+            .Where(attribute => IsAttribute(attribute, ConsumeAttributeName))
+            .ToImmutableArray();
+    }
+
     private static bool HasProvideAttribute(ITypeSymbol typeSymbol)
     {
         return typeSymbol.GetAttributes().Any(attribute => IsAttribute(attribute, ProvideAttributeName));
@@ -413,6 +430,23 @@ internal static class ConsumerValidator
         return PropertyNameSyntax.Classify(propertyName) == PropertyNameKind.Valid
             ? propertyName
             : null;
+    }
+
+    /// <summary>
+    /// Collects the dependency types of every consume attribute in declaration order, so a repeated
+    /// type is visible to the duplicate check across attributes as well as within one.
+    /// </summary>
+    private static List<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
+        ImmutableArray<AttributeData> attributes)
+    {
+        var dependencies = new List<(ITypeSymbol Type, Location? Location)>();
+        foreach (var attribute in attributes)
+        {
+            var syntax = attribute.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+            dependencies.AddRange(GetTypeArguments(attribute, GetArgumentLocations(syntax)));
+        }
+
+        return dependencies;
     }
 
     private static IEnumerable<(ITypeSymbol Type, Location? Location)> GetTypeArguments(

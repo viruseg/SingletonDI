@@ -90,7 +90,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                         : typeDeclaration;
                 })
             .Where(static typeDeclaration => typeDeclaration is not null)
-            .Select(static (typeDeclaration, _) => typeDeclaration!);
+            .Select(static (typeDeclaration, _) => typeDeclaration!)
+            .Collect()
+            .Select(static (declarations, _) => DistinctDeclarations(declarations));
 
         var consumerCandidates = context.SyntaxProvider
             .ForAttributeWithMetadataName(
@@ -154,7 +156,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         var compositionInputs = providerCandidates
             .Collect()
-            .Combine(consumerDeclarations.Collect())
+            .Combine(consumerDeclarations)
             .Combine(context.CompilationProvider)
             .Combine(languageSupport)
             .Combine(referencedComposition)
@@ -181,6 +183,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         var consumerInputs = consumerCandidates
             .Collect()
+            .Select(static (candidates, _) => candidates.Distinct().ToImmutableArray())
             .Combine(providerCandidates.Collect())
             .Combine(languageSupport)
             .Combine(generatorOptions)
@@ -1011,6 +1014,24 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         key.Append('\u001f').Append("identity");
         key.Append('\u001f').Append(typeIdentity?.CanonicalIdentity);
         return key.ToString();
+    }
+
+    /// <summary>
+    /// Keeps one entry per consumer declaration.
+    /// </summary>
+    /// <remarks>
+    /// <c>ForAttributeWithMetadataName</c> invokes its transform once for every matching attribute,
+    /// so a consumer that spreads its dependencies over several consume attributes arrives here
+    /// repeated. Every copy names the same declaration, and emitting one generated member set per
+    /// copy would put the same properties into the compilation more than once.
+    /// </remarks>
+    private static ImmutableArray<TypeDeclarationSyntax> DistinctDeclarations(
+        ImmutableArray<TypeDeclarationSyntax> declarations)
+    {
+        var seen = new HashSet<(string FilePath, TextSpan Span)>();
+        return declarations
+            .Where(declaration => seen.Add((declaration.SyntaxTree.FilePath, declaration.Span)))
+            .ToImmutableArray();
     }
 
     private static ConsumerCandidate CreateConsumerCandidate(

@@ -11,6 +11,11 @@ namespace SingletonDI.Attributes;
 /// provider implementation.
 /// </para>
 /// <para>
+/// The attribute can be applied more than once. Every occurrence contributes its dependencies in
+/// declaration order, so several attributes are equivalent to a single attribute listing all of
+/// their types. A type repeated across attributes is a duplicate and is reported as DM0010.
+/// </para>
+/// <para>
 /// The type and any containing types that receive generated members must be declared as
 /// <c>partial</c>. File-scoped declarations require C# 10 or later.
 /// </para>
@@ -22,7 +27,7 @@ namespace SingletonDI.Attributes;
 /// static class, a struct, or a record struct.
 /// </para>
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true, Inherited = true)]
 public sealed class SingletonDIConsumeAttribute : Attribute
 {
     /// <summary>

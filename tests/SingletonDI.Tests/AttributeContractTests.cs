@@ -31,6 +31,20 @@ public sealed class AttributeContractTests
     }
 
     [Fact]
+    public void ConsumeAttribute_AllowsMultipleOccurrences()
+    {
+        // A consumer splits its dependencies across several attributes, which the generator merges
+        // into one dependency list in declaration order.
+        var usage = typeof(SingletonDIConsumeAttribute)
+            .GetCustomAttributes(typeof(AttributeUsageAttribute), false)
+            .Cast<AttributeUsageAttribute>()
+            .Single();
+
+        Assert.True(usage.AllowMultiple);
+        Assert.True(usage.Inherited);
+    }
+
+    [Fact]
     public void ProviderModuleMarker_TargetsAssembly()
     {
         var usage = typeof(SingletonDIProviderModuleAttribute)

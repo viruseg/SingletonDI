@@ -141,6 +141,62 @@ public sealed partial class DeclarationContractMatrixTests
             new SupportedExpectation(),
             ["protected static global::App.First FirstInstance"],
             []),
+        new(
+            "ATTR-07",
+            "ATTRIBUTE_FORM",
+            "consume attribute applied several times",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class First
+                {
+                }
+
+                [SingletonDIProvide]
+                public class Second
+                {
+                }
+
+                [SingletonDIConsume(typeof(First))]
+                [SingletonDIConsume(typeof(Second))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new SupportedExpectation(),
+            [
+                "protected static global::App.First FirstInstance",
+                "protected static global::App.Second SecondInstance",
+            ],
+            []),
+        new(
+            "ATTR-08",
+            "ATTRIBUTE_FORM",
+            "the same consume type in two attributes",
+            """
+            using SingletonDI.Attributes;
+
+            namespace App
+            {
+                [SingletonDIProvide]
+                public class Service
+                {
+                }
+
+                [SingletonDIConsume(typeof(Service))]
+                [SingletonDIConsume(typeof(Service))]
+                public partial class Consumer
+                {
+                }
+            }
+            """,
+            new RejectedExpectation(["DM0010"]),
+            [],
+            []),
     ];
 
     public static IEnumerable<object[]> PropertyNameCases =>
