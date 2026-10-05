@@ -19,7 +19,7 @@ internal static class ConsumerValidator
         TypeDeclarationSyntax typeDecl,
         INamedTypeSymbol typeSymbol,
         Action<Diagnostic> reportDiagnostic,
-        SemanticModel? semanticModel = null)
+        SemanticModel semanticModel)
     {
         return Validate(
             typeDecl,
@@ -34,7 +34,7 @@ internal static class ConsumerValidator
         INamedTypeSymbol typeSymbol,
         ImmutableHashSet<string> knownProviderFullyQualifiedNames,
         Action<Diagnostic> reportDiagnostic,
-        SemanticModel? semanticModel = null)
+        SemanticModel semanticModel)
     {
         return Validate(
             typeDecl,
@@ -49,7 +49,7 @@ internal static class ConsumerValidator
         INamedTypeSymbol typeSymbol,
         ImmutableHashSet<ServiceTypeIdentity> knownProviderIdentities,
         Action<Diagnostic> reportDiagnostic,
-        SemanticModel? semanticModel = null)
+        SemanticModel semanticModel)
     {
         return Validate(
             typeDecl,
@@ -64,7 +64,7 @@ internal static class ConsumerValidator
         INamedTypeSymbol typeSymbol,
         Func<ServiceTypeIdentity, string, bool> isKnownProvider,
         Action<Diagnostic> reportDiagnostic,
-        SemanticModel? semanticModel)
+        SemanticModel semanticModel)
     {
         var fullyQualifiedName = GetFullyQualifiedName(typeSymbol);
         var consumerIdentity = CreateIdentity(typeSymbol);
@@ -250,7 +250,7 @@ internal static class ConsumerValidator
     private static ConsumerDeclarationShape CreateShape(
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
-        SemanticModel? semanticModel)
+        SemanticModel semanticModel)
     {
         var typeParameters = GetTypeParameters(typeDeclaration);
         var containingTypes = typeDeclaration
@@ -281,7 +281,7 @@ internal static class ConsumerValidator
 
     private static ConsumerContainingTypeShape CreateContainingTypeShape(
         TypeDeclarationSyntax typeDeclaration,
-        SemanticModel? semanticModel)
+        SemanticModel semanticModel)
     {
         var typeParameters = GetTypeParameters(typeDeclaration);
         return new ConsumerContainingTypeShape(
@@ -301,17 +301,12 @@ internal static class ConsumerValidator
 
     private static string GetConstraintClauses(
         TypeDeclarationSyntax typeDeclaration,
-        SemanticModel? semanticModel)
+        SemanticModel semanticModel)
     {
         return string.Join(
             "\n",
             typeDeclaration.ConstraintClauses.Select(constraint =>
             {
-                if (semanticModel is null)
-                {
-                    return constraint.ToString();
-                }
-
                 var constraints = constraint.Constraints
                     .Select(limitation => limitation is TypeConstraintSyntax typeConstraint
                         ? typeConstraint.WithType(
@@ -392,7 +387,7 @@ internal static class ConsumerValidator
     /// dependencies. Merging them here is what makes a type that splits its dependencies across
     /// attributes behave like one attribute that lists every type.
     /// </remarks>
-    private static ImmutableArray<AttributeData> FindConsumeAttributes(ISymbol symbol)
+    internal static ImmutableArray<AttributeData> FindConsumeAttributes(ISymbol symbol)
     {
         return symbol.GetAttributes()
             .Where(attribute => IsAttribute(attribute, ConsumeAttributeName))
@@ -436,7 +431,7 @@ internal static class ConsumerValidator
     /// Collects the dependency types of every consume attribute in declaration order, so a repeated
     /// type is visible to the duplicate check across attributes as well as within one.
     /// </summary>
-    private static List<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
+    internal static List<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
         ImmutableArray<AttributeData> attributes)
     {
         var dependencies = new List<(ITypeSymbol Type, Location? Location)>();

@@ -342,6 +342,21 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error);
 
     /// <summary>
+    /// DM0036: A consumer declares a dependency that nothing in its declaration reads.
+    /// </summary>
+    /// <remarks>
+    /// The only diagnostic here that is not an error. A dependency nobody reads is dead weight in the
+    /// attribute and a needless instance at startup, but it does not stop the program from compiling,
+    /// so it is reported as a suggestion the IDE shows under the type name and a code fix removes.
+    /// </remarks>
+    public static readonly DiagnosticDescriptor ConsumeDependencyUnused = Create(
+        "DM0036",
+        "Unused dependency in SingletonDIConsume",
+        "[SingletonDIConsume] dependency '{0}' is not used by consumer '{1}'. Remove '{0}' from the attribute.",
+        Category,
+        DiagnosticSeverity.Info);
+
+    /// <summary>
     /// The README section that documents every diagnostic, linked from each descriptor's help entry.
     /// </summary>
     /// <remarks>

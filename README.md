@@ -324,6 +324,7 @@ public sealed class SingletonDIConsumeAttribute : Attribute
 - Each dependency must be a visible `[SingletonDIProvide]` type or a supported interface/abstract contract; the composition root verifies that a requested contract has exactly one provider
 - Cannot specify the consumer type itself in the dependency list (self-reference)
 - Cannot duplicate types in the dependency list; a repeat across two attributes is a duplicate and reports DM0010
+- A dependency that nothing in the consumer reads is reported as a suggestion (DM0036) and can be removed with its code fix
 - The attribute can be applied several times (`AllowMultiple = true`). Every occurrence adds its dependencies in declaration order, so several attributes are equivalent to a single attribute listing all of their types
 - The attribute is inherited (`Inherited = true`), so a derived consumer reads the same generated dependencies through the base type without repeating the attribute; a derived declaration is not itself validated and receives no generated members, so DM0007, DM0026, and DM0029 do not apply to it. The provider side does inherit the attribute for validation
 - Generated properties are `protected` for an unsealed class and `private` for a sealed class, a `static` class, a `struct`, or a `record struct`
@@ -480,7 +481,7 @@ public static async Task Main(string[] args)
 
 ## Diagnostics
 
-The generator reports errors at compile time:
+The generator reports errors at compile time, plus one suggestion about a dependency a consumer never uses:
 
 | ID | Level | Description |
 |---|---|---|
@@ -518,12 +519,13 @@ The generator reports errors at compile time:
 | **DM0033** | Error | Nullable initializer return type is not supported |
 | **DM0034** | Error | InitializeAsync has an unsupported return type |
 | **DM0035** | Error | Provider nested in a generic type is not supported |
+| **DM0036** | Suggestion | Unused dependency in SingletonDIConsume |
 
 Cross-project service and provider identities include the containing assembly. Repeated references to the same assembly are deduplicated, while equal type names from different assemblies remain distinct. `DM0019` is also emitted for conflicting local `ServiceType` mappings, not only in a composition root, and reports all conflicting provider identities. It also reports ambiguity when the same fully qualified name is associated with multiple identities, for example a local `App.Service` and a referenced `App.Service`; the diagnostic keeps their assembly identities separate.
 
 ### Code fixes
 
-The analyzer ships a code fix for `DM0004`, `DM0005`, `DM0007`, `DM0010` and `DM0012`, and a refactoring that adds an `InitializeAsync` initializer to a provider. Every one of them changes only the text it is responsible for. Applying a fix never reformats the surrounding code: spacing inside method signatures and bodies, casts, parameter lists and attribute arguments survives the fix exactly as written, and a document formatted against the project's own style rules comes out of the fix unchanged.
+The analyzer ships a code fix for `DM0004`, `DM0005`, `DM0007`, `DM0010`, `DM0012` and `DM0036`, and a refactoring that adds an `InitializeAsync` initializer to a provider. Every one of them changes only the text it is responsible for. Applying a fix never reformats the surrounding code: spacing inside method signatures and bodies, casts, parameter lists and attribute arguments survives the fix exactly as written, and a document formatted against the project's own style rules comes out of the fix unchanged.
 
 The one region a fix may lay out is its own: the modifier list it writes into, and the whitespace that separates a member it adds from the member above it.
 
@@ -777,6 +779,27 @@ Occurs when a provider declares a parameterless `InitializeAsync` whose return t
 ### DM0035: Provider nested in a generic type is not supported
 
 Occurs when a provider that has no type parameters of its own is declared inside a generic type. Generated code cannot name such a provider, because its only fully qualified name is not a legal C# source. Declare the provider in a non-generic type.
+
+### DM0036: Unused dependency in SingletonDIConsume
+
+The only diagnostic that is not an error. It underlines a type in a `[SingletonDIConsume]` attribute that nothing in the consumer ever reads, and its code fix removes that type from the attribute. A dependency nobody reads is dead weight in the attribute and a needless instance created at startup, but it does not break the program, so the IDE reports it as a suggestion.
+
+A dependency counts as used when any part of the consumer names either the generated property that resolves it, or the declared type itself, because a provider is an ordinary class whose static members can be reached directly:
+
+```csharp
+[SingletonDIConsume(typeof(ProgramPaths), typeof(DetectPeopleService))]
+public static partial class CropAllImgsInPreset
+{
+    public void Test()
+    {
+        DetectPeopleService.Start(); // DetectPeopleService is used
+    }
+}                                     // ProgramPaths is reported here
+```
+
+The scan covers every `partial` part of the consumer, the types nested in it, and every type of the same assembly that derives from it, because the attribute is inherited and a derived declaration reads the same generated properties. A derived type in another assembly is not visible to the analyzer, and a usage through a `global using` alias is not recognized either; suppress the diagnostic for a dependency that is declared on purpose, either per occurrence with `#pragma warning disable DM0036` or for the project with `dotnet_diagnostic.DM0036.severity = none` in `.editorconfig`.
+
+Removing the last type of an attribute removes the attribute itself, and a type whose only consume attribute is gone is no longer a consumer.
 
 ## Limitations
 

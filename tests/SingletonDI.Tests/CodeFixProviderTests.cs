@@ -962,6 +962,211 @@ public class CodeFixProviderTests
         await VerifyConsumerCodeFixAsync(test, expected, "DM0010");
     }
 
+    [Fact]
+    public async Task DM0036_RemoveUnusedTypeFromTheMiddle()
+    {
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class DatabaseService
+                   {
+                       public static int Value => 1;
+                   }
+
+                   [SingletonDIProvide]
+                   public class LoggerService
+                   {
+                   }
+
+                   [SingletonDIProvide]
+                   public class MetricsService
+                   {
+                       public static int Value => 2;
+                   }
+
+                   [SingletonDIConsume(typeof(DatabaseService), typeof(LoggerService), typeof(MetricsService))]
+                   public partial class Repository
+                   {
+                       public int Read() => DatabaseService.Value + MetricsService.Value;
+                   }
+                   """;
+
+        var expected = """
+                        using SingletonDI.Attributes;
+
+                        [SingletonDIProvide]
+                        public class DatabaseService
+                        {
+                            public static int Value => 1;
+                        }
+
+                        [SingletonDIProvide]
+                        public class LoggerService
+                        {
+                        }
+
+                        [SingletonDIProvide]
+                        public class MetricsService
+                        {
+                            public static int Value => 2;
+                        }
+
+                        [SingletonDIConsume(typeof(DatabaseService), typeof(MetricsService))]
+                        public partial class Repository
+                        {
+                            public int Read() => DatabaseService.Value + MetricsService.Value;
+                        }
+                        """;
+
+        await VerifyConsumerCodeFixAsync(test, expected, "DM0036");
+    }
+
+    [Fact]
+    public async Task DM0036_RemoveTheOnlyType_RemovesTheWholeAttribute()
+    {
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   /// <summary>
+                   /// Сервис-контракт.
+                   /// </summary>
+                   public interface IService
+                   {
+                   }
+
+                   /// <summary>
+                   /// Провайдер сервиса.
+                   /// </summary>
+                   [SingletonDIProvide(ServiceType = typeof(IService))]
+                   public class Service : IService
+                   {
+                   }
+
+                   /// <summary>
+                   /// Консьюмер, которому сервис не нужен.
+                   /// </summary>
+                   [SingletonDIConsume(typeof(IService))]
+                   public partial class MyClass
+                   {
+                   }
+                   """;
+
+        var expected = """
+                        using SingletonDI.Attributes;
+
+                        /// <summary>
+                        /// Сервис-контракт.
+                        /// </summary>
+                        public interface IService
+                        {
+                        }
+
+                        /// <summary>
+                        /// Провайдер сервиса.
+                        /// </summary>
+                        [SingletonDIProvide(ServiceType = typeof(IService))]
+                        public class Service : IService
+                        {
+                        }
+
+                        /// <summary>
+                        /// Консьюмер, которому сервис не нужен.
+                        /// </summary>
+                        public partial class MyClass
+                        {
+                        }
+                        """;
+
+        await VerifyConsumerCodeFixAsync(test, expected, "DM0036");
+    }
+
+    [Fact]
+    public async Task DM0036_RemoveTheOnlyType_KeepsTheOtherAttributeInTheList()
+    {
+        var test = """
+                   using System;
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class DatabaseService
+                   {
+                   }
+
+                   [Obsolete("legacy")]
+                   [SingletonDIConsume(typeof(DatabaseService))]
+                   public partial class Repository
+                   {
+                   }
+                   """;
+
+        var expected = """
+                        using System;
+                        using SingletonDI.Attributes;
+
+                        [SingletonDIProvide]
+                        public class DatabaseService
+                        {
+                        }
+
+                        [Obsolete("legacy")]
+                        public partial class Repository
+                        {
+                        }
+                        """;
+
+        await VerifyConsumerCodeFixAsync(test, expected, "DM0036");
+    }
+
+    [Fact]
+    public async Task DM0036_RemoveTheOnlyTypeOfSeparateAttributes_KeepsTheOtherConsumeAttribute()
+    {
+        var test = """
+                   using SingletonDI.Attributes;
+
+                   [SingletonDIProvide]
+                   public class DatabaseService
+                   {
+                       public static int Value => 1;
+                   }
+
+                   [SingletonDIProvide]
+                   public class LoggerService
+                   {
+                   }
+
+                   [SingletonDIConsume(typeof(DatabaseService))]
+                   [SingletonDIConsume(typeof(LoggerService))]
+                   public partial class Repository
+                   {
+                       public int Read() => DatabaseService.Value;
+                   }
+                   """;
+
+        var expected = """
+                        using SingletonDI.Attributes;
+
+                        [SingletonDIProvide]
+                        public class DatabaseService
+                        {
+                            public static int Value => 1;
+                        }
+
+                        [SingletonDIProvide]
+                        public class LoggerService
+                        {
+                        }
+
+                        [SingletonDIConsume(typeof(DatabaseService))]
+                        public partial class Repository
+                        {
+                            public int Read() => DatabaseService.Value;
+                        }
+                        """;
+
+        await VerifyConsumerCodeFixAsync(test, expected, "DM0036");
+    }
+
     #endregion
 
     #region SingletonDIPartialCodeFixProvider Tests
@@ -1649,6 +1854,45 @@ public class CodeFixProviderTests
         AssertNoOverlap(changes);
     }
 
+    [Fact]
+    public async Task DM0036_FixAllChangesDoNotOverlapForTwoUnusedTypes()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public class ServiceA
+            {
+            }
+
+            [SingletonDIProvide]
+            public class ServiceB
+            {
+            }
+
+            [SingletonDIProvide]
+            public class ServiceC
+            {
+                public static int Value => 1;
+            }
+
+            [SingletonDIConsume(typeof(ServiceA))]
+            [SingletonDIConsume(typeof(ServiceB), typeof(ServiceC))]
+            public partial class Consumer
+            {
+                public int Read() => ServiceC.Value;
+            }
+            """;
+
+        var changes = await CodeFixTestHarness.GetFixAllTextChangesAsync(
+            source,
+            "DM0036",
+            new SingletonDIConsumerCodeFixProvider());
+
+        Assert.Equal(2, changes.Length);
+        AssertNoOverlap(changes);
+    }
+
     private static void AssertNoOverlap(ImmutableArray<TextChange> changes)
     {
         var ordered = changes
@@ -1722,6 +1966,7 @@ public class CodeFixProviderTests
             (SingletonDIProviderCodeFixProvider, "DM0005") => "Make method public",
             (SingletonDIProviderCodeFixProvider, "DM0012") => "Remove static modifier",
             (SingletonDIConsumerCodeFixProvider, "DM0010") => "Remove duplicate type",
+            (SingletonDIConsumerCodeFixProvider, "DM0036") => "Remove unused dependency",
             (SingletonDIPartialCodeFixProvider, "DM0007") => "Add 'partial' modifier",
             _ => throw new ArgumentException($"Unknown diagnostic/provider combination: {diagnosticId}")
         };

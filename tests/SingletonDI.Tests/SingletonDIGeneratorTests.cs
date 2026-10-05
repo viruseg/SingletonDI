@@ -414,7 +414,8 @@ public class SingletonDIGeneratorTests
         var model = ConsumerValidator.Validate(
             declaration,
             consumer,
-            diagnostics.Add);
+            diagnostics.Add,
+            compilation.GetSemanticModel(declaration.SyntaxTree));
 
         Assert.NotNull(model);
         Assert.Empty(diagnostics);
@@ -453,7 +454,8 @@ public class SingletonDIGeneratorTests
         var consumerModel = ConsumerValidator.Validate(
             declaration,
             provider,
-            diagnostics.Add);
+            diagnostics.Add,
+            compilation.GetSemanticModel(declaration.SyntaxTree));
 
         Assert.NotNull(model);
         Assert.NotNull(consumerModel);
@@ -491,7 +493,8 @@ public class SingletonDIGeneratorTests
         var model = ConsumerValidator.Validate(
             declaration,
             consumer,
-            diagnostics.Add);
+            diagnostics.Add,
+            compilation.GetSemanticModel(declaration.SyntaxTree));
 
         Assert.NotNull(model);
         Assert.Empty(diagnostics);
@@ -860,7 +863,8 @@ public class SingletonDIGeneratorTests
             declaration,
             consumer,
             ImmutableHashSet.Create(new ServiceTypeIdentity("global::App.Service", "OtherAssembly")),
-            diagnostics.Add);
+            diagnostics.Add,
+            compilation.GetSemanticModel(declaration.SyntaxTree));
 
         Assert.NotNull(model);
         Assert.Empty(model!.Value.Dependencies);

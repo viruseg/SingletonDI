@@ -47,7 +47,7 @@ internal static class DeclarationMatrixHarness
         "netstandard",
     ];
 
-    private static readonly ImmutableArray<MetadataReference> DefaultReferences = BuildDefaultReferences();
+    internal static readonly ImmutableArray<MetadataReference> DefaultReferences = BuildDefaultReferences();
 
     internal static MatrixRunResult Run(
         string source,

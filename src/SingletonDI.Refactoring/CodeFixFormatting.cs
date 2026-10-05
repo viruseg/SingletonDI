@@ -88,4 +88,84 @@ internal static class CodeFixFormatting
 
         return argumentList.WithArguments(arguments.Remove(argumentToRemove));
     }
+
+    /// <summary>
+    /// Removes one attribute from an attribute list that keeps at least one other attribute.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is marked for formatting: annotating the list would re-lay out the attributes around
+    /// the removed one and rewrite the spacing the user wrote between them. Removing the attribute
+    /// with a plain list removal instead would leave two line breaks behind, because the removal
+    /// hands the attribute's leading trivia and then its trailing trivia to the neighbour, and only
+    /// the first of the two belongs to it.
+    /// </remarks>
+    /// <param name="attributeList">The list to remove from. It is left untouched.</param>
+    /// <param name="attributeToRemove">The attribute to remove.</param>
+    /// <returns>
+    /// A list without <paramref name="attributeToRemove"/>, or the same list when the attribute is
+    /// not in it or is the only one.
+    /// </returns>
+    internal static AttributeListSyntax RemoveAttribute(
+        AttributeListSyntax attributeList,
+        AttributeSyntax attributeToRemove)
+    {
+        var attributes = attributeList.Attributes;
+        var index = attributes.IndexOf(attributeToRemove);
+        if (index < 0 || attributes.Count < 2)
+        {
+            return attributeList;
+        }
+
+        var remaining = attributes.RemoveAt(index);
+        if (index == 0)
+        {
+            return attributeList.WithAttributes(remaining);
+        }
+
+        var previous = attributes[index - 1];
+        var neighbour = previous.WithTrailingTrivia(
+            previous.GetTrailingTrivia().AddRange(attributeToRemove.GetLeadingTrivia()));
+        return attributeList.WithAttributes(remaining.Replace(previous, neighbour));
+    }
+
+    /// <summary>
+    /// Removes an attribute list that a fix has emptied.
+    /// </summary>
+    /// <remarks>
+    /// The leading trivia of a removed node is dropped, and on a declaration that trivia is where the
+    /// documentation comment, the <c>#region</c> and the line breaks of everything the list preceded
+    /// live. It is handed to the first token the list was standing in front of, so removing the list
+    /// cannot take a documented declaration's documentation with it.
+    /// </remarks>
+    /// <param name="typeDeclaration">The declaration to remove the list from. It is left untouched.</param>
+    /// <param name="attributeList">The list to remove.</param>
+    /// <returns>A declaration without <paramref name="attributeList"/>.</returns>
+    internal static TypeDeclarationSyntax RemoveAttributeList(
+        TypeDeclarationSyntax typeDeclaration,
+        AttributeListSyntax attributeList)
+    {
+        if (typeDeclaration.AttributeLists.IndexOf(attributeList) < 0)
+        {
+            return typeDeclaration;
+        }
+
+        var lists = typeDeclaration.AttributeLists;
+        var index = lists.IndexOf(attributeList);
+        var remaining = lists.RemoveAt(index);
+        var updated = typeDeclaration.WithAttributeLists(remaining);
+        var leadingTrivia = attributeList.GetLeadingTrivia();
+        if (remaining.Count > 0 || leadingTrivia.Count == 0)
+        {
+            return updated;
+        }
+
+        var predecessor = index > 0
+            ? remaining[index - 1].GetLastToken()
+            : updated.Modifiers.Count > 0
+                ? updated.Modifiers[0]
+                : updated.Keyword;
+        return updated.ReplaceToken(
+            predecessor,
+            predecessor.WithLeadingTrivia(leadingTrivia.AddRange(predecessor.LeadingTrivia)));
+    }
 }

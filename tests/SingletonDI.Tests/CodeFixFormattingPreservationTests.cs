@@ -258,6 +258,74 @@ public class CodeFixFormattingPreservationTests
     }
 
     [Fact]
+    public async Task DM0036_AuthorsOnlyTheAttributeItRemoves()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public  class  Service
+            {
+                public  static  int  Value => 1;
+            }
+
+            /// <summary>
+            /// Документация консьюмера.
+            /// </summary>
+            [SingletonDIConsume(typeof(Service))]
+            public  partial  class  MyConsumer
+            {
+                public  int  GetValue ( )
+                {
+                    return  ( 2 )  -  1;
+                }
+            }
+            """;
+
+        await AssertFixAuthorsOnlyItsOwnTokensAsync(
+            source,
+            "DM0036",
+            new SingletonDIConsumerCodeFixProvider(),
+            "Remove unused dependency", authoredTokenBudget: 9);
+    }
+
+    [Fact]
+    public async Task DM0036_AuthorsOnlyTheArgumentItRemoves()
+    {
+        const string source = """
+            using SingletonDI.Attributes;
+
+            [SingletonDIProvide]
+            public  class  Service
+            {
+                public  static  int  Value => 1;
+            }
+
+            [SingletonDIProvide]
+            public  class  Other
+            {
+                public  static  int  Value => 2;
+            }
+
+            [SingletonDIConsume(typeof(Service),
+                               typeof(Other))]
+            public  partial  class  MyConsumer
+            {
+                public  int  GetValue ( )
+                {
+                    return  ( Service.Value )  -  1;
+                }
+            }
+            """;
+
+        await AssertFixAuthorsOnlyItsOwnTokensAsync(
+            source,
+            "DM0036",
+            new SingletonDIConsumerCodeFixProvider(),
+            "Remove unused dependency", authoredTokenBudget: 5);
+    }
+
+    [Fact]
     public async Task AddInitializeAsync_AuthorsOnlyTheMethodItAdds()
     {
         const string source = """

@@ -132,6 +132,41 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
 
         var languageSupport = languageScan.Select(static (scan, _) => scan.Support);
 
+        // DM0036 asks what a consumer reads, so it cannot be answered from a cached candidate: a
+        // keystroke inside a consumer changes the answer without changing anything the candidate's
+        // key covers, and a candidate that carried its own locations would also point into the
+        // compilation the previous run analyzed. The hint therefore holds nothing but a metadata name
+        // and the validated dependencies, and the report below is combined with the compilation so
+        // that it always reads the consumer back out of the one being analyzed.
+        var consumerUsageHints = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "SingletonDI.Attributes.SingletonDIConsumeAttribute",
+                predicate: static (node, _) => node is TypeDeclarationSyntax,
+                transform: static (context, token) => CreateConsumerUsageHint(context, token))
+            .Collect()
+            .Select(static (hints, _) => hints.IsDefault
+                ? ImmutableArray<ConsumerUsageHint>.Empty
+                : hints
+                    .Where(static hint => hint.HasValue)
+                    .Select(static hint => hint!.Value)
+                    .Distinct()
+                    .ToImmutableArray());
+
+        var consumerUsageInputs = consumerUsageHints
+            .Combine(context.CompilationProvider)
+            .Combine(languageSupport)
+            .WithTrackingName("ConsumerUsageOutput");
+        context.RegisterSourceOutput(consumerUsageInputs, (sourceProductionContext, input) =>
+        {
+            var ((hints, compilation), language) = input;
+            if (!language.CanEmit || hints.IsDefault)
+            {
+                return;
+            }
+
+            ReportConsumerUsage(hints, compilation, sourceProductionContext.ReportDiagnostic);
+        });
+
         var providerInputs = providerCandidates
             .Collect()
             .Combine(languageSupport)
@@ -1032,6 +1067,75 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         return declarations
             .Where(declaration => seen.Add((declaration.SyntaxTree.FilePath, declaration.Span)))
             .ToImmutableArray();
+    }
+
+    /// <summary>
+    /// Names a consumer and the dependencies it declared, for DM0036 to judge against a compilation
+    /// read back later. Both members are independent of the compilation that produced them, so a
+    /// cached hint stays valid and never carries a location from a superseded run.
+    /// </summary>
+    private static ConsumerUsageHint? CreateConsumerUsageHint(
+        GeneratorAttributeSyntaxContext context,
+        CancellationToken cancellationToken)
+    {
+        var typeDeclaration = (TypeDeclarationSyntax)context.TargetNode;
+        if (context.SemanticModel.GetDeclaredSymbol(typeDeclaration, cancellationToken) is not
+            INamedTypeSymbol consumer)
+        {
+            return null;
+        }
+
+        var model = ConsumerValidator.Validate(
+            typeDeclaration,
+            consumer,
+            static _ => { },
+            context.SemanticModel);
+        return model is { Dependencies.IsEmpty: false }
+            ? new ConsumerUsageHint(GetMetadataName(consumer), model.Value.Dependencies)
+            : null;
+    }
+
+    /// <summary>
+    /// Builds the name <see cref="Compilation.GetTypeByMetadataName"/> accepts, which is the whole
+    /// namespace chain in front of the type name and a <c>+</c> between the names of nested types.
+    /// <see cref="INamedTypeSymbol.MetadataName"/> on its own carries neither.
+    /// </summary>
+    private static string GetMetadataName(INamedTypeSymbol type)
+    {
+        var parts = new Stack<string>();
+        for (var current = type; current is not null; current = current.ContainingType)
+        {
+            parts.Push(current.MetadataName);
+        }
+
+        for (var containing = type.ContainingNamespace;
+             containing is { IsGlobalNamespace: false };
+             containing = containing.ContainingNamespace)
+        {
+            parts.Push(containing.Name);
+        }
+
+        return string.Join(".", parts);
+    }
+
+    private static void ReportConsumerUsage(
+        ImmutableArray<ConsumerUsageHint> hints,
+        Compilation compilation,
+        Action<Diagnostic> reportDiagnostic)
+    {
+        foreach (var hint in hints)
+        {
+            if (compilation.GetTypeByMetadataName(hint.MetadataName) is not INamedTypeSymbol consumer)
+            {
+                continue;
+            }
+
+            ConsumerUsageAnalyzer.ReportUnusedDependencies(
+                compilation,
+                consumer,
+                hint.Dependencies,
+                reportDiagnostic);
+        }
     }
 
     private static ConsumerCandidate CreateConsumerCandidate(

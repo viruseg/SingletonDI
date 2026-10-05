@@ -92,18 +92,29 @@ public sealed class DocumentationConsistencyTests
     }
 
     [Fact]
-    public void EveryGeneratorDiagnosticIsAnError()
+    public void EveryGeneratorDiagnosticIsAnErrorOrTheDocumentedSuggestion()
     {
-        // The documented severity column is only correct because nothing pinned it.
+        // The documented severity column is only correct because nothing pinned it. DM0036 is a
+        // suggestion: a dependency nobody reads is dead weight, not a broken program.
         var descriptors = ReadDescriptors();
 
         Assert.NotEmpty(descriptors);
+        foreach (var suggestion in Suggestions)
+        {
+            Assert.Contains(descriptors, descriptor => descriptor.Id == suggestion);
+        }
+
         Assert.All(
             descriptors,
             descriptor => Assert.Equal(
-                DiagnosticSeverity.Error,
+                Array.IndexOf(Suggestions, descriptor.Id) >= 0 ? DiagnosticSeverity.Info : DiagnosticSeverity.Error,
                 descriptor.DefaultSeverity));
     }
+
+    /// <summary>
+    /// The diagnostics the readme documents as suggestions rather than errors.
+    /// </summary>
+    private static readonly string[] Suggestions = ["DM0036"];
 
     /// <summary>
     /// Reads the descriptors the generator actually exposes, rather than scraping the source file.
