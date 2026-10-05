@@ -523,6 +523,12 @@ The generator reports errors at compile time, plus one suggestion about a depend
 
 Cross-project service and provider identities include the containing assembly. Repeated references to the same assembly are deduplicated, while equal type names from different assemblies remain distinct. `DM0019` is also emitted for conflicting local `ServiceType` mappings, not only in a composition root, and reports all conflicting provider identities. It also reports ambiguity when the same fully qualified name is associated with multiple identities, for example a local `App.Service` and a referenced `App.Service`; the diagnostic keeps their assembly identities separate.
 
+### Where a diagnostic is reported
+
+Every diagnostic is anchored to the smallest piece of source the reader has to change, so an error never underlines a whole class. A provider problem points at the token that declares the provider or the member at fault: the `abstract` or `static` modifier for `DM0002`, the constructor for `DM0004`, the type parameter list for `DM0015`, the required member for `DM0032`, the containing generic type for `DM0035`, and the provider name for `DM0022`. A property name problem points at the argument that spells the name (`DM0001`, `DM0003`), and a missing provider points at the argument that asks for it (`DM0017`, `DM0018`). A cycle is anchored at the provider the reported cycle starts from (`DM0009`), and a file-scoped consumer is anchored at the namespace name (`DM0028`).
+
+The only diagnostics without a source location are `DM0020` and `DM0021`, which describe a referenced assembly and therefore have no declaration in the project being compiled.
+
 ### Code fixes
 
 The analyzer ships a code fix for `DM0004`, `DM0005`, `DM0007`, `DM0010`, `DM0012` and `DM0036`, and a refactoring that adds an `InitializeAsync` initializer to a provider. Every one of them changes only the text it is responsible for. Applying a fix never reformats the surrounding code: spacing inside method signatures and bodies, casts, parameter lists and attribute arguments survives the fix exactly as written, and a document formatted against the project's own style rules comes out of the fix unchanged.
