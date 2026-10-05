@@ -348,7 +348,7 @@ When type name conflicts occur (e.g., `Foo.Bar` and `Baz.Bar`), names with names
 
 ## Package compatibility
 
-Version `1.2.1` targets `net10.0`. Generated source requires C# 9 or later; file-scoped consumer declarations require C# 10 or later.
+Version `1.3.0` targets `net10.0`. Generated source requires C# 9 or later; file-scoped consumer declarations require C# 10 or later.
 
 The package places the generator and refactoring assemblies under `analyzers/dotnet/cs`, so consumers receive them automatically through the `SingletonDI` package reference.
 
