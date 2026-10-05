@@ -1,3 +1,5 @@
+using Microsoft.CodeAnalysis;
+
 namespace SingletonDI.Generator.Models;
 
 /// <summary>
@@ -10,6 +12,10 @@ namespace SingletonDI.Generator.Models;
 /// <param name="IsContract">Whether the reference is an interface or abstract contract.</param>
 /// <param name="Identity">The assembly-qualified service identity.</param>
 /// <param name="CanUseProtectedProperty">Whether a protected generated property can expose the service type.</param>
+/// <param name="DeclarationLocation">
+/// Where the type is named in the consumer's consume attribute, or <see langword="null"/> when the
+/// declaration carries no source location. A diagnostic about this reference points at it.
+/// </param>
 public readonly record struct ServiceReferenceModel(
     string FullyQualifiedName,
     string ShortName,
@@ -17,7 +23,8 @@ public readonly record struct ServiceReferenceModel(
     string? PropertyName,
     bool IsContract,
     ServiceTypeIdentity? Identity = null,
-    bool CanUseProtectedProperty = true)
+    bool CanUseProtectedProperty = true,
+    Location? DeclarationLocation = null)
 {
     /// <summary>
     /// Gets the fully qualified name of the referenced service type.
@@ -54,4 +61,10 @@ public readonly record struct ServiceReferenceModel(
     /// inconsistent accessibility.
     /// </summary>
     public bool CanUseProtectedProperty { get; } = CanUseProtectedProperty;
+
+    /// <summary>
+    /// Gets where the referenced type is named in the consume attribute, or <see langword="null"/>
+    /// when the attribute carries no source location.
+    /// </summary>
+    public Location? DeclarationLocation { get; } = DeclarationLocation;
 }

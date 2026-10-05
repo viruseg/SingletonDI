@@ -298,7 +298,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         {
             sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.CircularDependency,
-                Location.None,
+                GetCycleLocation(cycle, providerModels),
                 string.Join(" -> ", cycle.Select(identity => identity.FullyQualifiedName))));
             return;
         }
@@ -379,7 +379,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             {
                 if (IsUnmapped(dependency))
                 {
-                    AddMissingDependency(missingDependencies, dependency, provider.Location);
+                    // The argument that asks for the dependency is where the author has to act, so
+                    // the diagnostic points at it and not at the provider that declared it.
+                    var dependencyLocation = provider.GetDependencyLocation(dependency);
+                    AddMissingDependency(
+                        missingDependencies,
+                        dependency,
+                        dependencyLocation.IsInSource ? dependencyLocation : provider.Location);
                 }
             }
         }
@@ -421,21 +427,29 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 continue;
             }
 
-            var dependencyIdentities = consumerModel.Value.Dependencies
-                .Select(dependency => dependency.Identity ??
-                    new ServiceTypeIdentity(
-                        dependency.FullyQualifiedName,
-                        compilation.Assembly.Identity.ToString()))
+            var consumerDependencies = consumerModel.Value.Dependencies
+                .Select(dependency => (
+                    Dependency: dependency,
+                    Identity: dependency.Identity ??
+                        new ServiceTypeIdentity(
+                            dependency.FullyQualifiedName,
+                            compilation.Assembly.Identity.ToString())))
                 .ToImmutableArray();
-            propertyNameDependencySets.Add(dependencyIdentities);
-            foreach (var dependencyIdentity in dependencyIdentities)
+            propertyNameDependencySets.Add(
+                consumerDependencies.Select(item => item.Identity).ToImmutableArray());
+            foreach (var (dependency, dependencyIdentity) in consumerDependencies)
             {
                 if (IsUnmapped(dependencyIdentity))
                 {
+                    // The unmapped type is named in the attribute, so the attribute argument is where
+                    // the author has to act.
+                    var declarationLocation = consumerDeclaration.Identifier.GetLocation();
                     AddMissingDependency(
                         missingDependencies,
                         dependencyIdentity,
-                        consumerDeclaration.Identifier.GetLocation());
+                        dependency.DeclarationLocation is { IsInSource: true } declaredLocation
+                            ? declaredLocation
+                            : declarationLocation);
                 }
             }
         }
@@ -500,7 +514,7 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 hasInvalidGraph = true;
                 sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.CircularDependency,
-                    Location.None,
+                    GetCycleLocation(cycle, allProviders),
                     FormatCycle(cycle)));
             }
         }
@@ -529,6 +543,23 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
         var serviceTypeMapResult = ServiceTypeResolver.BuildServiceTypeMap(providerModels);
         var consumerModels = new List<ConsumerModel>();
 
+        // A dependency this executable cannot satisfy is named in the consumer's own attribute, so
+        // both the message and the anchor are taken from the same first matching dependency.
+        ServiceReferenceModel? FindUnmappedDependency(ConsumerModel consumer)
+        {
+            foreach (var dependency in consumer.Dependencies)
+            {
+                if (dependency.Identity is { } identity &&
+                    !serviceTypeMapResult.IdentityMap.ContainsKey(identity) &&
+                    (dependency.IsContract || !localProviderIdentities.Contains(identity)))
+                {
+                    return dependency;
+                }
+            }
+
+            return null;
+        }
+
         foreach (var candidate in consumerCandidates)
         {
             foreach (var diagnostic in candidate.Diagnostics)
@@ -549,22 +580,18 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     localProviderIdentities,
                     serviceTypeMapResult.IdentityMap))
             {
+                var unmappedDependency = FindUnmappedDependency(model);
+                var dependencyLocation = unmappedDependency?.DeclarationLocation;
                 sourceProductionContext.ReportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.MissingCompositionRoot,
-                    candidate.DeclarationLocation,
-                    model.Dependencies
-                        .Where(dependency =>
-                        {
-                            var identity = dependency.Identity;
-                            return identity is not null &&
-                                   !serviceTypeMapResult.IdentityMap.ContainsKey(identity.Value) &&
-                                   (dependency.IsContract ||
-                                    !localProviderIdentities.Contains(identity.Value));
-                        })
-                        .Select(dependency => dependency.Identity is { } identity
+                    dependencyLocation is { IsInSource: true } declaredLocation
+                        ? declaredLocation
+                        : candidate.DeclarationLocation,
+                    unmappedDependency is null
+                        ? model.FullyQualifiedName
+                        : unmappedDependency.Value.Identity is { } identity
                             ? FormatServiceTypeIdentity(identity)
-                            : dependency.FullyQualifiedName)
-                        .FirstOrDefault() ?? model.FullyQualifiedName));
+                            : unmappedDependency.Value.FullyQualifiedName));
             }
 
             ReportConsumerPropertyNameConflicts(
@@ -742,6 +769,30 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
     private static string FormatCycle(ImmutableArray<ServiceTypeIdentity> cycle)
     {
         return string.Join(" -> ", cycle.Select(FormatServiceTypeIdentity));
+    }
+
+    /// <summary>
+    /// Anchors a cycle diagnostic at the name of the provider the reported cycle starts from, so that
+    /// the diagnostic points at a declaration the reader can navigate to.
+    /// </summary>
+    /// <param name="cycle">The identities the cycle walks through, starting at its first entry.</param>
+    /// <param name="providers">Every provider in the graph the cycle was found in.</param>
+    private static Location GetCycleLocation(
+        ImmutableArray<ServiceTypeIdentity> cycle,
+        IEnumerable<ProviderModel> providers)
+    {
+        foreach (var identity in cycle)
+        {
+            foreach (var provider in providers)
+            {
+                if (provider.TypeIdentity == identity && provider.Location.IsInSource)
+                {
+                    return provider.Location;
+                }
+            }
+        }
+
+        return Location.None;
     }
 
     private static string FormatServiceTypeIdentity(ServiceTypeIdentity identity)
@@ -933,7 +984,9 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                     .FirstOrDefault();
                 if (fileScopedNamespace is not null)
                 {
-                    fileScopedConsumerLocation = fileScopedNamespace.GetLocation();
+                    // The namespace name, not the declaration: a file-scoped namespace spans the rest
+                    // of the file, and a diagnostic over it would underline everything below it.
+                    fileScopedConsumerLocation = fileScopedNamespace.Name.GetLocation();
                 }
             }
         }
@@ -1027,6 +1080,14 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             foreach (var dependency in provider.DependencyIdentities)
             {
                 key.Append('\u001f').Append("identity").Append('\u001f').Append(dependency.CanonicalIdentity);
+            }
+
+            foreach (var dependencyLocation in provider.DependencyLocations.OrderBy(
+                         pair => pair.Key,
+                         StringComparer.Ordinal))
+            {
+                key.Append('\u001f').Append("dependencyLocation").Append('\u001f').Append(dependencyLocation.Key);
+                AppendLocationKey(key, dependencyLocation.Value);
             }
 
             AppendLocationKey(key, provider.Location);
@@ -1163,6 +1224,11 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
                 key.Append('\u001f').Append(dependency.IsContract);
                 key.Append('\u001f').Append(dependency.CanUseProtectedProperty);
                 key.Append('\u001f').Append(dependency.Identity?.CanonicalIdentity);
+                if (dependency.DeclarationLocation is { } dependencyDeclarationLocation)
+                {
+                    key.Append('\u001f').Append("dependencyLocation");
+                    AppendLocationKey(key, dependencyDeclarationLocation);
+                }
             }
         }
 
@@ -1422,13 +1488,13 @@ public partial class SingletonDIGenerator : IIncrementalGenerator
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.PropertyNameConflict,
-                    existingProvider.Location,
+                    existingProvider.PropertyNameLocation ?? existingProvider.Location,
                     provider.PropertyName,
                     FormatProviderName(existingProvider),
                     FormatProviderName(provider)));
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.PropertyNameConflict,
-                    provider.Location,
+                    provider.PropertyNameLocation ?? provider.Location,
                     provider.PropertyName,
                     FormatProviderName(existingProvider),
                     FormatProviderName(provider)));

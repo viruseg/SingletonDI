@@ -604,7 +604,12 @@ public class SingletonDIGeneratorTests
         var diagnostic = Assert.Single(diagnostics);
         Assert.Null(model);
         Assert.Equal("DM0002", diagnostic.Id);
-        Assert.Equal(declaration.GetLocation().SourceSpan, diagnostic.Location.SourceSpan);
+
+        // The anchor is the token inside the declaration that was passed in, not the declaration of
+        // the symbol, which for a partial type is the first part.
+        var abstractModifier = declaration.Modifiers
+            .First(modifier => modifier.IsKind(SyntaxKind.AbstractKeyword));
+        Assert.Equal(abstractModifier.GetLocation().SourceSpan, diagnostic.Location.SourceSpan);
         Assert.Same(declaration.SyntaxTree, diagnostic.Location.SourceTree);
     }
 

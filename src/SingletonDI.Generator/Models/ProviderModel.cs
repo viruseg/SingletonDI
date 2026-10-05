@@ -18,7 +18,7 @@ namespace SingletonDI.Generator.Models;
 /// <param name="serviceTypeShortName">The short name of the service contract, or <see langword="null"/>.</param>
 /// <param name="serviceTypeNamespace">The namespace of the service contract, or <see langword="null"/>.</param>
 /// <param name="propertyName">The property name the consumer exposes, or <see langword="null"/> to derive it.</param>
-/// <param name="location">Where the provider was declared, used to anchor diagnostics.</param>
+/// <param name="location">Where the provider name is declared, used to anchor diagnostics.</param>
 /// <param name="propertyNameLocation">Where the property name argument was written, or <see langword="null"/>.</param>
 /// <param name="dependencyIdentities">
 /// The resolved identity of each entry in <paramref name="dependencies"/>. Default when the
@@ -27,6 +27,11 @@ namespace SingletonDI.Generator.Models;
 /// <param name="serviceTypeIdentity">
 /// The resolved identity of <paramref name="serviceTypeFullyQualifiedName"/>, or <see langword="null"/>
 /// when the provider declares no service contract.
+/// </param>
+/// <param name="dependencyLocations">
+/// Where each entry of <paramref name="dependencyIdentities"/> is named in the provider's consume
+/// attribute, keyed by canonical identity. A dependency declared through a base type or without a
+/// resolvable location has no entry.
 /// </param>
 public readonly record struct ProviderModel(
     string fullyQualifiedName,
@@ -44,7 +49,8 @@ public readonly record struct ProviderModel(
     Location location,
     Location? propertyNameLocation,
     ImmutableArray<ServiceTypeIdentity> dependencyIdentities = default,
-    ServiceTypeIdentity? serviceTypeIdentity = null)
+    ServiceTypeIdentity? serviceTypeIdentity = null,
+    ImmutableDictionary<string, Location>? dependencyLocations = null)
 {
     /// <summary>
     /// Gets the fully qualified name of the provider type.
@@ -134,7 +140,7 @@ public readonly record struct ProviderModel(
     public string? PropertyName { get; } = propertyName;
 
     /// <summary>
-    /// Gets the source location of the provider declaration, or <see cref="Location.None"/> for metadata providers.
+    /// Gets the source location of the provider name, or <see cref="Location.None"/> for metadata providers.
     /// </summary>
     public Location Location { get; } = location;
 
@@ -142,4 +148,21 @@ public readonly record struct ProviderModel(
     /// Gets the source location of the custom property name argument, if available.
     /// </summary>
     public Location? PropertyNameLocation { get; } = propertyNameLocation;
+
+    /// <summary>
+    /// Gets where each dependency of <see cref="DependencyIdentities"/> is named, keyed by canonical
+    /// identity, so that a diagnostic about a missing provider underlines the argument that asks for it.
+    /// </summary>
+    public ImmutableDictionary<string, Location> DependencyLocations { get; } =
+        dependencyLocations ?? ImmutableDictionary<string, Location>.Empty;
+
+    /// <summary>
+    /// Gets the location naming the given dependency, or <see cref="Location.None"/> when the
+    /// dependency has no entry.
+    /// </summary>
+    /// <param name="identity">The identity of the dependency to locate.</param>
+    public Location GetDependencyLocation(ServiceTypeIdentity identity) =>
+        DependencyLocations.TryGetValue(identity.CanonicalIdentity, out var location)
+            ? location
+            : Location.None;
 }

@@ -235,7 +235,8 @@ internal static class ConsumerValidator
                 hasProvideAttribute ? GetProviderPropertyName(dependencyType) : null,
                 isContract,
                 dependencyIdentity,
-                CanUseProtectedProperty(dependencyType, typeSymbol.ContainingAssembly)));
+                CanUseProtectedProperty(dependencyType, typeSymbol.ContainingAssembly),
+                location));
         }
 
         return new ConsumerModel(

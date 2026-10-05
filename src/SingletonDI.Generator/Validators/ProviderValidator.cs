@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using SingletonDI.Generator.Helpers;
 using SingletonDI.Generator.Models;
@@ -21,7 +22,7 @@ internal static class ProviderValidator
     {
         return Validate(
             typeSymbol,
-            typeDecl.GetLocation(),
+            CreateAnchor(typeDecl),
             compilation: null,
             reportDiagnostic);
     }
@@ -34,7 +35,7 @@ internal static class ProviderValidator
     {
         return Validate(
             typeSymbol,
-            typeDecl.GetLocation(),
+            CreateAnchor(typeDecl),
             compilation,
             reportDiagnostic);
     }
@@ -46,9 +47,10 @@ internal static class ProviderValidator
     {
         return Validate(
             typeSymbol,
-            location,
+            ProviderAnchor.None,
             compilation: null,
-            reportDiagnostic);
+            reportDiagnostic,
+            location);
     }
 
     internal static ProviderModel? Validate(
@@ -59,16 +61,18 @@ internal static class ProviderValidator
     {
         return Validate(
             typeSymbol,
-            location,
+            ProviderAnchor.None,
             compilation,
-            reportDiagnostic);
+            reportDiagnostic,
+            location);
     }
 
     private static ProviderModel? Validate(
         INamedTypeSymbol typeSymbol,
-        Location location,
+        ProviderAnchor anchor,
         Compilation? compilation,
-        Action<Diagnostic> reportDiagnostic)
+        Action<Diagnostic> reportDiagnostic,
+        Location? fallbackLocation = null)
     {
         var provideAttribute = FindAttribute(typeSymbol, ProvideAttributeName);
         if (provideAttribute == null)
@@ -76,9 +80,12 @@ internal static class ProviderValidator
             return null;
         }
 
-        var attributeLocation = GetAttributeLocation(provideAttribute) ?? location;
-        var declarationLocation = location;
-        var providerDisplayName = GetProviderDisplayName(typeSymbol, location);
+        // A source provider is anchored to the name in its declaration, so a diagnostic underlines
+        // the type and not its whole body. A provider reached through a reference has no source
+        // declaration to point at, so it keeps the location it was given.
+        var declarationLocation = anchor.FallbackLocation(fallbackLocation);
+        var attributeLocation = GetAttributeLocation(provideAttribute) ?? declarationLocation;
+        var providerDisplayName = GetProviderDisplayName(typeSymbol, declarationLocation);
 
         if (!IsAccessibleFromGeneratedCode(typeSymbol, typeSymbol.ContainingAssembly))
         {
@@ -93,27 +100,22 @@ internal static class ProviderValidator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.GenericTypeNotSupported,
-                declarationLocation,
+                anchor.TypeParameterList ?? declarationLocation,
                 providerDisplayName));
             return null;
         }
 
-        for (INamedTypeSymbol? container = typeSymbol.ContainingType;
-             container is not null;
-             container = container.ContainingType)
+        if (GetContainingGenericType(typeSymbol) is { } containingGenericType)
         {
-            if (container.Arity > 0)
-            {
-                // A provider nested in a generic type cannot be named by generated code, because
-                // the only fully qualified name it has is not a legal C# source. The rejection is
-                // separate from DM0015 because the provider itself has no type parameters.
-                reportDiagnostic(Diagnostic.Create(
-                    DiagnosticDescriptors.ProviderInGenericTypeNotSupported,
-                    declarationLocation,
-                    providerDisplayName,
-                    GetFullyQualifiedName(container)));
-                return null;
-            }
+            // A provider nested in a generic type cannot be named by generated code, because
+            // the only fully qualified name it has is not a legal C# source. The rejection is
+            // separate from DM0015 because the provider itself has no type parameters.
+            reportDiagnostic(Diagnostic.Create(
+                DiagnosticDescriptors.ProviderInGenericTypeNotSupported,
+                containingGenericType.Location ?? declarationLocation,
+                providerDisplayName,
+                GetFullyQualifiedName(containingGenericType.Symbol)));
+            return null;
         }
 
         // A source static class reports IsAbstract and IsSealed as false, so both flags are needed to
@@ -123,7 +125,7 @@ internal static class ProviderValidator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProvideOnAbstractClass,
-                declarationLocation));
+                anchor.AbstractOrStaticModifier ?? declarationLocation));
             return null;
         }
 
@@ -135,7 +137,7 @@ internal static class ProviderValidator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProvideMissingParameterlessConstructor,
-                declarationLocation,
+                anchor.ConstructorName ?? declarationLocation,
                 providerDisplayName));
             return null;
         }
@@ -144,7 +146,7 @@ internal static class ProviderValidator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProviderRequiredMembersNotSupported,
-                declarationLocation,
+                GetRequiredMemberLocation(typeSymbol) ?? declarationLocation,
                 providerDisplayName));
             return null;
         }
@@ -164,7 +166,7 @@ internal static class ProviderValidator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.GenericInitializerNotSupported,
-                initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
+                initializeAsyncMethod.Locations.FirstOrDefault() ?? declarationLocation,
                 initializeAsyncMethod.ToDisplayString()));
             return null;
         }
@@ -179,7 +181,7 @@ internal static class ProviderValidator
             {
                 reportDiagnostic(Diagnostic.Create(
                     DiagnosticDescriptors.InitializeAsyncNotAccessible,
-                    initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
+                    initializeAsyncMethod.Locations.FirstOrDefault() ?? declarationLocation,
                     GetCSharpAccessModifier(accessibility)));
                 return null;
             }
@@ -189,7 +191,7 @@ internal static class ProviderValidator
         {
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.InitializeAsyncIsStatic,
-                initializeAsyncMethod.Locations.FirstOrDefault() ?? location,
+                initializeAsyncMethod.Locations.FirstOrDefault() ?? declarationLocation,
                 providerDisplayName));
             return null;
         }
@@ -210,7 +212,7 @@ internal static class ProviderValidator
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.AliasedServiceTypeNotSupported,
                 GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
-                GetTypeDisplayName(serviceType, location)));
+                GetTypeDisplayName(serviceType, declarationLocation)));
             return null;
         }
 
@@ -219,7 +221,7 @@ internal static class ProviderValidator
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.OpenGenericDependencyNotSupported,
                 GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
-                GetTypeDisplayName(serviceType, location)));
+                GetTypeDisplayName(serviceType, declarationLocation)));
             return null;
         }
 
@@ -229,7 +231,7 @@ internal static class ProviderValidator
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.ProviderTypeNotAccessible,
                 GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
-                GetTypeDisplayName(serviceType, location)));
+                GetTypeDisplayName(serviceType, declarationLocation)));
             return null;
         }
 
@@ -239,29 +241,29 @@ internal static class ProviderValidator
             reportDiagnostic(Diagnostic.Create(
                 DiagnosticDescriptors.InvalidServiceType,
                 GetServiceTypeArgumentLocation(provideAttribute) ?? attributeLocation,
-                GetTypeDisplayName(serviceType, location),
+                GetTypeDisplayName(serviceType, declarationLocation),
                 providerDisplayName));
             return null;
         }
 
-        var dependencyIdentities = GetDependencyIdentities(
+        var dependencyResolution = GetDependencyIdentities(
             typeSymbol,
             compilation,
-            location,
+            declarationLocation,
             reportDiagnostic);
-        if (dependencyIdentities is null)
+        if (dependencyResolution is null)
         {
             return null;
         }
 
-        var validDependencyIdentities = dependencyIdentities.Value;
+        var validDependencyIdentities = dependencyResolution.Value.Identities;
         var dependencies = validDependencyIdentities
             .Select(identity => identity.FullyQualifiedName)
             .ToImmutableArray();
 
         var (propertyName, propertyNameLocation) = GetPropertyName(
             provideAttribute,
-            location,
+            declarationLocation,
             reportDiagnostic);
         ServiceTypeIdentity? serviceTypeIdentity = serviceType == null
             ? null
@@ -285,10 +287,11 @@ internal static class ProviderValidator
             serviceTypeShortName: serviceType?.Name,
             serviceTypeNamespace: serviceType?.ContainingNamespace.ToDisplayString(),
             propertyName: propertyName,
-            location: location,
+            location: declarationLocation,
             propertyNameLocation: propertyNameLocation,
             dependencyIdentities: validDependencyIdentities,
-            serviceTypeIdentity: serviceTypeIdentity);
+            serviceTypeIdentity: serviceTypeIdentity,
+            dependencyLocations: dependencyResolution.Value.Locations);
     }
 
     private static IMethodSymbol? FindInitializeAsyncMethod(
@@ -421,7 +424,7 @@ internal static class ProviderValidator
             : type;
     }
 
-    private static ImmutableArray<ServiceTypeIdentity>? GetDependencyIdentities(
+    private static DependencyResolution? GetDependencyIdentities(
         INamedTypeSymbol typeSymbol,
         Compilation? compilation,
         Location location,
@@ -430,10 +433,13 @@ internal static class ProviderValidator
         var consumeAttributes = FindConsumeAttributesIncludingBaseTypes(typeSymbol);
         if (consumeAttributes.IsEmpty)
         {
-            return ImmutableArray<ServiceTypeIdentity>.Empty;
+            return new DependencyResolution(
+                ImmutableArray<ServiceTypeIdentity>.Empty,
+                ImmutableDictionary<string, Location>.Empty);
         }
 
         var dependencies = ImmutableArray.CreateBuilder<ServiceTypeIdentity>();
+        var dependencyLocations = ImmutableDictionary.CreateBuilder<string, Location>(StringComparer.Ordinal);
         var hasInvalidDependency = false;
 
         foreach (var consumeAttribute in consumeAttributes)
@@ -467,13 +473,18 @@ internal static class ProviderValidator
                     continue;
                 }
 
-                dependencies.Add(ServiceTypeIdentity.FromSymbol(dependencyType));
+                var identity = ServiceTypeIdentity.FromSymbol(dependencyType);
+                dependencies.Add(identity);
+                if (dependencyLocation is not null && !dependencyLocations.ContainsKey(identity.CanonicalIdentity))
+                {
+                    dependencyLocations.Add(identity.CanonicalIdentity, dependencyLocation);
+                }
             }
         }
 
         return hasInvalidDependency
             ? null
-            : dependencies.ToImmutable();
+            : new DependencyResolution(dependencies.ToImmutable(), dependencyLocations.ToImmutable());
     }
 
     private static IEnumerable<(ITypeSymbol Type, Location? Location)> GetTypeArguments(
@@ -616,6 +627,103 @@ internal static class ProviderValidator
     {
         return constructor.GetAttributes().Any(attribute =>
             IsAttribute(attribute, "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute"));
+    }
+
+    /// <summary>
+    /// Collects the places a provider diagnostic can be anchored to, so that each one underlines the
+    /// token the reader has to change instead of the whole declaration.
+    /// </summary>
+    /// <param name="typeDecl">The declaration of the provider being validated.</param>
+    private static ProviderAnchor CreateAnchor(TypeDeclarationSyntax typeDecl)
+    {
+        return new ProviderAnchor(
+            typeDecl.Identifier.GetLocation(),
+            GetModifierLocation(typeDecl, SyntaxKind.AbstractKeyword) ??
+            GetModifierLocation(typeDecl, SyntaxKind.StaticKeyword),
+            typeDecl.TypeParameterList?.GetLocation(),
+            GetConstructorNameLocation(typeDecl));
+    }
+
+    private static Location? GetModifierLocation(TypeDeclarationSyntax typeDecl, SyntaxKind kind)
+    {
+        foreach (var modifier in typeDecl.Modifiers)
+        {
+            if (modifier.IsKind(kind))
+            {
+                return modifier.GetLocation();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Prefers a constructor that takes arguments, because that is the one the author has to change.
+    /// A provider with only an implicit constructor has nothing to point at.
+    /// </summary>
+    private static Location? GetConstructorNameLocation(TypeDeclarationSyntax typeDecl)
+    {
+        ConstructorDeclarationSyntax? withParameters = null;
+        ConstructorDeclarationSyntax? declared = null;
+        foreach (var member in typeDecl.Members)
+        {
+            if (member is not ConstructorDeclarationSyntax constructor)
+            {
+                continue;
+            }
+
+            declared ??= constructor;
+            if (constructor.ParameterList.Parameters.Count > 0)
+            {
+                withParameters ??= constructor;
+            }
+        }
+
+        return (withParameters ?? declared)?.Identifier.GetLocation();
+    }
+
+    /// <summary>
+    /// Finds the required member that makes a provider unregistrable, which is the declaration the
+    /// author has to change to keep it. A required member inherited from a base type in another
+    /// assembly has no location to report.
+    /// </summary>
+    private static Location? GetRequiredMemberLocation(INamedTypeSymbol typeSymbol)
+    {
+        for (var current = typeSymbol; current is not null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers())
+            {
+                if (member is not (IPropertySymbol { IsRequired: true } or IFieldSymbol { IsRequired: true }))
+                {
+                    continue;
+                }
+
+                var location = member.Locations.FirstOrDefault(candidate => candidate.IsInSource);
+                if (location is not null)
+                {
+                    return location;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static ContainingGenericType? GetContainingGenericType(INamedTypeSymbol typeSymbol)
+    {
+        for (INamedTypeSymbol? container = typeSymbol.ContainingType;
+             container is not null;
+             container = container.ContainingType)
+        {
+            if (container.Arity > 0)
+            {
+                return new ContainingGenericType(
+                    container.Locations.FirstOrDefault(candidate => candidate.IsInSource),
+                    container);
+            }
+        }
+
+        return null;
     }
 
     private static bool HasProvideAttribute(ITypeSymbol typeSymbol)
@@ -889,4 +997,38 @@ internal static class ProviderValidator
     {
         return typeSymbol.ToDisplayString(SymbolDisplayFormats.CodeGeneration);
     }
+
+    /// <summary>
+    /// The token a provider diagnostic points at, with the provider name as the last fallback.
+    /// </summary>
+    /// <param name="Name">The provider name in its declaration.</param>
+    /// <param name="AbstractOrStaticModifier">The <c>abstract</c> or <c>static</c> modifier.</param>
+    /// <param name="TypeParameterList">The provider's own type parameter list.</param>
+    /// <param name="ConstructorName">The name of a declared constructor.</param>
+    private readonly record struct ProviderAnchor(
+        Location? Name,
+        Location? AbstractOrStaticModifier,
+        Location? TypeParameterList,
+        Location? ConstructorName)
+    {
+        internal static ProviderAnchor None => default;
+
+        /// <summary>
+        /// Resolves the anchor a provider without a source declaration falls back to.
+        /// </summary>
+        internal Location FallbackLocation(Location? fallbackLocation) =>
+            (Name ?? fallbackLocation) is { IsInSource: true } location
+                ? location
+                : Location.None;
+    }
+
+    /// <param name="Location">Where the containing type is declared, or <see langword="null"/> when it is metadata.</param>
+    /// <param name="Symbol">The containing generic type itself.</param>
+    private readonly record struct ContainingGenericType(Location? Location, INamedTypeSymbol Symbol);
+
+    /// <param name="Identities">Every dependency the provider declares.</param>
+    /// <param name="Locations">Where each dependency is named, keyed by its canonical identity.</param>
+    private readonly record struct DependencyResolution(
+        ImmutableArray<ServiceTypeIdentity> Identities,
+        ImmutableDictionary<string, Location> Locations);
 }
